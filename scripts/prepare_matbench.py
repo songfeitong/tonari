@@ -46,13 +46,14 @@ def download_parquet(path: Path, endpoint: str) -> str:
         return url
     temporary = path.with_suffix(path.suffix + ".part")
     request = urllib.request.Request(url)
-    mode = "wb"
-    if temporary.exists():
-        request.add_header("Range", f"bytes={temporary.stat().st_size}-")
-        mode = "ab"
-    with urllib.request.urlopen(request) as response, temporary.open(mode) as output:
-        while chunk := response.read(1024 * 1024):
-            output.write(chunk)
+    resume_bytes = temporary.stat().st_size if temporary.exists() else 0
+    if resume_bytes:
+        request.add_header("Range", f"bytes={resume_bytes}-")
+    with urllib.request.urlopen(request) as response:
+        mode = "ab" if resume_bytes and response.status == 206 else "wb"
+        with temporary.open(mode) as output:
+            while chunk := response.read(1024 * 1024):
+                output.write(chunk)
     temporary.replace(path)
     if path.stat().st_size != PARQUET_BYTES or sha256(path) != PARQUET_SHA256:
         raise RuntimeError(

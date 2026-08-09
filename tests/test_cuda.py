@@ -224,6 +224,18 @@ def test_nondefault_stream_and_empty_structure() -> None:
     }
 
 
+def test_empty_periodic_structure_does_not_enumerate_tiny_cell_images() -> None:
+    edge_index, shifts = cuda_graph(
+        torch.empty((0, 3), dtype=torch.float64),
+        torch.tensor([0, 0]),
+        (0.02 * torch.eye(3, dtype=torch.float64))[None],
+        torch.ones((1, 3), dtype=torch.bool),
+        1.0,
+    )
+    assert edge_index.shape == (2, 0)
+    assert shifts.shape == (0, 3)
+
+
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
 def test_cell_list_path_matches_reference(dtype: torch.dtype) -> None:
     generator = torch.Generator().manual_seed(1842)
@@ -292,6 +304,53 @@ def test_rejects_dependent_active_cell_rows() -> None:
             ),
             torch.tensor([[True, True, False]]),
             1.0,
+        )
+
+
+@pytest.mark.parametrize("n_atoms", [2, 256])
+def test_rejects_representative_wrap_outside_int32_range(n_atoms: int) -> None:
+    positions = torch.zeros((n_atoms, 3), dtype=torch.float64)
+    positions[0, 0] = 0.1
+    positions[1, 0] = 2**31 + 0.2
+    if n_atoms > 2:
+        positions[2:, 1] = 2 * torch.arange(2, n_atoms, dtype=torch.float64)
+    with pytest.raises(RuntimeError, match="wraps.*int32"):
+        cuda_graph(
+            positions,
+            torch.tensor([0, n_atoms]),
+            torch.eye(3, dtype=torch.float64)[None],
+            torch.tensor([[True, False, False]]),
+            0.5,
+        )
+
+
+@pytest.mark.parametrize("n_atoms", [2, 256])
+@pytest.mark.parametrize("value", [float("nan"), float("inf")])
+def test_rejects_nonfinite_positions(n_atoms: int, value: float) -> None:
+    positions = torch.zeros((n_atoms, 3), dtype=torch.float64)
+    positions[0, 0] = value
+    if n_atoms > 2:
+        positions[:, 1] = 2 * torch.arange(n_atoms, dtype=torch.float64)
+    with pytest.raises(RuntimeError, match="positions must"):
+        cuda_graph(
+            positions,
+            torch.tensor([0, n_atoms]),
+            torch.zeros((1, 3, 3), dtype=torch.float64),
+            torch.zeros((1, 3), dtype=torch.bool),
+            0.5,
+        )
+
+
+def test_rejects_nonfinite_inactive_cell_row() -> None:
+    cell = torch.eye(3, dtype=torch.float64)
+    cell[2, 0] = torch.nan
+    with pytest.raises(ValueError, match="cells must contain only finite values"):
+        cuda_graph(
+            torch.zeros((1, 3), dtype=torch.float64),
+            torch.tensor([0, 1]),
+            cell[None],
+            torch.tensor([[True, True, False]]),
+            0.5,
         )
 
 

@@ -17,9 +17,9 @@ def reference_radius_graph_pbc(
     pbc: Tensor,
     cutoff: float,
 ) -> tuple[Tensor, Tensor]:
-    """Construct a complete directed periodic cutoff graph by exhaustive PyTorch operations.
+    """使用 exhaustive PyTorch operations 构造完整的有向 periodic cutoff graph。
 
-    This implementation is intentionally independent of the CUDA kernel and intended for correctness checks on small inputs. Returned ``cell_shifts`` satisfy ``positions[source] - positions[target] + cell_shifts @ cell``. The zero-displacement onsite edge is excluded, periodic self-images are retained, and the cutoff comparison is strict.
+    该实现有意独立于 CUDA kernel，用于小输入的正确性检查。返回的 ``cell_shifts`` 满足 ``positions[source] - positions[target] + cell_shifts @ cell``；zero-displacement onsite edge 被排除，periodic self-images 被保留，cutoff comparison 使用严格小于。
     """
 
     cutoff = float(cutoff)
@@ -30,6 +30,10 @@ def reference_radius_graph_pbc(
         raise ValueError("ptr must start at zero and end at n_atoms_total")
     if torch.any(ptr_cpu[1:] < ptr_cpu[:-1]):
         raise ValueError("ptr must be nondecreasing")
+    if not torch.all(torch.isfinite(positions)):
+        raise ValueError("positions must contain only finite values")
+    if not torch.all(torch.isfinite(cells)):
+        raise ValueError("cells must contain only finite values")
 
     edge_indices: list[Tensor] = []
     edge_shifts: list[Tensor] = []
@@ -37,6 +41,8 @@ def reference_radius_graph_pbc(
         start = int(ptr_cpu[batch_index])
         stop = int(ptr_cpu[batch_index + 1])
         structure_positions = positions[start:stop]
+        if stop == start:
+            continue
         active_axes = torch.nonzero(pbc_cpu[batch_index], as_tuple=False).flatten()
         atom_wrap = torch.zeros(
             (stop - start, 3), dtype=torch.int64, device=positions.device
@@ -47,7 +53,14 @@ def reference_radius_graph_pbc(
             active_cell = cells[batch_index, active_axes]
             active_duals = torch.linalg.pinv(active_cell)
             fractional = structure_positions @ active_duals
-            active_wrap = torch.floor(fractional).to(torch.int64)
+            floored_fractional = torch.floor(fractional)
+            if torch.any(floored_fractional < torch.iinfo(torch.int32).min) or torch.any(
+                floored_fractional > torch.iinfo(torch.int32).max
+            ):
+                raise ValueError(
+                    "atom representatives require periodic wraps outside the int32 range"
+                )
+            active_wrap = floored_fractional.to(torch.int64)
             atom_wrap[:, active_axes] = active_wrap
             wrapped_positions = (
                 structure_positions - active_wrap.to(positions.dtype) @ active_cell
@@ -79,6 +92,12 @@ def reference_radius_graph_pbc(
             if source.numel() == 0:
                 continue
             shifts = image_shift[None, :] - atom_wrap[source] + atom_wrap[target]
+            if torch.any(shifts < torch.iinfo(torch.int32).min) or torch.any(
+                shifts > torch.iinfo(torch.int32).max
+            ):
+                raise ValueError(
+                    "a cell shift required by the cutoff graph exceeds the int32 output range"
+                )
             edge_indices.append(torch.stack((source + start, target + start)))
             edge_shifts.append(shifts.to(torch.int32))
 

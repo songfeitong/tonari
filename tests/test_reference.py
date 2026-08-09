@@ -3,6 +3,7 @@ from __future__ import annotations
 import torch
 
 from torch_radius_graph import reference_radius_graph_pbc
+from torch_radius_graph._geometry import build_search_metadata
 
 
 def edge_keys(edge_index: torch.Tensor, shifts: torch.Tensor) -> set[tuple[int, ...]]:
@@ -90,3 +91,27 @@ def test_representative_translation_relabels_shift_without_changing_vectors() ->
         torch.sort(first_vectors[:, 0]).values,
         torch.sort(second_vectors[:, 0]).values,
     )
+
+
+def test_empty_periodic_reference_skips_tiny_cell_image_enumeration() -> None:
+    edge_index, shifts = reference_radius_graph_pbc(
+        torch.empty((0, 3), dtype=torch.float64),
+        torch.tensor([0, 0]),
+        (0.02 * torch.eye(3, dtype=torch.float64))[None],
+        torch.ones((1, 3), dtype=torch.bool),
+        1.0,
+    )
+    assert edge_index.shape == (2, 0)
+    assert shifts.shape == (0, 3)
+
+
+def test_cell_list_metadata_is_not_limited_by_dense_grid_size() -> None:
+    n_atoms = 741_456
+    metadata = build_search_metadata(
+        torch.tensor([0, n_atoms]),
+        torch.zeros((1, 3, 3), dtype=torch.float64),
+        torch.zeros((1, 3), dtype=torch.bool),
+        1.0,
+    )
+    assert metadata.total_nodes == n_atoms
+    assert metadata.total_blocks >= 2**31

@@ -58,6 +58,8 @@ def build_search_metadata(
     ptr_cpu = ptr.detach().cpu()
     cells_cpu = cells.detach().to(device="cpu", dtype=torch.float64)
     pbc_cpu = pbc.detach().cpu()
+    if not torch.all(torch.isfinite(cells_cpu)):
+        raise ValueError("cells must contain only finite values")
     if ptr_cpu[0].item() != 0 or ptr_cpu[-1].item() < 0:
         raise ValueError("ptr must start at zero and contain nonnegative atom offsets")
     atom_counts_tensor = ptr_cpu[1:] - ptr_cpu[:-1]
@@ -100,18 +102,23 @@ def build_search_metadata(
     image_ptr = [0]
     image_counts: list[int] = []
     shift_cache: dict[tuple[int, int, int], list[tuple[int, int, int]]] = {}
-    for repeats in repeats_by_structure:
+    for repeats, n_atoms in zip(
+        repeats_by_structure, atom_counts_tensor.tolist(), strict=True
+    ):
         repeat_key = tuple(repeats)
-        structure_shifts = shift_cache.get(repeat_key)
-        if structure_shifts is None:
-            structure_shifts = list(
-                product(
-                    range(-repeats[0], repeats[0] + 1),
-                    range(-repeats[1], repeats[1] + 1),
-                    range(-repeats[2], repeats[2] + 1),
+        if n_atoms == 0:
+            structure_shifts = []
+        else:
+            structure_shifts = shift_cache.get(repeat_key)
+            if structure_shifts is None:
+                structure_shifts = list(
+                    product(
+                        range(-repeats[0], repeats[0] + 1),
+                        range(-repeats[1], repeats[1] + 1),
+                        range(-repeats[2], repeats[2] + 1),
+                    )
                 )
-            )
-            shift_cache[repeat_key] = structure_shifts
+                shift_cache[repeat_key] = structure_shifts
         image_shifts.extend(structure_shifts)
         image_counts.append(len(structure_shifts))
         image_ptr.append(len(image_shifts))
@@ -129,8 +136,6 @@ def build_search_metadata(
     block_ptr = [0]
     for n_blocks in blocks_per_structure:
         block_ptr.append(block_ptr[-1] + n_blocks)
-    if block_ptr[-1] >= 2**31:
-        raise ValueError("the dense CUDA path requires fewer than 2^31 thread blocks")
     node_ptr = [0]
     for n_atoms, n_images in zip(
         atom_counts_tensor.tolist(), image_counts, strict=True
