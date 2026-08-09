@@ -63,35 +63,49 @@ def build_search_metadata(
         raise ValueError("ptr must be nondecreasing")
 
     duals = torch.zeros_like(cells_cpu)
+    repeats_by_structure = [[0, 0, 0] for _ in range(len(pbc_cpu))]
+    pattern_groups: dict[tuple[bool, bool, bool], list[int]] = {}
+    for batch_index, periodic_axes in enumerate(pbc_cpu.tolist()):
+        pattern_groups.setdefault(tuple(periodic_axes), []).append(batch_index)
+    for pattern, batch_indices in pattern_groups.items():
+        active_axes = [axis for axis, periodic in enumerate(pattern) if periodic]
+        if not active_axes:
+            continue
+        active_cells = cells_cpu[batch_indices][:, active_axes, :]
+        singular_values = torch.linalg.svdvals(active_cells)
+        scales = torch.maximum(singular_values[:, 0], torch.ones_like(singular_values[:, 0]))
+        tolerances = (
+            torch.finfo(torch.float64).eps * max(active_cells.shape[-2:]) * scales
+        )
+        if torch.any(singular_values[:, -1] <= tolerances):
+            raise ValueError("active periodic cell vectors must be linearly independent")
+        gram = active_cells @ active_cells.transpose(1, 2)
+        active_duals = active_cells.transpose(1, 2) @ torch.linalg.inv(gram)
+        reciprocal_norms = torch.linalg.vector_norm(active_duals, dim=1)
+        repeats = torch.ceil(cutoff * reciprocal_norms).to(torch.int64)
+        for local_axis, axis in enumerate(active_axes):
+            duals[batch_indices, :, axis] = active_duals[:, :, local_axis]
+            for group_index, batch_index in enumerate(batch_indices):
+                repeats_by_structure[batch_index][axis] = int(
+                    repeats[group_index, local_axis]
+                )
+
     image_shifts: list[tuple[int, int, int]] = []
     image_ptr = [0]
     image_counts: list[int] = []
-    for batch_index, periodic_axes in enumerate(pbc_cpu):
-        active_axes = torch.nonzero(periodic_axes, as_tuple=False).flatten()
-        repeats = [0, 0, 0]
-        if active_axes.numel() > 0:
-            active_cell = cells_cpu[batch_index, active_axes]
-            singular_values = torch.linalg.svdvals(active_cell)
-            tolerance = (
-                torch.finfo(torch.float64).eps
-                * max(active_cell.shape)
-                * max(float(singular_values[0]), 1.0)
+    shift_cache: dict[tuple[int, int, int], list[tuple[int, int, int]]] = {}
+    for repeats in repeats_by_structure:
+        repeat_key = tuple(repeats)
+        structure_shifts = shift_cache.get(repeat_key)
+        if structure_shifts is None:
+            structure_shifts = list(
+                product(
+                    range(-repeats[0], repeats[0] + 1),
+                    range(-repeats[1], repeats[1] + 1),
+                    range(-repeats[2], repeats[2] + 1),
+                )
             )
-            if float(singular_values[-1]) <= tolerance:
-                raise ValueError("active periodic cell vectors must be linearly independent")
-            active_duals = torch.linalg.pinv(active_cell)
-            duals[batch_index, :, active_axes] = active_duals
-            for local_axis, axis in enumerate(active_axes.tolist()):
-                reciprocal_norm = float(torch.linalg.vector_norm(active_duals[:, local_axis]))
-                repeats[axis] = ceil(cutoff * reciprocal_norm)
-
-        structure_shifts = list(
-            product(
-                range(-repeats[0], repeats[0] + 1),
-                range(-repeats[1], repeats[1] + 1),
-                range(-repeats[2], repeats[2] + 1),
-            )
-        )
+            shift_cache[repeat_key] = structure_shifts
         image_shifts.extend(structure_shifts)
         image_counts.append(len(structure_shifts))
         image_ptr.append(len(image_shifts))
