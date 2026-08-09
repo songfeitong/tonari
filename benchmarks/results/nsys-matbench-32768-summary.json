@@ -1,0 +1,38 @@
+{
+  "accepted_fused_bounds": {
+    "kernel_average_microseconds": {
+      "count_edges": 28.072,
+      "insert_images": 6.3888,
+      "wrap_and_atomic_bounds": 48.3013,
+      "write_edges": 35.4987
+    },
+    "profile_nvtx_milliseconds": 9.256378
+  },
+  "environment": {
+    "gpu": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+    "nsight_systems": "2025.6.3.343-256337165561v0",
+    "torch": "2.12.1+cu130"
+  },
+  "method": {
+    "command": "CUDA_VISIBLE_DEVICES=1 PYTHONPATH=src:. nsys profile --trace=cuda,nvtx --output=runs/nsys-matbench-32768 python benchmarks/profile_case.py --factor 8 --iterations 20",
+    "cutoff_angstrom": 5.0,
+    "profiled_iterations": 20,
+    "warmup_iterations": 3
+  },
+  "rejected_separate_reduction": {
+    "kernel_average_microseconds": {
+      "count_edges": 28.0666,
+      "insert_images": 6.3957,
+      "reduce_bounds": 104.7611,
+      "wrap_positions": 1.6278,
+      "write_edges": 35.5056
+    },
+    "profile_nvtx_milliseconds": 10.178581,
+    "resolution": "reverted because both GPU work and the end-to-end NVTX range regressed"
+  },
+  "workload": {
+    "atoms": 32768,
+    "derivation": "8x8x8 supercell of the sampled real structure",
+    "source_id": "CO_8661596785617876616983344"
+  }
+}

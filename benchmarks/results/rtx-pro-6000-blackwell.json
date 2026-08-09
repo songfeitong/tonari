@@ -1,0 +1,529 @@
+{
+  "dataset": {
+    "manifest_sha256": "3475c391b8def6bf599a57a7f1c938113eabcbfb0f2b89f7d31da648c6f7b413",
+    "sample_size": 1536,
+    "sampling": {
+      "anisotropy_boundaries": [
+        1.2,
+        1.5,
+        2.0,
+        3.0,
+        6.0
+      ],
+      "atom_count_boundaries": [
+        4,
+        8,
+        16,
+        32,
+        64,
+        128,
+        256
+      ],
+      "maximum_atoms": 444,
+      "method": "round-robin over fixed atom-count, cell-anisotropy, cell-skew, and element-count strata; stable hash order within each stratum",
+      "minimum_atoms": 1,
+      "sample_size": 1536,
+      "score": "sha256(f'{seed}:{configuration_id}')",
+      "seed": 20260809,
+      "skew_boundaries": [
+        0.05,
+        0.2,
+        0.4,
+        0.7
+      ],
+      "unique_formulas": 1343
+    },
+    "source": {
+      "colabfit_id": "DS_5drebe4tktiu_0",
+      "configuration_count_observed": 132741,
+      "download_url_used": "https://huggingface.co/datasets/colabfit/Matbench_mp_e_form/resolve/9880d5b9b62877ec5aa14d1a4c2a9ff4ee870b8d/co/co_0.parquet?download=true",
+      "hf_commit": "9880d5b9b62877ec5aa14d1a4c2a9ff4ee870b8d",
+      "hf_repository": "colabfit/Matbench_mp_e_form",
+      "name": "matbench_mp_e_form",
+      "page": "https://materials.colabfit.org/id/DS_5drebe4tktiu_0",
+      "parquet_bytes": 128655162,
+      "parquet_path": "co/co_0.parquet",
+      "parquet_sha256": "4b815791cc31862895b23cda7339d96217c37815c8f183949dc59b3035ee2afd"
+    },
+    "supercell_source_id": "CO_8661596785617876616983344"
+  },
+  "environment": {
+    "compute_capability": [
+      12,
+      0
+    ],
+    "equiformer_v3_reference_revision": "a7300c58df683dc99cb48027d5bfd4c887486c48",
+    "gpu": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+    "platform": "Linux-7.0.0-28-generic-x86_64-with-glibc2.39",
+    "python": "3.12.3",
+    "repository_revision": "c9b5dfa3300bec5cee8a75fb6cc06fc8aa6b5de9",
+    "torch": "2.12.1+cu130",
+    "torch_cuda": "13.0",
+    "vesin_version": "0.6.1"
+  },
+  "method": {
+    "batch_size": 32,
+    "cutoff_angstrom": 5.0,
+    "data_transfer_timed": false,
+    "dense_baseline": "independent Equiformer/FairChem-style N^2 x padded-images tensor expansion adjusted to strict cutoff and onsite policy",
+    "dense_candidate_limit": 150000000,
+    "dtype": "float32",
+    "exact_keys_compared": "(source, target, Sx, Sy, Sz)",
+    "output_order_compared": false
+  },
+  "validation": {
+    "dense_median_batch": {
+      "edges": 43842,
+      "exact_key_match": true
+    },
+    "vesin_all_sampled_structures": {
+      "batches": 48,
+      "edges": 2780158,
+      "exact_key_match": true,
+      "structures": 1536
+    }
+  },
+  "workloads": [
+    {
+      "backends": {
+        "torch_dense_batch": {
+          "reason": "estimated 449,736,378 atom-pair-image candidates exceeds the safety limit 0",
+          "status": "skipped"
+        },
+        "torch_radius_graph": {
+          "atoms": 75238,
+          "atoms_per_second": 2204660.145427163,
+          "backend": "torch_radius_graph",
+          "edges": 2780158,
+          "edges_per_second": 81465529.92624061,
+          "maximum_ms": 39.1247239895165,
+          "median_ms": 34.12680188193917,
+          "memory_note": "Torch allocator peak above resident inputs",
+          "minimum_ms": 33.98937406018376,
+          "repeats": 7,
+          "structures": 1536,
+          "structures_per_second": 45008.61244817941,
+          "torch_peak_bytes": 3653632
+        },
+        "vesin_gpu_per_structure": {
+          "atoms": 75238,
+          "atoms_per_second": 153599.862108598,
+          "backend": "vesin_gpu_per_structure",
+          "edges": 2780158,
+          "edges_per_second": 5675747.434010946,
+          "maximum_ms": 522.542464081198,
+          "median_ms": 489.8311689030379,
+          "memory_note": "Torch allocator only; Vesin native temporary allocations may not be visible",
+          "minimum_ms": 477.07167407497764,
+          "repeats": 7,
+          "structures": 1536,
+          "structures_per_second": 3135.774318812389,
+          "torch_peak_bytes": 5950464
+        }
+      },
+      "batch_count": 48,
+      "dense_candidate_count_max": 449736378,
+      "name": "matbench_dataloader_epoch_bs32",
+      "source_id_count": 1536,
+      "source_id_sha256": "6dd9343d756dc03e359296e69e8f932ace5df10b8107a9a666703cedb2473f31",
+      "source_ids": null
+    },
+    {
+      "backends": {
+        "torch_dense_batch": {
+          "atoms": 1126,
+          "atoms_per_second": 26334.871965736293,
+          "backend": "torch_dense_batch",
+          "edges": 43842,
+          "edges_per_second": 1025376.0716889969,
+          "maximum_ms": 42.86698205396533,
+          "median_ms": 42.75699541904032,
+          "memory_note": "Torch allocator peak above resident inputs",
+          "minimum_ms": 42.71935997530818,
+          "repeats": 12,
+          "structures": 32,
+          "structures_per_second": 748.4155443193262,
+          "torch_peak_bytes": 6915438080
+        },
+        "torch_radius_graph": {
+          "atoms": 1126,
+          "atoms_per_second": 1372060.492497141,
+          "backend": "torch_radius_graph",
+          "edges": 43842,
+          "edges_per_second": 53422625.32154498,
+          "maximum_ms": 0.8638841100037098,
+          "median_ms": 0.8206635247915983,
+          "memory_note": "Torch allocator peak above resident inputs",
+          "minimum_ms": 0.8125170134007931,
+          "repeats": 12,
+          "structures": 32,
+          "structures_per_second": 38992.83815267186,
+          "torch_peak_bytes": 1494528
+        },
+        "vesin_gpu_per_structure": {
+          "atoms": 1126,
+          "atoms_per_second": 121083.15906316163,
+          "backend": "vesin_gpu_per_structure",
+          "edges": 43842,
+          "edges_per_second": 4714500.76345216,
+          "maximum_ms": 9.405564051121473,
+          "median_ms": 9.29939397610724,
+          "memory_note": "Torch allocator only; Vesin native temporary allocations may not be visible",
+          "minimum_ms": 9.270499926060438,
+          "repeats": 12,
+          "structures": 32,
+          "structures_per_second": 3441.0844493971335,
+          "torch_peak_bytes": 2525184
+        }
+      },
+      "batch_count": 1,
+      "dense_candidate_count_max": 47989130,
+      "name": "matbench_median_batch_bs32",
+      "source_id_count": 32,
+      "source_id_sha256": "7e751e41b9ec87eaf4859a5d3c35427f190def78462b72814452f2bb4da88c15",
+      "source_ids": [
+        "CO_7709054407100603635113860",
+        "CO_1119165305054701236763738",
+        "CO_8763530830781219272957593",
+        "CO_9834591878386329755721367",
+        "CO_3776873626598103155293292",
+        "CO_5691874900193744519256347",
+        "CO_5273060548029272344304036",
+        "CO_3463481034481020150220603",
+        "CO_9864987999219940417825718",
+        "CO_1151228016536543560089434",
+        "CO_6755572739731489761637750",
+        "CO_1059520703003242961010637",
+        "CO_8478044151273659454916315",
+        "CO_7001091476305146458511747",
+        "CO_3291860072974595014581501",
+        "CO_6819609548478669937349738",
+        "CO_2237399706339636931067286",
+        "CO_5591423623595420040309247",
+        "CO_1126561901560440906068441",
+        "CO_1417608204095018634488134",
+        "CO_6474743547061826560912129",
+        "CO_4902380226914394810976859",
+        "CO_5743572775485511713256220",
+        "CO_9090115037616596651071448",
+        "CO_2971983980313819892101894",
+        "CO_4415180477220882118422799",
+        "CO_1152044792676321799497214",
+        "CO_8658273820994767913834419",
+        "CO_4191054133309156136003610",
+        "CO_1123205171266975931870430",
+        "CO_2037190348507888568709067",
+        "CO_1291137931967555234494194"
+      ]
+    },
+    {
+      "backends": {
+        "torch_dense_batch": {
+          "atoms": 64,
+          "atoms_per_second": 91577.1888653977,
+          "backend": "torch_dense_batch",
+          "edges": 744,
+          "edges_per_second": 1064584.8205602483,
+          "maximum_ms": 0.8260260801762342,
+          "median_ms": 0.6988639943301678,
+          "memory_note": "Torch allocator peak above resident inputs",
+          "minimum_ms": 0.6892399396747351,
+          "repeats": 12,
+          "structures": 1,
+          "structures_per_second": 1430.893576021839,
+          "torch_peak_bytes": 16064512
+        },
+        "torch_radius_graph": {
+          "atoms": 64,
+          "atoms_per_second": 287148.02938776877,
+          "backend": "torch_radius_graph",
+          "edges": 744,
+          "edges_per_second": 3338095.841632812,
+          "maximum_ms": 0.26760390028357506,
+          "median_ms": 0.22288155741989613,
+          "memory_note": "Torch allocator peak above resident inputs",
+          "minimum_ms": 0.21911109797656536,
+          "repeats": 12,
+          "structures": 1,
+          "structures_per_second": 4486.687959183887,
+          "torch_peak_bytes": 25088
+        },
+        "vesin_gpu_per_structure": {
+          "atoms": 64,
+          "atoms_per_second": 169491.48894671287,
+          "backend": "vesin_gpu_per_structure",
+          "edges": 744,
+          "edges_per_second": 1970338.559005537,
+          "maximum_ms": 0.4108699504286051,
+          "median_ms": 0.3776000812649727,
+          "memory_note": "Torch allocator only; Vesin native temporary allocations may not be visible",
+          "minimum_ms": 0.3663329407572746,
+          "repeats": 12,
+          "structures": 1,
+          "structures_per_second": 2648.3045147923885,
+          "torch_peak_bytes": 55296
+        }
+      },
+      "batch_count": 1,
+      "dense_candidate_count_max": 110592,
+      "name": "matbench_supercell_1x1x1",
+      "source_id_count": 1,
+      "source_id_sha256": "0f9ab247146e5fd763fbc342f793146dedbc07785f17893fff08ce41dfc2a427",
+      "source_ids": [
+        "CO_8661596785617876616983344__1x1x1"
+      ]
+    },
+    {
+      "backends": {
+        "torch_dense_batch": {
+          "atoms": 512,
+          "atoms_per_second": 76742.54264416549,
+          "backend": "torch_dense_batch",
+          "edges": 5952,
+          "edges_per_second": 892132.0582384238,
+          "maximum_ms": 6.778790149837732,
+          "median_ms": 6.671658018603921,
+          "memory_note": "Torch allocator peak above resident inputs",
+          "minimum_ms": 6.6493849735707045,
+          "repeats": 12,
+          "structures": 1,
+          "structures_per_second": 149.8877786018857,
+          "torch_peak_bytes": 1028685824
+        },
+        "torch_radius_graph": {
+          "atoms": 512,
+          "atoms_per_second": 1739162.581551152,
+          "backend": "torch_radius_graph",
+          "edges": 5952,
+          "edges_per_second": 20217765.010532144,
+          "maximum_ms": 0.37864106707274914,
+          "median_ms": 0.29439455829560757,
+          "memory_note": "Torch allocator peak above resident inputs",
+          "minimum_ms": 0.28567109256982803,
+          "repeats": 12,
+          "structures": 1,
+          "structures_per_second": 3396.801917092094,
+          "torch_peak_bytes": 251392
+        },
+        "vesin_gpu_per_structure": {
+          "atoms": 512,
+          "atoms_per_second": 729163.480454464,
+          "backend": "vesin_gpu_per_structure",
+          "edges": 5952,
+          "edges_per_second": 8476525.460283143,
+          "maximum_ms": 0.7620491087436676,
+          "median_ms": 0.7021744968369603,
+          "memory_note": "Torch allocator only; Vesin native temporary allocations may not be visible",
+          "minimum_ms": 0.6889801006764174,
+          "repeats": 12,
+          "structures": 1,
+          "structures_per_second": 1424.147422762625,
+          "torch_peak_bytes": 429056
+        }
+      },
+      "batch_count": 1,
+      "dense_candidate_count_max": 7077888,
+      "name": "matbench_supercell_2x2x2",
+      "source_id_count": 1,
+      "source_id_sha256": "c12d4b597dbce4e7a4981767d76c3b6cf1f5a1ffe1f37b9654c725ced46737be",
+      "source_ids": [
+        "CO_8661596785617876616983344__2x2x2"
+      ]
+    },
+    {
+      "backends": {
+        "torch_dense_batch": {
+          "atoms": 1728,
+          "atoms_per_second": 23603.065288923834,
+          "backend": "torch_dense_batch",
+          "edges": 20088,
+          "edges_per_second": 274385.6339837396,
+          "maximum_ms": 73.25981883332133,
+          "median_ms": 73.21082998532802,
+          "memory_note": "Torch allocator peak above resident inputs",
+          "minimum_ms": 73.17424891516566,
+          "repeats": 12,
+          "structures": 1,
+          "structures_per_second": 13.659181301460553,
+          "torch_peak_bytes": 11710352384
+        },
+        "torch_radius_graph": {
+          "atoms": 1728,
+          "atoms_per_second": 5017056.094975003,
+          "backend": "torch_radius_graph",
+          "edges": 20088,
+          "edges_per_second": 58323277.10408441,
+          "maximum_ms": 0.3979611210525036,
+          "median_ms": 0.34442509058862925,
+          "memory_note": "Torch allocator peak above resident inputs",
+          "minimum_ms": 0.3359068650752306,
+          "repeats": 12,
+          "structures": 1,
+          "structures_per_second": 2903.388943851275,
+          "torch_peak_bytes": 830976
+        },
+        "vesin_gpu_per_structure": {
+          "atoms": 1728,
+          "atoms_per_second": 1834507.8955925065,
+          "backend": "vesin_gpu_per_structure",
+          "edges": 20088,
+          "edges_per_second": 21326154.28626289,
+          "maximum_ms": 1.1193398386240005,
+          "median_ms": 0.9419419802725315,
+          "memory_note": "Torch allocator only; Vesin native temporary allocations may not be visible",
+          "minimum_ms": 0.9282908868044615,
+          "repeats": 12,
+          "structures": 1,
+          "structures_per_second": 1061.6365136530708,
+          "torch_peak_bytes": 1446912
+        }
+      },
+      "batch_count": 1,
+      "dense_candidate_count_max": 80621568,
+      "name": "matbench_supercell_3x3x3",
+      "source_id_count": 1,
+      "source_id_sha256": "a551727782c0e4e3c2b30d47a22395d605aac42890405de296698263a9d7e56c",
+      "source_ids": [
+        "CO_8661596785617876616983344__3x3x3"
+      ]
+    },
+    {
+      "backends": {
+        "torch_dense_batch": {
+          "reason": "estimated 452,984,832 atom-pair-image candidates exceeds the safety limit 150,000,000",
+          "status": "skipped"
+        },
+        "torch_radius_graph": {
+          "atoms": 4096,
+          "atoms_per_second": 11838769.16623833,
+          "backend": "torch_radius_graph",
+          "edges": 47616,
+          "edges_per_second": 137625691.5575206,
+          "maximum_ms": 0.42844610288739204,
+          "median_ms": 0.34598191268742085,
+          "memory_note": "Torch allocator peak above resident inputs",
+          "minimum_ms": 0.33571687527000904,
+          "repeats": 12,
+          "structures": 1,
+          "structures_per_second": 2890.324503476155,
+          "torch_peak_bytes": 1955840
+        },
+        "vesin_gpu_per_structure": {
+          "atoms": 4096,
+          "atoms_per_second": 4452737.819970009,
+          "backend": "vesin_gpu_per_structure",
+          "edges": 47616,
+          "edges_per_second": 51763077.15715136,
+          "maximum_ms": 1.1085120495408773,
+          "median_ms": 0.9198834886774421,
+          "memory_note": "Torch allocator only; Vesin native temporary allocations may not be visible",
+          "minimum_ms": 0.9095820132642984,
+          "repeats": 12,
+          "structures": 1,
+          "structures_per_second": 1087.0941943286155,
+          "torch_peak_bytes": 3428352
+        }
+      },
+      "batch_count": 1,
+      "dense_candidate_count_max": 452984832,
+      "name": "matbench_supercell_4x4x4",
+      "source_id_count": 1,
+      "source_id_sha256": "63083d6bc670bce73c1035901e22f11aa422875b0cdfc2cd759de1f78126a820",
+      "source_ids": [
+        "CO_8661596785617876616983344__4x4x4"
+      ]
+    },
+    {
+      "backends": {
+        "torch_dense_batch": {
+          "reason": "estimated 5,159,780,352 atom-pair-image candidates exceeds the safety limit 150,000,000",
+          "status": "skipped"
+        },
+        "torch_radius_graph": {
+          "atoms": 13824,
+          "atoms_per_second": 38741836.96334236,
+          "backend": "torch_radius_graph",
+          "edges": 160704,
+          "edges_per_second": 450373854.6988549,
+          "maximum_ms": 0.458691967651248,
+          "median_ms": 0.35682355519384146,
+          "memory_note": "Torch allocator peak above resident inputs",
+          "minimum_ms": 0.3505989443510771,
+          "repeats": 12,
+          "structures": 1,
+          "structures_per_second": 2802.505567371409,
+          "torch_peak_bytes": 6580224
+        },
+        "vesin_gpu_per_structure": {
+          "atoms": 13824,
+          "atoms_per_second": 12475836.32583204,
+          "backend": "vesin_gpu_per_structure",
+          "edges": 160704,
+          "edges_per_second": 145031597.28779745,
+          "maximum_ms": 1.1754240840673447,
+          "median_ms": 1.1080619879066944,
+          "memory_note": "Torch allocator only; Vesin native temporary allocations may not be visible",
+          "minimum_ms": 1.096114981919527,
+          "repeats": 12,
+          "structures": 1,
+          "structures_per_second": 902.476586070026,
+          "torch_peak_bytes": 11571200
+        }
+      },
+      "batch_count": 1,
+      "dense_candidate_count_max": 5159780352,
+      "name": "matbench_supercell_6x6x6",
+      "source_id_count": 1,
+      "source_id_sha256": "8d71ae47e723d4581ba949f21ebe0bc334e97a0dda67f9ef3a2a0a617910cbf3",
+      "source_ids": [
+        "CO_8661596785617876616983344__6x6x6"
+      ]
+    },
+    {
+      "backends": {
+        "torch_dense_batch": {
+          "reason": "estimated 28,991,029,248 atom-pair-image candidates exceeds the safety limit 150,000,000",
+          "status": "skipped"
+        },
+        "torch_radius_graph": {
+          "atoms": 32768,
+          "atoms_per_second": 80021884.08180755,
+          "backend": "torch_radius_graph",
+          "edges": 380928,
+          "edges_per_second": 930254402.4510127,
+          "maximum_ms": 0.5988539196550846,
+          "median_ms": 0.40948798414319754,
+          "memory_note": "Torch allocator peak above resident inputs",
+          "minimum_ms": 0.38890703581273556,
+          "repeats": 12,
+          "structures": 1,
+          "structures_per_second": 2442.074099176256,
+          "torch_peak_bytes": 15581696
+        },
+        "vesin_gpu_per_structure": {
+          "atoms": 32768,
+          "atoms_per_second": 20043461.270927947,
+          "backend": "vesin_gpu_per_structure",
+          "edges": 380928,
+          "edges_per_second": 233005237.27453738,
+          "maximum_ms": 1.9146900158375502,
+          "median_ms": 1.6348473727703094,
+          "memory_note": "Torch allocator only; Vesin native temporary allocations may not be visible",
+          "minimum_ms": 1.6150770243257284,
+          "repeats": 12,
+          "structures": 1,
+          "structures_per_second": 611.6778952309554,
+          "torch_peak_bytes": 27426816
+        }
+      },
+      "batch_count": 1,
+      "dense_candidate_count_max": 28991029248,
+      "name": "matbench_supercell_8x8x8",
+      "source_id_count": 1,
+      "source_id_sha256": "2492df5d6dcbcb1034db87ee815b9e08609588c7f581e9c8ae3c7ba810d28288",
+      "source_ids": [
+        "CO_8661596785617876616983344__8x8x8"
+      ]
+    }
+  ]
+}
