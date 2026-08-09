@@ -2,6 +2,8 @@
 
 这是一个私有 CUDA 实验仓库，用于为整个 PyTorch batch 构造完整的有向周期 cutoff graph。实现独立于 Vesin：小结构使用融合的 exhaustive 路径，大结构使用 Cartesian cell-list 路径。
 
+第一次阅读建议从[算法总览：为什么这个 Radius Graph Builder 快](docs/algorithm-overview.md)开始；它集中介绍问题、整体架构、核心优化、真实性能、模型集成位置和已知边界。
+
 ## API
 
 ```python
