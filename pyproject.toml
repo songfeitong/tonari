@@ -1,0 +1,35 @@
+[project]
+name = "torch-radius-graph"
+version = "0.1.0"
+description = "Experimental batched periodic radius graphs for PyTorch CUDA"
+readme = "README.md"
+requires-python = "==3.12.*"
+dependencies = [
+  "torch==2.12.1",
+]
+
+[build-system]
+requires = [
+  "setuptools>=77",
+  "torch==2.12.1",
+]
+build-backend = "setuptools.build_meta"
+
+[dependency-groups]
+dev = [
+  "ase==3.29.0",
+  "pytest==9.1.1",
+  "ruff",
+  "vesin==0.6.1",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+  "cuda: requires a CUDA device and the compiled extension",
+  "benchmark: performance benchmark, excluded from the default test run",
+]
+
+[tool.ruff]
+target-version = "py312"
+
