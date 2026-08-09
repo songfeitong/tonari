@@ -49,9 +49,9 @@ def reference_radius_graph_pbc(
             fractional = structure_positions @ active_duals
             active_wrap = torch.floor(fractional).to(torch.int64)
             atom_wrap[:, active_axes] = active_wrap
-            wrapped_positions = structure_positions - active_wrap.to(
-                positions.dtype
-            ) @ active_cell
+            wrapped_positions = (
+                structure_positions - active_wrap.to(positions.dtype) @ active_cell
+            )
             for local_axis, axis in enumerate(active_axes.tolist()):
                 reciprocal_norm = float(
                     torch.linalg.vector_norm(active_duals[:, local_axis]).cpu()
@@ -78,11 +78,7 @@ def reference_radius_graph_pbc(
             source, target = torch.nonzero(within_cutoff, as_tuple=True)
             if source.numel() == 0:
                 continue
-            shifts = (
-                image_shift[None, :]
-                - atom_wrap[source]
-                + atom_wrap[target]
-            )
+            shifts = image_shift[None, :] - atom_wrap[source] + atom_wrap[target]
             edge_indices.append(torch.stack((source + start, target + start)))
             edge_shifts.append(shifts.to(torch.int32))
 
@@ -92,4 +88,3 @@ def reference_radius_graph_pbc(
             torch.empty((0, 3), dtype=torch.int32, device=positions.device),
         )
     return torch.cat(edge_indices, dim=1), torch.cat(edge_shifts, dim=0)
-

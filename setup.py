@@ -3,7 +3,6 @@ from pathlib import Path
 from setuptools import find_packages, setup
 from torch.utils.cpp_extension import BuildExtension, CUDAExtension
 
-
 ROOT = Path(__file__).parent
 
 
@@ -16,6 +15,7 @@ setup(
             sources=[
                 str(ROOT / "csrc" / "bindings.cpp"),
                 str(ROOT / "csrc" / "radius_graph_cuda.cu"),
+                str(ROOT / "csrc" / "radius_graph_cell_cuda.cu"),
             ],
             extra_compile_args={
                 "cxx": ["-O3"],

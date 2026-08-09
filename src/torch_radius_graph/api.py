@@ -28,7 +28,7 @@ def radius_graph_pbc(
         raise RuntimeError(
             "the torch_radius_graph CUDA extension is not built; install the project with uv sync"
         ) from error
-    return _C.radius_graph_pbc_cuda(
+    arguments = (
         positions.detach().contiguous(),
         ptr.contiguous(),
         cells.detach().contiguous(),
@@ -36,7 +36,17 @@ def radius_graph_pbc(
         metadata.image_shifts,
         metadata.image_ptr,
         metadata.block_ptr,
+    )
+    if metadata.maximum_atoms >= 256 and metadata.total_nodes < 2**31:
+        return _C.radius_graph_pbc_cell_cuda(
+            *arguments,
+            metadata.node_ptr,
+            metadata.total_blocks,
+            metadata.total_nodes,
+            cutoff,
+        )
+    return _C.radius_graph_pbc_cuda(
+        *arguments,
         metadata.total_blocks,
         cutoff,
     )
-

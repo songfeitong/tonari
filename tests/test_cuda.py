@@ -7,7 +7,6 @@ from ase.neighborlist import primitive_neighbor_list
 
 from torch_radius_graph import radius_graph_pbc, reference_radius_graph_pbc
 
-
 pytestmark = pytest.mark.cuda
 
 
@@ -34,7 +33,9 @@ def cuda_graph(
 
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
-def test_cuda_matches_reference_for_mixed_boundary_conditions(dtype: torch.dtype) -> None:
+def test_cuda_matches_reference_for_mixed_boundary_conditions(
+    dtype: torch.dtype,
+) -> None:
     generator = torch.Generator().manual_seed(712)
     positions = torch.cat(
         (
@@ -65,9 +66,7 @@ def test_cuda_matches_reference_for_mixed_boundary_conditions(dtype: torch.dtype
             ),
         )
     )
-    pbc = torch.tensor(
-        [[False, False, False], [True, True, False], [True, True, True]]
-    )
+    pbc = torch.tensor([[False, False, False], [True, True, False], [True, True, True]])
     expected = reference_radius_graph_pbc(positions, ptr, cells, pbc, 1.35)
     actual = cuda_graph(positions, ptr, cells, pbc, 1.35)
     assert edge_keys(*actual) == edge_keys(*expected)
@@ -104,7 +103,9 @@ def test_cuda_matches_ase_for_partial_triclinic_multiple_images() -> None:
         cutoff,
     )
     assert edge_keys(*actual) == expected
-    assert any(source == target and shift != (0, 0, 0) for source, target, *shift in expected)
+    assert any(
+        source == target and shift != (0, 0, 0) for source, target, *shift in expected
+    )
 
 
 def test_cuda_relabels_unwrapped_representatives() -> None:
@@ -130,7 +131,9 @@ def test_cuda_relabels_unwrapped_representatives() -> None:
         - translated.cuda()[second_edges[1]]
         + second_shifts.to(dtype) @ cell.cuda()
     )
-    assert edge_keys(first_edges, first_shifts) != edge_keys(second_edges, second_shifts)
+    assert edge_keys(first_edges, first_shifts) != edge_keys(
+        second_edges, second_shifts
+    )
     first_vectors = sorted(map(tuple, np.round(first_vectors.cpu().numpy(), 12)))
     second_vectors = sorted(map(tuple, np.round(second_vectors.cpu().numpy(), 12)))
     assert first_vectors == second_vectors
@@ -206,3 +209,31 @@ def test_nondefault_stream_and_empty_structure() -> None:
         (1, 0, 0, 0, 0),
     }
 
+
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+def test_cell_list_path_matches_reference(dtype: torch.dtype) -> None:
+    generator = torch.Generator().manual_seed(1842)
+    n_atoms = 288
+    cell = torch.tensor(
+        [[8.0, 0.4, 0.1], [0.2, 7.5, 0.5], [0.3, 0.1, 9.0]], dtype=dtype
+    )
+    positions = torch.rand((n_atoms, 3), generator=generator, dtype=dtype) @ cell
+    positions[:5] += 3 * cell[0] - 2 * cell[1]
+    ptr = torch.tensor([0, n_atoms])
+    pbc = torch.tensor([[True, True, True]])
+    expected = reference_radius_graph_pbc(positions, ptr, cell[None], pbc, 1.2)
+    actual = cuda_graph(positions, ptr, cell[None], pbc, 1.2)
+    assert edge_keys(*actual) == edge_keys(*expected)
+
+
+def test_cell_list_falls_back_for_extremely_sparse_bounds() -> None:
+    positions = torch.zeros((256, 3))
+    positions[:, 0] = torch.arange(256) * 10_000.0
+    edge_index, shifts = cuda_graph(
+        positions,
+        torch.tensor([0, 256]),
+        torch.zeros((1, 3, 3)),
+        torch.zeros((1, 3), dtype=torch.bool),
+        1.0,
+    )
+    assert edge_keys(edge_index, shifts) == set()

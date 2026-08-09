@@ -42,9 +42,7 @@ def test_periodic_small_cell_retains_self_images_and_multiple_images() -> None:
 
 
 def test_mixed_batch_uses_each_structure_cell_and_never_crosses() -> None:
-    positions = torch.tensor(
-        [[0.0, 0.0, 0.0], [0.4, 0.0, 0.0], [0.0, 0.0, 0.0]]
-    )
+    positions = torch.tensor([[0.0, 0.0, 0.0], [0.4, 0.0, 0.0], [0.0, 0.0, 0.0]])
     edge_index, shifts = reference_radius_graph_pbc(
         positions,
         torch.tensor([0, 2, 3]),
@@ -56,7 +54,10 @@ def test_mixed_batch_uses_each_structure_cell_and_never_crosses() -> None:
     assert {(0, 1, 0, 0, 0), (1, 0, 0, 0, 0)} <= keys
     assert (2, 2, -1, 0, 0) in keys
     assert (2, 2, 1, 0, 0) in keys
-    assert all((source < 2 and target < 2) or (source == target == 2) for source, target, *_ in keys)
+    assert all(
+        (source < 2 and target < 2) or (source == target == 2)
+        for source, target, *_ in keys
+    )
 
 
 def test_representative_translation_relabels_shift_without_changing_vectors() -> None:
@@ -72,15 +73,20 @@ def test_representative_translation_relabels_shift_without_changing_vectors() ->
     )
     first_edges, first_shifts = reference_radius_graph_pbc(positions, *common)
     second_edges, second_shifts = reference_radius_graph_pbc(translated, *common)
-    first_vectors = positions[first_edges[0]] - positions[first_edges[1]] + first_shifts.to(
-        positions.dtype
-    ) @ cell
-    second_vectors = translated[second_edges[0]] - translated[second_edges[1]] + second_shifts.to(
-        positions.dtype
-    ) @ cell
-    assert edge_keys(first_edges, first_shifts) != edge_keys(second_edges, second_shifts)
+    first_vectors = (
+        positions[first_edges[0]]
+        - positions[first_edges[1]]
+        + first_shifts.to(positions.dtype) @ cell
+    )
+    second_vectors = (
+        translated[second_edges[0]]
+        - translated[second_edges[1]]
+        + second_shifts.to(positions.dtype) @ cell
+    )
+    assert edge_keys(first_edges, first_shifts) != edge_keys(
+        second_edges, second_shifts
+    )
     assert torch.allclose(
         torch.sort(first_vectors[:, 0]).values,
         torch.sort(second_vectors[:, 0]).values,
     )
-

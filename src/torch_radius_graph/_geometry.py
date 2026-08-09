@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from itertools import product
-from math import ceil
 
 import torch
 from torch import Tensor
@@ -14,7 +13,10 @@ class SearchMetadata:
     image_shifts: Tensor
     image_ptr: Tensor
     block_ptr: Tensor
+    node_ptr: Tensor
     total_blocks: int
+    total_nodes: int
+    maximum_atoms: int
 
 
 def validate_inputs(
@@ -73,12 +75,16 @@ def build_search_metadata(
             continue
         active_cells = cells_cpu[batch_indices][:, active_axes, :]
         singular_values = torch.linalg.svdvals(active_cells)
-        scales = torch.maximum(singular_values[:, 0], torch.ones_like(singular_values[:, 0]))
+        scales = torch.maximum(
+            singular_values[:, 0], torch.ones_like(singular_values[:, 0])
+        )
         tolerances = (
             torch.finfo(torch.float64).eps * max(active_cells.shape[-2:]) * scales
         )
         if torch.any(singular_values[:, -1] <= tolerances):
-            raise ValueError("active periodic cell vectors must be linearly independent")
+            raise ValueError(
+                "active periodic cell vectors must be linearly independent"
+            )
         gram = active_cells @ active_cells.transpose(1, 2)
         active_duals = active_cells.transpose(1, 2) @ torch.linalg.inv(gram)
         reciprocal_norms = torch.linalg.vector_norm(active_duals, dim=1)
@@ -111,16 +117,25 @@ def build_search_metadata(
         image_ptr.append(len(image_shifts))
 
     if ptr_cpu[-1].item() >= 2**31:
-        raise ValueError("the current CUDA implementation supports fewer than 2^31 atoms")
+        raise ValueError(
+            "the current CUDA implementation supports fewer than 2^31 atoms"
+        )
     blocks_per_structure = [
         (int(n_atoms) * int(n_atoms) * n_images + 255) // 256
-        for n_atoms, n_images in zip(atom_counts_tensor.tolist(), image_counts, strict=True)
+        for n_atoms, n_images in zip(
+            atom_counts_tensor.tolist(), image_counts, strict=True
+        )
     ]
     block_ptr = [0]
     for n_blocks in blocks_per_structure:
         block_ptr.append(block_ptr[-1] + n_blocks)
     if block_ptr[-1] >= 2**31:
         raise ValueError("the dense CUDA path requires fewer than 2^31 thread blocks")
+    node_ptr = [0]
+    for n_atoms, n_images in zip(
+        atom_counts_tensor.tolist(), image_counts, strict=True
+    ):
+        node_ptr.append(node_ptr[-1] + int(n_atoms) * n_images)
     return SearchMetadata(
         duals=duals.to(device=cells.device, dtype=cells.dtype),
         image_shifts=torch.tensor(
@@ -130,5 +145,8 @@ def build_search_metadata(
         ).reshape(-1, 3),
         image_ptr=torch.tensor(image_ptr, dtype=torch.int64, device=cells.device),
         block_ptr=torch.tensor(block_ptr, dtype=torch.int64, device=cells.device),
+        node_ptr=torch.tensor(node_ptr, dtype=torch.int64, device=cells.device),
         total_blocks=block_ptr[-1],
+        total_nodes=node_ptr[-1],
+        maximum_atoms=max(atom_counts_tensor.tolist(), default=0),
     )
