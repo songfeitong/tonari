@@ -26,6 +26,7 @@ from benchmarks.matbench_data import (
     StructureBatch,
     collate_structures,
     repeat_structure,
+    select_scaling_structure,
 )
 from torch_radius_graph import radius_graph_pbc
 
@@ -226,15 +227,7 @@ def load_gpu_batches(
 def scaling_batches(
     dataset: MatbenchStructureDataset, device: torch.device
 ) -> tuple[str, list[tuple[int, StructureBatch]]]:
-    candidates = []
-    for index in range(len(dataset)):
-        structure = dataset[index]
-        n_atoms = len(structure["positions"])
-        lengths = torch.linalg.vector_norm(structure["cell"], dim=1)
-        anisotropy = float(lengths.max() / lengths.min())
-        candidates.append((abs(n_atoms - 64), abs(anisotropy - 1.5), index))
-    _, _, selected_index = min(candidates)
-    structure = dataset[selected_index]
+    structure = select_scaling_structure(dataset)
     source_id = str(structure["source_id"])
     batches = []
     for factor in (1, 2, 3, 4, 6, 8):

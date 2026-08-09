@@ -27,6 +27,8 @@ def reference_radius_graph_pbc(
     """
 
     cutoff = float(cutoff)
+    cutoff_squared = cutoff * cutoff
+    int32_range = torch.iinfo(torch.int32)
     validate_inputs(positions, ptr, cells, pbc, cutoff, require_cuda=False)
     ptr_cpu = ptr.detach().cpu()
     pbc_cpu = pbc.detach().cpu()
@@ -58,8 +60,9 @@ def reference_radius_graph_pbc(
             active_duals = torch.linalg.pinv(active_cell)
             fractional = structure_positions @ active_duals
             floored_fractional = torch.floor(fractional)
-            if torch.any(floored_fractional < torch.iinfo(torch.int32).min) or torch.any(
-                floored_fractional > torch.iinfo(torch.int32).max
+            if torch.any(
+                (floored_fractional < int32_range.min)
+                | (floored_fractional > int32_range.max)
             ):
                 raise ValueError(
                     "atom representatives require periodic wraps outside the int32 range"
@@ -89,15 +92,15 @@ def reference_radius_graph_pbc(
                 - wrapped_positions[None, :, :]
                 + translation
             )
-            within_cutoff = torch.sum(vectors * vectors, dim=-1) < cutoff * cutoff
+            within_cutoff = torch.sum(vectors * vectors, dim=-1) < cutoff_squared
             if shift_values == (0, 0, 0):
                 within_cutoff.fill_diagonal_(False)
             source, target = torch.nonzero(within_cutoff, as_tuple=True)
             if source.numel() == 0:
                 continue
             shifts = image_shift[None, :] - atom_wrap[source] + atom_wrap[target]
-            if torch.any(shifts < torch.iinfo(torch.int32).min) or torch.any(
-                shifts > torch.iinfo(torch.int32).max
+            if torch.any(
+                (shifts < int32_range.min) | (shifts > int32_range.max)
             ):
                 raise ValueError(
                     "a cell shift required by the cutoff graph exceeds the int32 output range"

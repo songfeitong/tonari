@@ -9,6 +9,7 @@ from benchmarks.matbench_data import (
     MatbenchStructureDataset,
     collate_structures,
     repeat_structure,
+    select_scaling_structure,
 )
 from torch_radius_graph import radius_graph_pbc
 
@@ -32,14 +33,7 @@ def main() -> None:
     parser.add_argument("--cutoff", type=float, default=5.0)
     args = parser.parse_args()
     dataset = MatbenchStructureDataset(args.cache, args.manifest, torch.float32)
-    candidates = []
-    for index in range(len(dataset)):
-        structure = dataset[index]
-        n_atoms = len(structure["positions"])
-        lengths = torch.linalg.vector_norm(structure["cell"], dim=1)
-        anisotropy = float(lengths.max() / lengths.min())
-        candidates.append((abs(n_atoms - 64), abs(anisotropy - 1.5), index))
-    structure = dataset[min(candidates)[2]]
+    structure = select_scaling_structure(dataset)
     structure = repeat_structure(structure, (args.factor, args.factor, args.factor))
     batch = collate_structures([structure]).to(torch.device("cuda"))
     for _ in range(3):

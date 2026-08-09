@@ -1,23 +1,11 @@
 #include <ATen/cuda/CUDAContext.h>
 #include <c10/cuda/CUDAException.h>
 #include <c10/cuda/CUDAGuard.h>
-#include <torch/extension.h>
+
+#include "radius_graph_cuda.h"
 
 #include <cstdint>
 #include <limits>
-#include <vector>
-
-
-std::vector<torch::Tensor> radius_graph_pbc_cuda(
-    const torch::Tensor& positions,
-    const torch::Tensor& ptr,
-    const torch::Tensor& cells,
-    const torch::Tensor& duals,
-    const torch::Tensor& image_shifts,
-    const torch::Tensor& image_ptr,
-    const torch::Tensor& block_ptr,
-    int64_t total_blocks,
-    double cutoff);
 
 
 namespace {

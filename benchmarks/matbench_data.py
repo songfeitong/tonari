@@ -73,6 +73,19 @@ class MatbenchStructureDataset(Dataset[dict[str, object]]):
         }
 
 
+def select_scaling_structure(
+    dataset: MatbenchStructureDataset,
+) -> dict[str, object]:
+    candidates = []
+    for index in range(len(dataset)):
+        structure = dataset[index]
+        n_atoms = len(structure["positions"])
+        lengths = torch.linalg.vector_norm(structure["cell"], dim=1)
+        anisotropy = float(lengths.max() / lengths.min())
+        candidates.append((abs(n_atoms - 64), abs(anisotropy - 1.5), index))
+    return dataset[min(candidates)[2]]
+
+
 def collate_structures(structures: list[dict[str, object]]) -> StructureBatch:
     counts = torch.tensor(
         [len(structure["positions"]) for structure in structures], dtype=torch.int64

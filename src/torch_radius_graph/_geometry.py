@@ -2,9 +2,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from itertools import product
+from math import isfinite
 
 import torch
 from torch import Tensor
+
+_CUDA_BLOCK_SIZE = 256
+_INT32_INDEX_LIMIT = 2**31
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,40 +46,26 @@ def validate_inputs(
         raise ValueError("cells and positions must have the same dtype")
     if pbc.shape != (ptr.numel() - 1, 3) or pbc.dtype != torch.bool:
         raise ValueError("pbc must be a bool tensor with shape (batch_size, 3)")
-    tensors = (positions, ptr, cells, pbc)
-    if any(tensor.device != positions.device for tensor in tensors):
+    if any(tensor.device != positions.device for tensor in (ptr, cells, pbc)):
         raise ValueError("positions, ptr, cells, and pbc must be on the same device")
-    if not torch.isfinite(torch.as_tensor(cutoff)) or cutoff <= 0:
+    if not isfinite(cutoff) or cutoff <= 0:
         raise ValueError("cutoff must be finite and positive")
 
 
-def build_search_metadata(
-    ptr: Tensor,
-    cells: Tensor,
-    pbc: Tensor,
-    cutoff: float,
-) -> SearchMetadata:
-    ptr_cpu = ptr.detach().cpu()
-    cells_cpu = cells.detach().to(device="cpu", dtype=torch.float64)
-    pbc_cpu = pbc.detach().cpu()
-    if not torch.all(torch.isfinite(cells_cpu)):
-        raise ValueError("cells must contain only finite values")
-    if ptr_cpu[0].item() != 0 or ptr_cpu[-1].item() < 0:
-        raise ValueError("ptr must start at zero and contain nonnegative atom offsets")
-    atom_counts_tensor = ptr_cpu[1:] - ptr_cpu[:-1]
-    if torch.any(atom_counts_tensor < 0):
-        raise ValueError("ptr must be nondecreasing")
-
-    duals = torch.zeros_like(cells_cpu)
-    repeats_by_structure = [[0, 0, 0] for _ in range(len(pbc_cpu))]
+def _periodic_geometry(
+    cells: Tensor, pbc: Tensor, cutoff: float
+) -> tuple[Tensor, list[list[int]]]:
+    duals = torch.zeros_like(cells)
+    repeats_by_structure = [[0, 0, 0] for _ in range(len(pbc))]
     pattern_groups: dict[tuple[bool, bool, bool], list[int]] = {}
-    for batch_index, periodic_axes in enumerate(pbc_cpu.tolist()):
+    for batch_index, periodic_axes in enumerate(pbc.tolist()):
         pattern_groups.setdefault(tuple(periodic_axes), []).append(batch_index)
+
     for pattern, batch_indices in pattern_groups.items():
         active_axes = [axis for axis, periodic in enumerate(pattern) if periodic]
         if not active_axes:
             continue
-        active_cells = cells_cpu[batch_indices][:, active_axes, :]
+        active_cells = cells[batch_indices][:, active_axes, :]
         singular_values = torch.linalg.svdvals(active_cells)
         scales = torch.maximum(
             singular_values[:, 0], torch.ones_like(singular_values[:, 0])
@@ -89,22 +79,28 @@ def build_search_metadata(
             )
         gram = active_cells @ active_cells.transpose(1, 2)
         active_duals = active_cells.transpose(1, 2) @ torch.linalg.inv(gram)
-        reciprocal_norms = torch.linalg.vector_norm(active_duals, dim=1)
-        repeats = torch.ceil(cutoff * reciprocal_norms).to(torch.int64)
+        repeat_values = torch.ceil(
+            cutoff * torch.linalg.vector_norm(active_duals, dim=1)
+        ).to(torch.int64)
         for local_axis, axis in enumerate(active_axes):
             duals[batch_indices, :, axis] = active_duals[:, :, local_axis]
-            for group_index, batch_index in enumerate(batch_indices):
-                repeats_by_structure[batch_index][axis] = int(
-                    repeats[group_index, local_axis]
-                )
+        for batch_index, values in zip(
+            batch_indices, repeat_values.tolist(), strict=True
+        ):
+            for axis, value in zip(active_axes, values, strict=True):
+                repeats_by_structure[batch_index][axis] = value
 
+    return duals, repeats_by_structure
+
+
+def _enumerate_image_shifts(
+    repeats_by_structure: list[list[int]], atom_counts: list[int]
+) -> tuple[list[tuple[int, int, int]], list[int], list[int]]:
     image_shifts: list[tuple[int, int, int]] = []
     image_ptr = [0]
     image_counts: list[int] = []
     shift_cache: dict[tuple[int, int, int], list[tuple[int, int, int]]] = {}
-    for repeats, n_atoms in zip(
-        repeats_by_structure, atom_counts_tensor.tolist(), strict=True
-    ):
+    for repeats, n_atoms in zip(repeats_by_structure, atom_counts, strict=True):
         repeat_key = tuple(repeats)
         if n_atoms == 0:
             structure_shifts = []
@@ -122,24 +118,45 @@ def build_search_metadata(
         image_shifts.extend(structure_shifts)
         image_counts.append(len(structure_shifts))
         image_ptr.append(len(image_shifts))
+    return image_shifts, image_ptr, image_counts
 
-    if ptr_cpu[-1].item() >= 2**31:
+
+def build_search_metadata(
+    ptr: Tensor,
+    cells: Tensor,
+    pbc: Tensor,
+    cutoff: float,
+    n_atoms_total: int,
+) -> SearchMetadata:
+    ptr_cpu = ptr.detach().cpu()
+    if ptr_cpu[-1].item() != n_atoms_total:
+        raise ValueError("ptr must end at n_atoms_total")
+    cells_cpu = cells.detach().to(device="cpu", dtype=torch.float64)
+    pbc_cpu = pbc.detach().cpu()
+    if not torch.all(torch.isfinite(cells_cpu)):
+        raise ValueError("cells must contain only finite values")
+    if ptr_cpu[0].item() != 0 or ptr_cpu[-1].item() < 0:
+        raise ValueError("ptr must start at zero and contain nonnegative atom offsets")
+    atom_counts_tensor = ptr_cpu[1:] - ptr_cpu[:-1]
+    if torch.any(atom_counts_tensor < 0):
+        raise ValueError("ptr must be nondecreasing")
+    atom_counts = atom_counts_tensor.tolist()
+    if n_atoms_total >= _INT32_INDEX_LIMIT:
         raise ValueError(
             "the current CUDA implementation supports fewer than 2^31 atoms"
         )
-    blocks_per_structure = [
-        (int(n_atoms) * int(n_atoms) * n_images + 255) // 256
-        for n_atoms, n_images in zip(
-            atom_counts_tensor.tolist(), image_counts, strict=True
-        )
-    ]
+    duals, repeats_by_structure = _periodic_geometry(cells_cpu, pbc_cpu, cutoff)
+    image_shifts, image_ptr, image_counts = _enumerate_image_shifts(
+        repeats_by_structure, atom_counts
+    )
+
     block_ptr = [0]
-    for n_blocks in blocks_per_structure:
-        block_ptr.append(block_ptr[-1] + n_blocks)
     node_ptr = [0]
-    for n_atoms, n_images in zip(
-        atom_counts_tensor.tolist(), image_counts, strict=True
-    ):
+    for n_atoms, n_images in zip(atom_counts, image_counts, strict=True):
+        n_tasks = n_atoms * n_atoms * n_images
+        block_ptr.append(
+            block_ptr[-1] + (n_tasks + _CUDA_BLOCK_SIZE - 1) // _CUDA_BLOCK_SIZE
+        )
         node_ptr.append(node_ptr[-1] + int(n_atoms) * n_images)
     return SearchMetadata(
         duals=duals.to(device=cells.device, dtype=cells.dtype),
@@ -153,5 +170,5 @@ def build_search_metadata(
         node_ptr=torch.tensor(node_ptr, dtype=torch.int64, device=cells.device),
         total_blocks=block_ptr[-1],
         total_nodes=node_ptr[-1],
-        maximum_atoms=max(atom_counts_tensor.tolist(), default=0),
+        maximum_atoms=max(atom_counts, default=0),
     )

@@ -3,11 +3,11 @@
 #include <c10/cuda/CUDAGuard.h>
 #include <cub/block/block_reduce.cuh>
 #include <cub/block/block_scan.cuh>
-#include <torch/extension.h>
+
+#include "radius_graph_cuda.h"
 
 #include <cstdint>
 #include <limits>
-#include <vector>
 
 
 namespace {
@@ -15,15 +15,15 @@ namespace {
 constexpr int kBlockSize = 256;
 
 
-__device__ __forceinline__ int64_t structure_for_atom(
-    int64_t atom,
-    const int64_t* ptr,
-    int64_t batch_size) {
+__device__ __forceinline__ int64_t segment_for_index(
+    int64_t index,
+    const int64_t* segment_ptr,
+    int64_t n_segments) {
     int64_t lower = 0;
-    int64_t upper = batch_size;
+    int64_t upper = n_segments;
     while (lower < upper) {
         const int64_t middle = lower + (upper - lower) / 2;
-        if (ptr[middle + 1] <= atom) {
+        if (segment_ptr[middle + 1] <= index) {
             lower = middle + 1;
         } else {
             upper = middle;
@@ -60,7 +60,7 @@ __global__ void prepare_atom_wraps_kernel(
             return;
         }
     }
-    const int64_t batch = structure_for_atom(atom, ptr, batch_size);
+    const int64_t batch = segment_for_index(atom, ptr, batch_size);
     const scalar_t* dual = duals + 9 * batch;
     const scalar_t upper_bound = static_cast<scalar_t>(2147483648.0);
 #pragma unroll
@@ -82,24 +82,6 @@ __global__ void prepare_atom_wraps_kernel(
                 static_cast<int32_t>(floor(fractional));
         }
     }
-}
-
-
-__device__ __forceinline__ int64_t structure_for_block(
-    int64_t block_index,
-    const int64_t* block_ptr,
-    int64_t batch_size) {
-    int64_t lower = 0;
-    int64_t upper = batch_size;
-    while (lower < upper) {
-        const int64_t middle = lower + (upper - lower) / 2;
-        if (block_ptr[middle + 1] <= block_index) {
-            lower = middle + 1;
-        } else {
-            upper = middle;
-        }
-    }
-    return lower;
 }
 
 
@@ -194,7 +176,8 @@ __global__ void count_edges_kernel(
     scalar_t cutoff_squared,
     int64_t* edge_count,
     int64_t* shift_overflow) {
-    const int64_t batch_index = structure_for_block(blockIdx.x, block_ptr, batch_size);
+    const int64_t batch_index =
+        segment_for_index(blockIdx.x, block_ptr, batch_size);
     const int64_t local_block = blockIdx.x - block_ptr[batch_index];
     const int64_t task_index = local_block * blockDim.x + threadIdx.x;
     int64_t source = 0;
@@ -243,7 +226,8 @@ __global__ void write_edges_kernel(
     int64_t* edge_cursor,
     int64_t* edge_index,
     int32_t* output_shifts) {
-    const int64_t batch_index = structure_for_block(blockIdx.x, block_ptr, batch_size);
+    const int64_t batch_index =
+        segment_for_index(blockIdx.x, block_ptr, batch_size);
     const int64_t local_block = blockIdx.x - block_ptr[batch_index];
     const int64_t task_index = local_block * blockDim.x + threadIdx.x;
     int64_t source = 0;

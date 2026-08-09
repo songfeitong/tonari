@@ -12,6 +12,7 @@ setup(
                 "csrc/radius_graph_cuda.cu",
                 "csrc/radius_graph_cell_cuda.cu",
             ],
+            depends=["csrc/radius_graph_cuda.h"],
             extra_compile_args={
                 "cxx": ["-O3"],
                 "nvcc": ["-O3", "-lineinfo"],

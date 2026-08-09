@@ -25,9 +25,9 @@ def radius_graph_pbc(
 
     cutoff = float(cutoff)
     validate_inputs(positions, ptr, cells, pbc, cutoff, require_cuda=True)
-    if ptr.detach().cpu()[-1].item() != len(positions):
-        raise ValueError("ptr must end at n_atoms_total")
-    metadata = build_search_metadata(ptr, cells, pbc, cutoff)
+    metadata = build_search_metadata(
+        ptr, cells, pbc, cutoff, n_atoms_total=len(positions)
+    )
     try:
         from . import _C
     except ImportError as error:
