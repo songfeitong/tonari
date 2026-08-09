@@ -1,12 +1,16 @@
 {
-  "accepted_fused_bounds": {
+  "final_profile": {
+    "all_kernel_average_milliseconds_per_call": 0.136159,
+    "all_memory_operation_average_milliseconds_per_call": 0.006512,
     "kernel_average_microseconds": {
-      "count_edges": 28.072,
-      "insert_images": 6.3888,
-      "wrap_and_atomic_bounds": 48.3013,
-      "write_edges": 35.4987
+      "count_edges": 36.4477,
+      "insert_images": 6.4014,
+      "wrap_and_atomic_bounds": 48.4739,
+      "write_edges": 37.281
     },
-    "profile_nvtx_milliseconds": 9.256378
+    "profile_nvtx_milliseconds": 9.476373,
+    "profile_nvtx_milliseconds_per_call": 0.473819,
+    "repository_revision": "a20ee8960c27161a568e3f54a026d0f9a43779de"
   },
   "environment": {
     "gpu": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
@@ -14,9 +18,17 @@
     "torch": "2.12.1+cu130"
   },
   "method": {
-    "command": "CUDA_VISIBLE_DEVICES=1 PYTHONPATH=src:. nsys profile --trace=cuda,nvtx --output=runs/nsys-matbench-32768 python benchmarks/profile_case.py --factor 8 --iterations 20",
+    "command": "CUDA_VISIBLE_DEVICES=1 PYTHONPATH=src:. nsys profile --trace=cuda,nvtx --force-overwrite=true --output=runs/nsys-matbench-32768-final /home/ftsong/projects/elfes-workspace/elfes/.venv/bin/python benchmarks/profile_case.py --factor 8 --iterations 20",
     "cutoff_angstrom": 5.0,
+    "csv_records": [
+      "benchmarks/results/nsys-matbench-32768-final_cuda_gpu_kern_sum.csv",
+      "benchmarks/results/nsys-matbench-32768-final_cuda_gpu_mem_time_sum.csv",
+      "benchmarks/results/nsys-matbench-32768-final_cuda_api_sum.csv",
+      "benchmarks/results/nsys-matbench-32768-final_nvtx_sum.csv"
+    ],
+    "kernel_instances_including_warmup": 23,
     "profiled_iterations": 20,
+    "raw_trace_committed": false,
     "warmup_iterations": 3
   },
   "rejected_separate_reduction": {

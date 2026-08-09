@@ -20,7 +20,7 @@
 
 Python boundary 验证 shapes、dtypes、devices、`ptr`、cutoff、finite cells 和 active cell rows 的独立性，再构造较小的 per-structure search metadata。Positions 的 finite/range flags 融合进现有 CUDA prepare/wrap pass，并在本来就需要的 count synchronization 处检查，不增加额外 D2H sync。浮点输入只在离散 topology 构造中 detach。Extension guard 输入 device，使用 PyTorch current CUDA stream launch，并返回 `int64 [2, E]` edges 与 `int32 [E, 3]` shifts。连续 vectors 由原始输入通过普通 PyTorch operations 重建，因此无需 custom autograd function。
 
-精确大小分配目前需要在 count 或 prefix-sum pass 后执行 device-to-host synchronization。Search metadata 也会把很小的 `ptr/cells/pbc` tensors 移到 CPU，以稳健地执行 batched rank 和 dual 计算。在一个 32,768-atom 的 Matbench-derived supercell 上，单独测得 metadata median wall time 约 0.177 ms，extension 连同同步约 0.323 ms，正式 benchmark 的公开 one-shot API 为 0.409 ms。对于静态 geometry metadata，cache 可能有价值；但 tensor mutation 与 cache invalidation 需要明确 API contract，因此它不是一个低风险的内部优化。
+精确大小分配目前需要在 count 或 prefix-sum pass 后执行 device-to-host synchronization。Search metadata 也会把很小的 `ptr/cells/pbc` tensors 移到 CPU，以稳健地执行 batched rank 和 dual 计算。在一个 32,768-atom 的 Matbench-derived supercell 上，单独测得 metadata median wall time 约 0.177 ms，extension 连同同步约 0.323 ms；最终正式 benchmark 的公开 one-shot API 为 0.414 ms。对于静态 geometry metadata，cache 可能有价值；但 tensor mutation 与 cache invalidation 需要明确 API contract，因此它不是一个低风险的内部优化。
 
 ## 正确性策略
 

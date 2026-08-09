@@ -199,6 +199,8 @@ __global__ void define_bins_kernel(
         return;
     }
     if (batch == batch_size) {
+        // 最后一个 slot 不是普通 bin count：它把 wrap/finite 错误编码为
+        // INT64_MIN，使后续同一次 cumsum/host read 同时返回 count 与状态。
         bin_counts[batch] = bin_counts[batch] == 0
             ? 0
             : std::numeric_limits<int64_t>::min();
@@ -596,6 +598,8 @@ std::vector<torch::Tensor> radius_graph_pbc_cell_cuda(
 
     auto target_counts = torch::empty(
         {n_atoms + 1}, positions.options().dtype(torch::kInt64));
+    // 最后一个 slot 同样是状态位；query kernel 发现 shift 溢出时写入
+    // INT64_MIN，并由下面原本就需要的 edge-count cumsum 一并传回 host。
     C10_CUDA_CHECK(cudaMemsetAsync(
         target_counts.data_ptr<int64_t>() + n_atoms,
         0,

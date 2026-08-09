@@ -16,25 +16,25 @@ Vesin baseline 使用 Vesin 0.6.1 `NeighborList(cutoff, full_list=True)`，在 C
 
 ## 结果
 
-硬件是一张 NVIDIA RTX PRO 6000 Blackwell Workstation Edition，compute capability 12.0；软件为 PyTorch 2.12.1+cu130、Python 3.12.3，geometry 使用 float32，cutoff 为 5.0 Å。运行前两张 GPU 均为空闲状态，实际选择 GPU 1。完整 machine-readable record 位于 `benchmarks/results/rtx-pro-6000-blackwell.json`，其中记录的实现 revision 为 `c9b5dfa3300bec5cee8a75fb6cc06fc8aa6b5de9`。
+硬件是一张 NVIDIA RTX PRO 6000 Blackwell Workstation Edition，compute capability 12.0；软件为 PyTorch 2.12.1+cu130、Python 3.12.3，geometry 使用 float32，cutoff 为 5.0 Å。运行前两张 GPU 均为空闲状态，实际选择 GPU 1。完整 machine-readable record 位于 `benchmarks/results/rtx-pro-6000-blackwell.json`，其中记录的实现 revision 为 `a20ee8960c27161a568e3f54a026d0f9a43779de`。
 
 | Workload | Atoms | 新 batch CUDA | Vesin GPU/structure | Vesin / 新实现 | Dense PyTorch | Dense / 新实现 |
 | --- | --: | --: | --: | --: | --: | --: |
-| 1,536-structure DataLoader epoch | 75,238 | 34.127 ms | 489.831 ms | 14.35× | skipped | — |
-| Median 32-structure batch | 1,126 | 0.821 ms | 9.299 ms | 11.33× | 42.757 ms | 52.10× |
-| 真实结构，1×1×1 | 64 | 0.223 ms | 0.378 ms | 1.69× | 0.699 ms | 3.14× |
-| 派生 supercell，2×2×2 | 512 | 0.294 ms | 0.702 ms | 2.39× | 6.672 ms | 22.66× |
-| 派生 supercell，3×3×3 | 1,728 | 0.344 ms | 0.942 ms | 2.73× | 73.211 ms | 212.56× |
-| 派生 supercell，4×4×4 | 4,096 | 0.346 ms | 0.920 ms | 2.66× | skipped | — |
-| 派生 supercell，6×6×6 | 13,824 | 0.357 ms | 1.108 ms | 3.11× | skipped | — |
-| 派生 supercell，8×8×8 | 32,768 | 0.409 ms | 1.635 ms | 3.99× | skipped | — |
+| 1,536-structure DataLoader epoch | 75,238 | 36.584 ms | 539.100 ms | 14.74× | skipped | — |
+| Median 32-structure batch | 1,126 | 0.918 ms | 9.970 ms | 10.86× | 43.215 ms | 47.07× |
+| 真实结构，1×1×1 | 64 | 0.241 ms | 0.386 ms | 1.60× | 0.701 ms | 2.91× |
+| 派生 supercell，2×2×2 | 512 | 0.305 ms | 0.641 ms | 2.10× | 6.675 ms | 21.86× |
+| 派生 supercell，3×3×3 | 1,728 | 0.315 ms | 0.872 ms | 2.77× | 73.519 ms | 233.60× |
+| 派生 supercell，4×4×4 | 4,096 | 0.310 ms | 0.848 ms | 2.73× | skipped | — |
+| 派生 supercell，6×6×6 | 13,824 | 0.340 ms | 1.038 ms | 3.05× | skipped | — |
+| 派生 supercell，8×8×8 | 32,768 | 0.414 ms | 1.607 ms | 3.88× | skipped | — |
 
 Scaling source 是真实 64-atom configuration `CO_8661596785617876616983344`；只有 integer supercell repetition 是派生操作。Edge count 从 744 增至 380,928。Dense candidate estimate 从 1×1×1 的 110,592 增至 8×8×8 的 28,991,029,248，因此超过 150 million-candidate safety limit 的 runs 被跳过，避免无意义的 out-of-memory 风险。在 median batch 中，dense baseline 的 PyTorch allocator additional memory 为 6,915,438,080 bytes，新路径为 1,494,528 bytes；到 3×3×3 时，dense 使用 11,710,352,384 bytes。Vesin 的 allocator peak 不包含所有 native temporary allocations，不能解读为它的完整 memory footprint。
 
 ## Profiling 与解释
 
-Nsight Systems 在 32,768-atom 派生 workload 上测得每次调用约 0.126 ms 的 CUDA kernels。最大的 kernels 是融合 representative wrapping 与 Cartesian bounds 的 48.3 µs、cell-list edge writing 的 35.5 µs，以及 edge counting 的 28.1 µs。一次实验把融合 atomic bounds 替换为独立 CUB block reduction，结果 bounds work 合计增至 106.4 µs，20-call NVTX range 也从 9.256 ms 增至 10.179 ms，因此该改动已撤销。由此可以排除 CUDA query kernels 中仍隐藏着尚未检查的更大 device hotspot。Machine-readable comparison 位于 `benchmarks/results/nsys-matbench-32768-summary.json`；raw profiler traces 保持 ignored，存放在 `runs/`。
+最终 revision 的 Nsight Systems trace 在同一 32,768-atom 派生 workload 上测得每次调用约 0.136 ms 的全部 CUDA kernels，另有约 0.0065 ms 的 CUDA memory operations；20 次正式调用的 NVTX range 为 9.476 ms，即每次约 0.474 ms。最大的 kernels 是融合 representative wrapping 与 Cartesian bounds 的 48.5 µs、cell-list edge writing 的 37.3 µs，以及 edge counting 的 36.4 µs。较早的一次实验把融合 atomic bounds 替换为独立 CUB block reduction，结果 bounds work 合计增至 106.4 µs，20-call NVTX range 也从 9.256 ms 增至 10.179 ms，因此该改动已撤销。Machine-readable summary 与完整 kernel、memory operation、CUDA API、NVTX CSV records 位于 `benchmarks/results/`；raw `.nsys-rep` trace 保持 ignored，存放在 `runs/`。
 
 目前 one-shot overhead 主要来自 metadata 与 exact-size allocation synchronization。当 `ptr/cells/pbc/cutoff` 不变时，reusable metadata API 可能节省实测约 0.177 ms，但 tensor mutation 下的安全行为需要明确 ownership/invalidation design，因此没有加入隐式 identity-based cache。Output count synchronization 可以通过 over-allocation 或 allocator/workspace contract 减少，但这会改变 memory behavior 和 public API。它们是有测量依据的后续方向，而不是臆测的 kernel micro-optimization。
 
-这些数字是当前 workstation evidence，不是可移植的 performance guarantee 或测试阈值。Crossover 会随 atom-count distribution、density、cutoff、cell geometry、dtype、GPU、CUDA/PyTorch versions 以及 metadata 能否复用而变化。新路径在报告的每种 workload 上都更快，但最小 single-structure advantage 只有 1.69×；最强收益来自 heterogeneous batch parallelism，它消除了数千次逐结构 launches。
+这些数字是当前 workstation evidence，不是可移植的 performance guarantee 或测试阈值。Crossover 会随 atom-count distribution、density、cutoff、cell geometry、dtype、GPU、CUDA/PyTorch versions 以及 metadata 能否复用而变化。新路径在报告的每种 workload 上都更快，但最小 single-structure advantage 只有 1.60×；最强收益来自 heterogeneous batch parallelism，它消除了数千次逐结构 launches。

@@ -1,0 +1,3 @@
+Time (%),Total Time (ns),Instances,Avg (ns),Med (ns),Min (ns),Max (ns),StdDev (ns),Style,Range
+94.9,9476373,1,9476373.0,9476373.0,9476373,9476373,0.0,PushPop,:profile_radius_graph
+5.1,510280,46,11093.0,10281.0,8202,56315,6965.0,PushPop,CCCL:cub::DeviceScan::InclusiveScan

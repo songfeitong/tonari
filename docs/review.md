@@ -19,8 +19,8 @@
 
 审查者在最终边界修复版上运行了 26 项 tests、Ruff、极端 int32/int64 representative 复现、NaN/Inf、tiny-cell empty case、200 组 dense 随机差分和 40 组 cell-list 随机差分。它还重新对 Vesin 验证全部 1,536 个 Matbench structures 与 2,780,158 个 edge keys，并对 dense median batch 的 43,842 个 keys 精确比对，均通过。
 
-15:11 最终性能修复版的独立复测为 Matbench epoch 34.599 ms、median batch 0.845 ms、32,768-atom supercell 0.396 ms；与修复前已提交历史结果的差异为约 +1.38%、+2.9% 和噪声范围内的小幅提升。审查者确认 sentinel/memset 路径没有发现新 race 或 indexing 问题。
+15:11 最终性能修复版的独立 spot check 为 Matbench epoch 34.599 ms、median batch 0.845 ms、32,768-atom supercell 0.396 ms；审查者确认 sentinel/memset 路径没有发现新 race 或 indexing 问题。随后在固定 revision `a20ee8960c27161a568e3f54a026d0f9a43779de` 上重新执行完整正式流程，结果分别为 36.584 ms、0.918 ms 和 0.414 ms；全部 exact validation 仍通过。两组 timing 的差异用于展示短时系统噪声，仓库只把后者作为最终 machine-readable record。
 
 ## 残余风险
 
-One-shot API 仍会在每次调用重建 metadata 并同步精确分配输出；prepared metadata 的 ownership/invalidation contract 尚未设计。极小非空 periodic cell 的真实 graph 本身可能包含大量 images，metadata/output memory 会按物理 edge 数增长。Nsight raw trace 因体积与本地路径保持 Git ignored，仓库保存可复现 profile script、完整命令和 machine-readable summary；性能证据仍只代表当前硬件与软件版本。
+One-shot API 仍会在每次调用重建 metadata 并同步精确分配输出；prepared metadata 的 ownership/invalidation contract 尚未设计。极小非空 periodic cell 的真实 graph 本身可能包含大量 images，metadata/output memory 会按物理 edge 数增长。Nsight raw trace 因体积与本地路径保持 Git ignored，仓库保存可复现 profile script、完整命令、machine-readable summary，以及完整 kernel/memory/API/NVTX CSV records；性能证据仍只代表当前硬件与软件版本。

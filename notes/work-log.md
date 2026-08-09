@@ -33,3 +33,5 @@ GPT-5.6 high reasoning 独立审查确认了三个 correctness 边界：极端�
 审查还发现 dense `block_ptr >= 2^31` 的早期检查会阻止本可走 cell list 的 741,456-atom finite workload。限制已移动到真正选择 exhaustive path 或 sparse-bin fallback 的位置；cell-list node 总数仍明确限制在 int32 range。
 
 第一版 error flag 修复把 finite 检查重复放到每个 `N^2 × images` candidate，并增加多个 D2H/zero-fill launches，导致 Matbench epoch 从约 34.1 ms 回退到 40–41 ms。最终实现改为 O(N) per-atom wrap preparation，用 cumsum sentinel 将 error 与原 count 一次返回，并只对四个 8-byte status slots 使用 `cudaMemsetAsync`；独立复测恢复到 34.60 ms epoch、0.845 ms median batch 和 0.396 ms 的 32,768-atom case。该过程说明边界验证也必须进入真实 workload profile，不能只看功能测试。
+
+在最终边界修复 commit `a20ee8960c27161a568e3f54a026d0f9a43779de` 上又完整跑了一次正式 benchmark：1,536 个结构的 epoch 为 36.584 ms，逐结构 Vesin 为 539.100 ms，即 14.74×；median batch 为 0.918 ms，对 Vesin 为 9.970 ms、对 dense baseline 为 43.215 ms。最终 Nsight trace 的 32,768-atom case 中，全部 kernels 平均每次约 0.136 ms，20-call NVTX range 为 9.476 ms。Raw trace 保持 ignored，但完整 kernel、memory operation、CUDA API 与 NVTX CSV summaries 已提交，避免性能结论只能依赖手写摘录。
