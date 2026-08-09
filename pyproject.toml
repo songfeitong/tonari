@@ -1,7 +1,7 @@
 [project]
 name = "torch-radius-graph"
 version = "0.1.0"
-description = "面向 PyTorch CUDA batch 的实验性 periodic radius graph"
+description = "Experimental batched periodic radius graphs for PyTorch CUDA"
 readme = "README.md"
 requires-python = "==3.12.*"
 dependencies = [

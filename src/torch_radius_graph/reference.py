@@ -17,9 +17,13 @@ def reference_radius_graph_pbc(
     pbc: Tensor,
     cutoff: float,
 ) -> tuple[Tensor, Tensor]:
-    """使用 exhaustive PyTorch operations 构造完整的有向 periodic cutoff graph。
+    """Construct the complete directed periodic cutoff graph exhaustively.
 
-    该实现有意独立于 CUDA kernel，用于小输入的正确性检查。返回的 ``cell_shifts`` 满足 ``positions[source] - positions[target] + cell_shifts @ cell``；zero-displacement onsite edge 被排除，periodic self-images 被保留，cutoff comparison 使用严格小于。
+    This implementation intentionally stays independent of the CUDA kernels and
+    serves as a correctness oracle for small inputs. Returned ``cell_shifts``
+    satisfy ``positions[source] - positions[target] + cell_shifts @ cell``. The
+    zero-displacement onsite edge is excluded, periodic self-images are retained,
+    and the cutoff comparison is strict.
     """
 
     cutoff = float(cutoff)

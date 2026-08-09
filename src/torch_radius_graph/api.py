@@ -15,9 +15,12 @@ def radius_graph_pbc(
     pbc: Tensor,
     cutoff: float,
 ) -> tuple[Tensor, Tensor]:
-    """为一个 CUDA batch 构造完整的有向 periodic cutoff graph。
+    """Construct the complete directed periodic cutoff graph for a CUDA batch.
 
-    ``positions`` 和 ``cells`` 可以带梯度，但 connectivity 是离散的，返回 tensors 为整数。请用原始浮点 tensors 重算 edge vectors，以便在 connectivity 固定时对连续几何求导。
+    ``positions`` and ``cells`` may require gradients, but connectivity is
+    discrete and the returned tensors are integers. Recompute edge vectors from
+    the original floating tensors to differentiate continuous geometry while
+    holding connectivity fixed.
     """
 
     cutoff = float(cutoff)
