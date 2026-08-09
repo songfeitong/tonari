@@ -4,6 +4,9 @@ from torch import Tensor
 
 from ._geometry import build_search_metadata, validate_inputs
 
+_CELL_LIST_MINIMUM_ATOMS = 256
+_INT32_INDEX_LIMIT = 2**31
+
 
 def radius_graph_pbc(
     positions: Tensor,
@@ -37,7 +40,10 @@ def radius_graph_pbc(
         metadata.image_ptr,
         metadata.block_ptr,
     )
-    if metadata.maximum_atoms >= 256 and metadata.total_nodes < 2**31:
+    if (
+        metadata.maximum_atoms >= _CELL_LIST_MINIMUM_ATOMS
+        and metadata.total_nodes < _INT32_INDEX_LIMIT
+    ):
         return _C.radius_graph_pbc_cell_cuda(
             *arguments,
             metadata.node_ptr,

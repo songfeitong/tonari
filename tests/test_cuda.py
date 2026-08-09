@@ -104,7 +104,8 @@ def test_cuda_matches_ase_for_partial_triclinic_multiple_images() -> None:
     )
     assert edge_keys(*actual) == expected
     assert any(
-        source == target and shift != (0, 0, 0) for source, target, *shift in expected
+        source == target and tuple(shift) != (0, 0, 0)
+        for source, target, *shift in expected
     )
 
 
@@ -149,6 +150,19 @@ def test_cuda_strict_cutoff_and_periodic_self_images() -> None:
         1.0,
     )
     assert edge_keys(finite_edges, finite_shifts) == set()
+
+    just_inside = torch.nextafter(torch.tensor(1.0), torch.tensor(0.0))
+    inside_edges, inside_shifts = cuda_graph(
+        torch.tensor([[0.0, 0.0, 0.0], [just_inside, 0.0, 0.0]]),
+        torch.tensor([0, 2]),
+        torch.zeros((1, 3, 3)),
+        torch.zeros((1, 3), dtype=torch.bool),
+        1.0,
+    )
+    assert edge_keys(inside_edges, inside_shifts) == {
+        (0, 1, 0, 0, 0),
+        (1, 0, 0, 0, 0),
+    }
 
     periodic_edges, periodic_shifts = cuda_graph(
         positions[:1],
@@ -224,6 +238,61 @@ def test_cell_list_path_matches_reference(dtype: torch.dtype) -> None:
     expected = reference_radius_graph_pbc(positions, ptr, cell[None], pbc, 1.2)
     actual = cuda_graph(positions, ptr, cell[None], pbc, 1.2)
     assert edge_keys(*actual) == edge_keys(*expected)
+
+
+def test_cell_list_path_handles_mixed_finite_and_partial_pbc_batch() -> None:
+    generator = torch.Generator().manual_seed(5801)
+    counts = (256, 257)
+    cells = torch.tensor(
+        [
+            [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]],
+            [[2.1, 0.3, 0.2], [0.4, 4.0, 0.1], [0.2, 0.5, 5.0]],
+        ],
+        dtype=torch.float64,
+    )
+    positions = torch.cat(
+        (
+            torch.rand((counts[0], 3), generator=generator, dtype=torch.float64) * 8,
+            torch.rand((counts[1], 3), generator=generator, dtype=torch.float64)
+            @ cells[1],
+        )
+    )
+    positions[-3:] += 4 * cells[1, 0]
+    ptr = torch.tensor([0, counts[0], sum(counts)])
+    pbc = torch.tensor([[False, False, False], [True, False, False]])
+    expected = reference_radius_graph_pbc(positions, ptr, cells, pbc, 0.55)
+    actual = cuda_graph(positions, ptr, cells, pbc, 0.55)
+    assert edge_keys(*actual) == edge_keys(*expected)
+
+    edge_index, shifts = actual
+    edge_batch = torch.bucketize(edge_index[1], ptr[1:].cuda(), right=True)
+    source_batch = torch.bucketize(edge_index[0], ptr[1:].cuda(), right=True)
+    assert torch.equal(source_batch, edge_batch)
+    vectors = (
+        positions.cuda()[edge_index[0]]
+        - positions.cuda()[edge_index[1]]
+        + torch.einsum(
+            "ei,eij->ej",
+            shifts.to(torch.float64),
+            cells.cuda()[edge_batch],
+        )
+    )
+    assert torch.all(torch.sum(vectors.square(), dim=1) < 0.55**2)
+    assert torch.all(shifts[edge_batch == 1, 1:] == 0)
+
+
+def test_rejects_dependent_active_cell_rows() -> None:
+    with pytest.raises(ValueError, match="linearly independent"):
+        cuda_graph(
+            torch.zeros((1, 3), dtype=torch.float64),
+            torch.tensor([0, 1]),
+            torch.tensor(
+                [[[1.0, 0.0, 0.0], [2.0, 0.0, 0.0], [0.0, 0.0, 0.0]]],
+                dtype=torch.float64,
+            ),
+            torch.tensor([[True, True, False]]),
+            1.0,
+        )
 
 
 def test_cell_list_falls_back_for_extremely_sparse_bounds() -> None:
