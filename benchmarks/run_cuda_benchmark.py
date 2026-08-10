@@ -14,7 +14,7 @@ from pathlib import Path
 import numpy as np
 import torch
 from torch import Tensor
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 
 from benchmarks.baselines import (
     dense_candidate_count,
@@ -23,11 +23,10 @@ from benchmarks.baselines import (
 )
 from benchmarks.matbench_data import (
     MatbenchStructureDataset,
-    StructureBatch,
-    collate_structures,
     repeat_structure,
     select_scaling_structure,
 )
+from benchmarks.structure_data import StructureBatch, collate_structures
 from tonari import _C_cuda, find_neighbors
 
 Backend = Callable[[Tensor, Tensor, Tensor, float, Tensor], tuple[Tensor, Tensor]]
@@ -93,7 +92,7 @@ def validate_external_reference(
             missing = len(set(map(tuple, expected)) - set(map(tuple, actual)))
             extra = len(set(map(tuple, actual)) - set(map(tuple, expected)))
             raise AssertionError(
-                f"Matbench batch {batch_index} differs from Vesin: {missing=} {extra=}"
+                f"batch {batch_index} differs from Vesin: {missing=} {extra=}"
             )
         total_pairs += len(actual)
     return {
@@ -183,7 +182,8 @@ def benchmark_workload(
     dense_candidate_limit: int,
 ) -> dict[str, object]:
     candidate_counts = [
-        dense_candidate_count(batch.offsets, batch.cells, cutoff) for batch in batches
+        dense_candidate_count(batch.offsets, batch.cells, batch.pbc, cutoff)
+        for batch in batches
     ]
     source_ids = [source_id for batch in batches for source_id in batch.source_ids]
     results: dict[str, object] = {
@@ -215,7 +215,7 @@ def benchmark_workload(
 
 
 def load_gpu_batches(
-    dataset: MatbenchStructureDataset,
+    dataset: Dataset[dict[str, object]],
     batch_size: int,
     seed: int,
     device: torch.device,
@@ -281,7 +281,7 @@ def main() -> None:
     batches = load_gpu_batches(dataset, args.batch_size, args.seed, device)
     candidate_counts = np.asarray(
         [
-            dense_candidate_count(batch.offsets, batch.cells, args.cutoff)
+            dense_candidate_count(batch.offsets, batch.cells, batch.pbc, args.cutoff)
             for batch in batches
         ]
     )

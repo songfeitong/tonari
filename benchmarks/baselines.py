@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+from functools import cache
 from itertools import pairwise
 
 import torch
 from torch import Tensor
 from vesin import NeighborList
+
+
+@cache
+def vesin_gpu_neighbor_list(cutoff: float) -> NeighborList:
+    return NeighborList(cutoff=cutoff, full_list=True, sorted=False)
 
 
 def vesin_gpu_batch(
@@ -17,7 +23,7 @@ def vesin_gpu_batch(
     """Run Vesin 0.6.1 on each structure and concatenate the directed neighbor lists."""
 
     offsets_cpu = offsets.cpu().tolist()
-    neighbor_list = NeighborList(cutoff=cutoff, full_list=True, sorted=False)
+    neighbor_list = vesin_gpu_neighbor_list(cutoff)
     pair_indices = []
     cell_shifts = []
     for batch_index, (start, stop) in enumerate(pairwise(offsets_cpu)):
@@ -36,8 +42,16 @@ def vesin_gpu_batch(
     return torch.cat(pair_indices, dim=1), torch.cat(cell_shifts, dim=0)
 
 
-def dense_candidate_count(offsets: Tensor, cells: Tensor, cutoff: float) -> int:
+def dense_candidate_count(
+    offsets: Tensor, cells: Tensor, pbc: Tensor, cutoff: float
+) -> int:
     counts = (offsets[1:] - offsets[:-1]).to(torch.int64)
+    if not torch.any(pbc):
+        return int(torch.sum(counts * counts).cpu())
+    if not torch.all(pbc):
+        raise ValueError(
+            "the dense baseline requires uniformly finite or full-PBC data"
+        )
     reciprocal_norms = torch.linalg.vector_norm(torch.linalg.inv(cells), dim=1)
     maximum_repeats = torch.ceil(cutoff * reciprocal_norms).to(torch.int64).amax(dim=0)
     n_images = int(torch.prod(2 * maximum_repeats + 1).cpu())
@@ -52,13 +66,11 @@ def torch_dense_batch(
     cutoff: float,
     offsets: Tensor,
 ) -> tuple[Tensor, Tensor]:
-    """Materialize all atom pairs and padded periodic images in the Equiformer/FairChem style.
+    """Materialize all atom pairs and, for full PBC, padded periodic images.
 
-    The comparison and onsite rule are adjusted to the exact API under test: strict cutoff, exclusion of only ``(i, i, 0)``, and integer shifts. This baseline requires homogeneous full PBC, matching the upstream batch limitation.
+    The comparison and onsite rule match the API under test: strict cutoff, exclusion of only ``(i, i, 0)``, and integer shifts. Benchmark inputs must be uniformly finite or full-PBC.
     """
 
-    if not torch.all(pbc):
-        raise ValueError("the dense batch baseline only supports homogeneous full PBC")
     device = positions.device
     counts = offsets[1:] - offsets[:-1]
     pair_counts = counts * counts
@@ -75,6 +87,21 @@ def torch_dense_batch(
         torch.div(local_pair, expanded_counts, rounding_mode="floor") + atom_offsets
     )
     source = local_pair % expanded_counts + atom_offsets
+
+    if not torch.any(pbc):
+        displacements = positions[source] - positions[target]
+        mask = torch.sum(displacements * displacements, dim=1) < cutoff * cutoff
+        mask &= source != target
+        source = source[mask]
+        target = target[mask]
+        return (
+            torch.stack((source, target)),
+            torch.zeros((source.shape[0], 3), dtype=torch.int32, device=device),
+        )
+    if not torch.all(pbc):
+        raise ValueError(
+            "the dense baseline requires uniformly finite or full-PBC data"
+        )
 
     reciprocal = torch.linalg.inv(cells)
     atom_batch = torch.repeat_interleave(

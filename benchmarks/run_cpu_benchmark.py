@@ -14,17 +14,16 @@ from pathlib import Path
 import numpy as np
 import torch
 from torch import Tensor
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 from vesin import NeighborList
 
 from benchmarks.matbench_data import (
     MatbenchStructureDataset,
-    StructureBatch,
-    collate_structures,
     repeat_structure,
     select_scaling_structure,
 )
 from benchmarks.run_cuda_benchmark import canonical_keys, file_sha256, git_revision
+from benchmarks.structure_data import StructureBatch, collate_structures
 from tonari import _C_cpu, find_neighbors
 
 Backend = Callable[[StructureBatch, float], tuple[Tensor, Tensor]]
@@ -82,7 +81,7 @@ def tonari_cpu(batch: StructureBatch, cutoff: float) -> tuple[Tensor, Tensor]:
 
 
 def load_single_structure_batches(
-    dataset: MatbenchStructureDataset, seed: int
+    dataset: Dataset[dict[str, object]], seed: int
 ) -> list[StructureBatch]:
     loader = DataLoader(
         dataset,
@@ -107,7 +106,7 @@ def validate_external_reference(
             missing = len(set(map(tuple, expected)) - set(map(tuple, actual)))
             extra = len(set(map(tuple, actual)) - set(map(tuple, expected)))
             raise AssertionError(
-                f"Matbench structure {batch_index} differs from Vesin: {missing=} {extra=}"
+                f"structure {batch_index} differs from Vesin: {missing=} {extra=}"
             )
         total_pairs += len(actual)
     return {

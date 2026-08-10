@@ -1,0 +1,42 @@
+{
+  "cache_file": "sample-8192-seed-20260810.npz",
+  "dataset": {
+    "archive_changelog_date": "2021-07-30",
+    "chembl_source": "ChEMBL 27",
+    "conformer_count_observed": 1992984,
+    "doi": "https://doi.org/10.3929/ethz-b-000482129",
+    "license": "CC BY-SA 3.0",
+    "molecule_count_observed": 665911,
+    "name": "QMugs",
+    "page": "https://www.research-collection.ethz.ch/handle/20.500.11850/482129",
+    "release": "original QMugs data collection",
+    "structures_bytes": 7180016346,
+    "structures_sha256": "264102bf1c036d077a72ab558168be4c5c6054e6aeecb8a7768be36df87ad46b",
+    "structures_url": "https://libdrive.ethz.ch/index.php/s/X5vOBNSITAG5vzM/download?path=%2F&files=structures.tar.gz",
+    "summary_bytes": 2026848085,
+    "summary_sha256": "b6d7b54fa4d290ceace81c644f20b2ddfd68c21ecb1f4b5c00e8913cd608bcfd",
+    "summary_url": "https://libdrive.ethz.ch/index.php/s/X5vOBNSITAG5vzM/download?path=%2F&files=summary.csv"
+  },
+  "sampling": {
+    "conformer_selection": "minimum GFN2_TOTAL_ENERGY, then conformer ID",
+    "heavy_atom_boundaries": [
+      10,
+      20,
+      30,
+      40,
+      50,
+      65,
+      80
+    ],
+    "population_method": "globally smallest stable hash scores",
+    "population_size": 4096,
+    "samples_are_disjoint": true,
+    "score": "sha256(f'{seed}:{chembl_id}')",
+    "seed": 20260810,
+    "size_balanced_method": "smallest stable hash scores in each heavy-atom bin, excluding population sample",
+    "size_balanced_per_bin": 512,
+    "size_balanced_size": 4096
+  },
+  "structure_count": 8192,
+  "structures_file": "qmugs_sample_structures.csv"
+}
