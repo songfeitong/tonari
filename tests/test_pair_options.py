@@ -240,6 +240,31 @@ def test_strict_boundary_and_distinct_coincident_atoms_are_not_self_pairs(
     assert keys == expected
 
 
+@pytest.mark.parametrize(
+    ("dtype", "cutoff"),
+    [(torch.float32, 1e-30), (torch.float64, 1e-200)],
+)
+@pytest.mark.parametrize("half_list", [False, True])
+def test_zero_shift_self_does_not_depend_on_squared_cutoff_underflow(
+    dtype: torch.dtype,
+    cutoff: float,
+    half_list: bool,
+) -> None:
+    positions = torch.zeros((1, 3), dtype=dtype)
+    cell = torch.zeros((3, 3), dtype=dtype)
+    pbc = torch.zeros(3, dtype=torch.bool)
+    options = {"half_list": half_list, "include_self": True}
+    expected = {(0, 0, 0, 0, 0)}
+
+    assert (
+        pair_keys(find_neighbors(positions, cell, pbc, cutoff, **options)) == expected
+    )
+    assert (
+        pair_keys(find_neighbors_reference(positions, cell, pbc, cutoff, **options))
+        == expected
+    )
+
+
 @pytest.mark.parametrize("half_list", [False, True])
 @pytest.mark.parametrize("include_self", [False, True])
 def test_mixed_batch_pair_options_match_individual_structures(

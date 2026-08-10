@@ -76,6 +76,8 @@ CPU/CUDA 在全部 8,192 个分子、15,144,842 个 keys 上与 Vesin exact matc
 
 公共API增加keyword-only `half_list=False`与`include_self=False`，默认行为不变。C++共享`PairMode`集中定义zero-shift self与lexicographical canonical half规则，CPU和CUDA都在native candidate acceptance、count/write阶段使用compile-time specialization；Python reference复用同一Python canonical helper，NumPy继续走相同CPU backend。Zero-shift self显式绕过普通distance predicate，periodic self-images仍按strict cutoff参与；half只去除`(source, target, S)`与`(target, source, -S)`的reverse redundancy。
 
-新增测试把四种mode覆盖到NumPy、Torch CPU、Torch CUDA、reference、single/batch、strict boundary、multiple images、periodic self-images、unwrapped CUDA fallback与一致单位缩放。Vesin adapter明确补其不原生提供的zero-shift self；ASE使用`skin=0`、原生`self_interaction`和one-way/both-way，并把外部方向归一化为公开canonical key。实现提交上的115项tests全部通过。
+新增测试把四种mode覆盖到NumPy、Torch CPU、Torch CUDA、reference、single/batch、strict boundary、multiple images、periodic self-images、unwrapped CUDA fallback与一致单位缩放。Vesin adapter明确补其不原生提供的zero-shift self；ASE使用`skin=0`、原生`self_interaction`和one-way/both-way，并把外部方向归一化为公开canonical key。
 
 性能只做了能回答架构问题的真实Matbench测量。256结构CPU benchmark中，tonari/Vesin/ASE四种mode全部exact；half/no-self把output从14.15 MB减至7.07 MB并把tonari从27.59降至24.25 ms。完整1,536结构CUDA benchmark中，四种mode不变量和默认Vesin exact均通过；half/no-self把output从77.84 MB减至38.92 MB、peak allocation从4.73 MB减至2.42 MB，epoch从11.26降至10.91 ms。一次同policy、同compiler重建的pre-feature/current CPU A/B为168.36/170.32 ms，约1.2%差异，不构成明显默认路径回归。`include_self`没有可辨认的不合理成本，默认CUDA hot path也没有显示回归；按任务要求没有围绕亚毫秒波动反复调优。
+
+独立reviewer聚焦核心实现后只确认一个reference blocker：极小正cutoff的平方可能在geometry dtype下溢为零，production仍按契约原生加入zero-shift self，但reference原先依赖`0 < cutoff_squared`而漏掉diagonal。修复让zero image diagonal按`include_self`显式置真或置假，并覆盖float32/float64 underflow及full/half；修复后119项GPU-visible tests通过。

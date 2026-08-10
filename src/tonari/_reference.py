@@ -112,8 +112,8 @@ def find_neighbors_reference(
                 + displacements[..., 2] * displacements[..., 2]
             )
             within_cutoff = distance_squared < cutoff_squared
-            if shift_values == (0, 0, 0) and not include_self:
-                within_cutoff.fill_diagonal_(False)
+            if shift_values == (0, 0, 0):
+                within_cutoff.fill_diagonal_(include_self)
             source, target = torch.nonzero(within_cutoff, as_tuple=True)
             if source.numel() == 0:
                 continue
