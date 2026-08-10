@@ -117,7 +117,7 @@ benchmarks/run_qmugs_cuda_benchmark.py --repeats 11 --require-clean \
   --output benchmarks/results/rtx-pro-6000-blackwell-qmugs.json
 ```
 
-CPU 正式 JSON 的 clean implementation revision 为 `dca205966ab5643451b0f4c7d97cbc7c11123c57`，Python 为 3.12.13，CPU extension SHA-256 为 `a2466a5b24d9a427fcb8076a7eb286d8e3d52db22f12aaac5792b6f812a7d302`。Runner 固定 CPU31 和 Torch/Vesin 单线程，并在 JSON 中记录 `amd-pstate-epp` driver、`performance` governor/EPP、boost 与 frequency bounds；runner 本身不修改系统 policy，上述命令在测量后恢复原始设置。CUDA 正式 JSON 的 clean implementation revision 为 `70a09d2fbe737a61677d68b3f5fbf1b685f2610e`，Python 为 3.12.3，CUDA extension SHA-256 为 `78c0af2e407fac90a332e227af5f73212d8c23cf0930756fcedaeffa3a4e495c`。
+CPU 正式 JSON 的 clean implementation revision 为 `dca205966ab5643451b0f4c7d97cbc7c11123c57`，Python 为 3.12.13，CPU extension SHA-256 为 `a2466a5b24d9a427fcb8076a7eb286d8e3d52db22f12aaac5792b6f812a7d302`。Runner 固定 CPU31 和 Torch/Vesin 单线程，并在 JSON 中记录 `amd-pstate-epp` driver、`performance` governor/EPP、boost 与 frequency bounds；runner 本身不修改系统 policy，上述命令在测量后恢复原始设置。CUDA 正式 JSON 的 clean implementation revision 为 `e4f2bf421bb42df1928f69bd592223abcd233ea6`，Python 为 3.12.13，CUDA extension SHA-256 为 `e1c2e3ac9ba81130450a6761e951cd7b6c99b40bbf59ceb438a2cccf264c1282`。
 
 ## QMugs CPU 结果
 
@@ -140,20 +140,20 @@ QMugs 把 Matbench scaling 结论放到了更真实的 finite-molecule 分布上
 
 | Workload | Atoms | Pairs | tonari CUDA | Vesin GPU/structure | Vesin / tonari | Dense PyTorch | Dense / tonari |
 | --- | --: | --: | --: | --: | --: | --: | --: |
-| Population epoch，bs=8 | 226,648 | 5,320,936 | 45.471 ms | 923.253 ms | 20.30× | skipped | — |
-| Population epoch，bs=32 | 226,648 | 5,320,936 | 12.309 ms | 915.940 ms | 74.41× | skipped | — |
-| Population epoch，bs=64 | 226,648 | 5,320,936 | 6.730 ms | 914.764 ms | 135.93× | skipped | — |
-| Population epoch，bs=128 | 226,648 | 5,320,936 | 4.049 ms | 913.805 ms | 225.68× | skipped | — |
-| Size-balanced epoch，bs=64 | 339,795 | 9,823,906 | 7.346 ms | 934.513 ms | 127.21× | skipped | — |
-| Population representative batch，bs=64 | 3,494 | 80,992 | 0.1128 ms | 14.1688 ms | 125.56× | 0.3031 ms | 2.69× |
-| 4–10-heavy-atom representative batch | 1,167 | 17,758 | 0.1094 ms | 12.6545 ms | 115.71× | 0.2652 ms | 2.43× |
-| 21–30-heavy-atom representative batch | 3,001 | 65,154 | 0.1124 ms | 14.3014 ms | 127.19× | 0.2691 ms | 2.39× |
-| 51–65-heavy-atom representative batch | 6,945 | 211,056 | 0.1264 ms | 15.2762 ms | 120.88× | 0.4107 ms | 3.25× |
-| 81–100-heavy-atom representative batch | 11,409 | 384,320 | 0.1425 ms | 15.9462 ms | 111.92× | 0.7740 ms | 5.43× |
+| Population epoch，bs=8 | 226,648 | 5,320,936 | 44.065 ms | 908.543 ms | 20.62× | skipped | — |
+| Population epoch，bs=32 | 226,648 | 5,320,936 | 11.958 ms | 905.406 ms | 75.71× | skipped | — |
+| Population epoch，bs=64 | 226,648 | 5,320,936 | 6.396 ms | 905.611 ms | 141.60× | skipped | — |
+| Population epoch，bs=128 | 226,648 | 5,320,936 | 3.844 ms | 904.720 ms | 235.36× | skipped | — |
+| Size-balanced epoch，bs=64 | 339,795 | 9,823,906 | 7.053 ms | 923.483 ms | 130.94× | skipped | — |
+| Population representative batch，bs=64 | 3,494 | 80,992 | 0.1054 ms | 13.9742 ms | 132.62× | 0.2981 ms | 2.83× |
+| 4–10-heavy-atom representative batch | 1,167 | 17,758 | 0.1049 ms | 12.5009 ms | 119.18× | 0.2636 ms | 2.51× |
+| 21–30-heavy-atom representative batch | 3,001 | 65,154 | 0.1061 ms | 14.1158 ms | 133.04× | 0.2653 ms | 2.50× |
+| 51–65-heavy-atom representative batch | 6,945 | 211,056 | 0.1218 ms | 15.1137 ms | 124.06× | 0.4092 ms | 3.36× |
+| 81–100-heavy-atom representative batch | 11,409 | 384,320 | 0.1362 ms | 15.8172 ms | 116.14× | 0.7736 ms | 5.68× |
 
-QMugs 分子最多 221 atoms，因此 CUDA 全部走 fused exhaustive path；本轮刻意不通过复制单分子制造大体系 scaling。Batch-size sweep 是更符合分子 GNN 的 scaling 轴：同一 4,096 个分子从 bs=8 增加到 bs=128 时，调用次数从 512 降到 32，时间从 45.471 ms 降到 4.049 ms。Vesin 必须逐结构执行，batch size 对其约 914–923 ms 的总时间影响很小。
+QMugs 分子最多 221 atoms，因此 CUDA 全部走 fused exhaustive path；本轮刻意不通过复制单分子制造大体系 scaling。Batch-size sweep 是更符合分子 GNN 的 scaling 轴：同一 4,096 个分子从 bs=8 增加到 bs=128 时，调用次数从 512 降到 32，时间从 44.065 ms 降到 3.844 ms。Vesin 必须逐结构执行，batch size 对其约 905–909 ms 的总时间影响很小。
 
-Finite dense baseline 不承担 periodic image padding，所以与 `tonari` 的差距远小于 Matbench 代表 batch 的约 190×；它仍要 materialize `N²` candidates，并随分子尺寸从 2.43×扩大到 5.43×。Population representative batch 的 Torch allocator peak 为 `tonari` 2.32 MB、dense 18.85 MB；81–100-heavy-atom batch 为 10.91 MB 对 176.16 MB。Vesin 的 native temporary allocations 仍可能不完全出现在 Torch allocator peak 中。
+Finite dense baseline 不承担 periodic image padding，所以与 `tonari` 的差距远小于 Matbench 代表 batch 的约 190×；它仍要 materialize `N²` candidates，并随分子尺寸从 2.51×扩大到 5.68×。Population representative batch 的 Torch allocator peak 为 `tonari` 2.32 MB、dense 18.85 MB；81–100-heavy-atom batch 为 10.91 MB 对 176.16 MB。Vesin 的 native temporary allocations 仍可能不完全出现在 Torch allocator peak 中。
 
 ## CUDA profiling
 

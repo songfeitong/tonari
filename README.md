@@ -84,7 +84,7 @@ Finite-molecule workload 来自 QMugs。脚本从 665,911 个 ChEMBL 分子、1,
 
 固定单核和明确 performance policy 的 CPU 上，QMugs population epoch 中 `tonari` 为 169.70 ms，复用 Vesin 为 169.55 ms，二者基本打平；size-balanced epoch 为 303.69 对 281.31 ms。`tonari` 在 4–30 个重原子的三档快 1.03–1.20×，从 31–40 个重原子档开始 Vesin 逐渐占优，真实分子明确给出了 CPU crossover。
 
-同一 Blackwell GPU 上，QMugs population `DataLoader(batch_size=64)` epoch 中 `tonari` 为 6.730 ms，逐结构 Vesin 为 914.764 ms；`batch_size=8/32/64/128` 的 `tonari` 时间分别为 45.471/12.309/6.730/4.049 ms，直接显示了 batch amortization。代表性 64-molecule batch 中，`tonari` 为 0.1128 ms、Vesin 为 14.1688 ms、finite dense PyTorch baseline 为 0.3031 ms。全部 8,192 个分子、15,144,842 个 Vesin keys 以及九个 dense representative batches 的 1,322,646 个 keys 均精确一致。
+同一 Blackwell GPU 上，QMugs population `DataLoader(batch_size=64)` epoch 中 `tonari` 为 6.396 ms，逐结构 Vesin 为 905.611 ms；`batch_size=8/32/64/128` 的 `tonari` 时间分别为 44.065/11.958/6.396/3.844 ms，直接显示了 batch amortization。代表性 64-molecule batch 中，`tonari` 为 0.1054 ms、Vesin 为 13.9742 ms、finite dense PyTorch baseline 为 0.2981 ms。全部 8,192 个分子、15,144,842 个 Vesin keys 以及九个 dense representative batches 的 1,322,646 个 keys 均精确一致。
 
 ## 支持范围与边界
 
