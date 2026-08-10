@@ -12,10 +12,10 @@ extensions = [
         name="tonari._C_cpu",
         sources=[
             "csrc/bindings_cpu.cpp",
-            "csrc/periodic_geometry.cpp",
+            "csrc/geometry.cpp",
             "csrc/neighbors_cpu.cpp",
         ],
-        depends=["csrc/periodic_geometry.h", "csrc/neighbors_cpu.h"],
+        depends=["csrc/geometry.h", "csrc/neighbors_cpu.h"],
         extra_compile_args=["-O3"],
     )
 ]

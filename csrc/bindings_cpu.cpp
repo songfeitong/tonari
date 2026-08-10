@@ -1,5 +1,5 @@
 #include "neighbors_cpu.h"
-#include "periodic_geometry.h"
+#include "geometry.h"
 
 namespace py = pybind11;
 
