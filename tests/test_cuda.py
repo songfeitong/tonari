@@ -7,7 +7,10 @@ from ase.neighborlist import primitive_neighbor_list
 
 from torch_radius_graph import radius_graph_pbc, reference_radius_graph_pbc
 
-pytestmark = pytest.mark.cuda
+pytestmark = [
+    pytest.mark.cuda,
+    pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is unavailable"),
+]
 
 
 def edge_keys(edge_index: torch.Tensor, shifts: torch.Tensor) -> set[tuple[int, ...]]:
