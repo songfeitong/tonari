@@ -4,7 +4,7 @@
 
 ## 2026-08-09：确定物理语义并实现 CUDA 原型
 
-项目首先从 ELFES 的理论与设计文档固定物理约定：cell vectors 按行；periodicity 只由 `pbc` 决定；shift 施加在 source image；cutoff 使用严格 `<`；periodic self-images 与 multiple images 必须保留。Vesin 只作为外部 reference 和 baseline，没有复制其实现。
+项目首先固定 neighbor-search 的物理约定：cell vectors 按行；periodicity 只由 `pbc` 决定；shift 施加在 target image；displacement 从 source 指向 target；cutoff 使用严格 `<`；periodic self-images 与 multiple images 必须保留。Vesin 只作为外部 reference 和 baseline，没有复制其实现。
 
 第一版 CUDA search 已采用小体系 exhaustive、大体系 batched cell list 的总体路线。关键判断是把完整 batch 作为执行单位，不在 Python 中逐结构构图，也不 materialize `N² × images` candidate tensors。
 
@@ -26,7 +26,7 @@ CPU 与 CUDA 共享 active-cell geometry、image range 和 pair identity，但�
 
 ## 2026-08-10：统一公共 API 与 NumPy/PyTorch 语义
 
-公共入口收敛为 `find_neighbors(positions, cells, pbc, cutoff, offsets=None)`，返回 `pair_indices` 与施加在 source 上的 `cell_shifts`。单结构与 batch、finite 与 periodic geometry 使用同一模型，旧接口不保留 alias。
+公共入口收敛为 `find_neighbors(positions, cells, pbc, cutoff, offsets=None)`，返回 `pair_indices` 与施加在 target 上的 `cell_shifts`。单结构与 batch、finite 与 periodic geometry 使用同一模型，旧接口不保留 alias。
 
 NumPy 与 PyTorch 使用同一个 public function。随后项目进一步拆出 NumPy frontend、Torch frontend、独立 bindings 与 framework-neutral C++ core，使 NumPy CPU 不再借道 Tensor 或 LibTorch。CUDA 所需 metadata 和 schedule 也从 Python 收回 native provider。
 

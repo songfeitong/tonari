@@ -64,7 +64,7 @@ class VesinCpuBackend:
             batch.pbc[0],
             "ijS",
         )
-        return torch.stack((second.to(torch.int64), first.to(torch.int64))), shifts
+        return torch.stack((first.to(torch.int64), second.to(torch.int64))), shifts
 
 
 def production_cpu(batch: StructureBatch, cutoff: float) -> tuple[Tensor, Tensor]:

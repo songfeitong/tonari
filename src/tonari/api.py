@@ -82,9 +82,9 @@ def find_neighbors(
         the inputs and, for Torch, on the same device. ``pair_indices`` has
         dtype ``int64`` and shape ``(2, num_pairs)``;
         ``source, target = pair_indices``. ``cell_shifts`` has dtype ``int32``
-        and shape ``(num_pairs, 3)``. Each shift translates the source image.
+        and shape ``(num_pairs, 3)``. Each shift translates the target image.
         For one structure, pair ``k`` has Cartesian displacement
-        ``positions[source[k]] - positions[target[k]] + cell_shifts[k] @
+        ``positions[target[k]] - positions[source[k]] + cell_shifts[k] @
         cells``. For a batch, first locate structure ``b`` from ``offsets`` and
         use the same formula with ``cells[b]``. Both outputs are dimensionless.
 
@@ -128,8 +128,8 @@ def find_neighbors(
         ... )
         >>> source, target = pair_indices
         >>> displacements = (
-        ...     positions[source]
-        ...     - positions[target]
+        ...     positions[target]
+        ...     - positions[source]
         ...     + cell_shifts.to(positions.dtype) @ cells
         ... )
         >>> distances = torch.linalg.vector_norm(displacements, dim=1)

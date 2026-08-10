@@ -61,7 +61,7 @@ def test_cpu_matches_ase_for_partial_triclinic_multiple_images() -> None:
         self_interaction=False,
     )
     expected = {
-        (int(j), int(i), int(shift[0]), int(shift[1]), int(shift[2]))
+        (int(i), int(j), int(shift[0]), int(shift[1]), int(shift[2]))
         for i, j, shift in zip(first, second, shifts, strict=True)
     }
     actual = find_neighbors(
@@ -114,13 +114,13 @@ def test_cpu_relabels_unwrapped_representatives() -> None:
     first_pairs, first_shifts = find_neighbors(positions, *common)
     second_pairs, second_shifts = find_neighbors(translated, *common)
     first_displacements = (
-        positions[first_pairs[0]]
-        - positions[first_pairs[1]]
+        positions[first_pairs[1]]
+        - positions[first_pairs[0]]
         + first_shifts.to(positions.dtype) @ cell
     )
     second_displacements = (
-        translated[second_pairs[0]]
-        - translated[second_pairs[1]]
+        translated[second_pairs[1]]
+        - translated[second_pairs[0]]
         + second_shifts.to(positions.dtype) @ cell
     )
     assert pair_keys(first_pairs, first_shifts) != pair_keys(
@@ -198,8 +198,8 @@ def test_cpu_allows_continuous_geometry_backward() -> None:
         torch.tensor([0, 2]),
     )
     displacements = (
-        positions[pair_indices[0]]
-        - positions[pair_indices[1]]
+        positions[pair_indices[1]]
+        - positions[pair_indices[0]]
         + shifts.to(positions.dtype) @ cells[0]
     )
     torch.sum(displacements.square()).backward()

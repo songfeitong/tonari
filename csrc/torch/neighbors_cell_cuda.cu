@@ -257,15 +257,15 @@ __global__ void insert_images_kernel(
     const int64_t batch = segment_for_index(node, node_offsets, batch_size);
     const int64_t local_node = node - node_offsets[batch];
     const int64_t n_shifts = image_offsets[batch + 1] - image_offsets[batch];
-    const int64_t local_source = local_node / n_shifts;
+    const int64_t local_target = local_node / n_shifts;
     const int64_t shift_index = local_node % n_shifts;
-    const int64_t source = offsets[batch] + local_source;
+    const int64_t target = offsets[batch] + local_target;
     const scalar_t* cell = cells + 9 * batch;
     const int32_t* shift = image_shifts + 3 * (image_offsets[batch] + shift_index);
     int64_t coordinates[3];
 #pragma unroll
     for (int cartesian = 0; cartesian < 3; ++cartesian) {
-        scalar_t image_position = wrapped_positions[3 * source + cartesian];
+        scalar_t image_position = wrapped_positions[3 * target + cartesian];
 #pragma unroll
         for (int axis = 0; axis < 3; ++axis) {
             image_position += static_cast<scalar_t>(shift[axis]) * cell[3 * axis + cartesian];
@@ -310,30 +310,30 @@ __global__ void query_bins_kernel(
     scalar_t cutoff,
     scalar_t cutoff_squared,
     const int64_t* pair_offsets,
-    int64_t* target_pair_counts,
+    int64_t* source_pair_counts,
     int64_t* shift_overflow,
     int64_t n_pairs,
     int64_t* pair_indices,
     int32_t* cell_shifts) {
     const int lane = threadIdx.x % kWarpSize;
     const int warp = threadIdx.x / kWarpSize;
-    const int64_t target =
+    const int64_t source =
         (static_cast<int64_t>(blockIdx.x) * kWarpsPerBlock) + warp;
-    if (target >= n_atoms) {
+    if (source >= n_atoms) {
         return;
     }
-    const int64_t batch = segment_for_index(target, offsets, batch_size);
+    const int64_t batch = segment_for_index(source, offsets, batch_size);
     const scalar_t* cell = cells + 9 * batch;
-    int64_t target_bin[3];
+    int64_t source_bin[3];
 #pragma unroll
     for (int cartesian = 0; cartesian < 3; ++cartesian) {
         const int64_t dimension = bin_dimensions[3 * batch + cartesian];
-        target_bin[cartesian] = min(
+        source_bin[cartesian] = min(
             dimension - 1,
             max(
                 int64_t{0},
                 static_cast<int64_t>(floor(
-                    (wrapped_positions[3 * target + cartesian] -
+                    (wrapped_positions[3 * source + cartesian] -
                      bin_origins[3 * batch + cartesian]) /
                     cutoff))));
     }
@@ -351,9 +351,9 @@ __global__ void query_bins_kernel(
         const int offset_x = lane / 9 - 1;
         const int offset_y = (lane / 3) % 3 - 1;
         const int offset_z = lane % 3 - 1;
-        const int64_t coordinate_x = target_bin[0] + offset_x;
-        const int64_t coordinate_y = target_bin[1] + offset_y;
-        const int64_t coordinate_z = target_bin[2] + offset_z;
+        const int64_t coordinate_x = source_bin[0] + offset_x;
+        const int64_t coordinate_y = source_bin[1] + offset_y;
+        const int64_t coordinate_z = source_bin[2] + offset_z;
         if (coordinate_x >= 0 && coordinate_x < bin_dimensions[3 * batch] &&
             coordinate_y >= 0 && coordinate_y < bin_dimensions[3 * batch + 1] &&
             coordinate_z >= 0 && coordinate_z < bin_dimensions[3 * batch + 2]) {
@@ -365,9 +365,9 @@ __global__ void query_bins_kernel(
             while (node >= 0) {
                 const int64_t local_node = node - node_offsets[batch];
                 const int64_t n_shifts = image_offsets[batch + 1] - image_offsets[batch];
-                const int64_t local_source = local_node / n_shifts;
+                const int64_t local_target = local_node / n_shifts;
                 const int64_t shift_index = local_node % n_shifts;
-                const int64_t source = offsets[batch] + local_source;
+                const int64_t target = offsets[batch] + local_target;
                 const int32_t* wrapped_shift =
                     image_shifts + 3 * (image_offsets[batch] + shift_index);
                 int64_t output_shift[3];
@@ -375,8 +375,8 @@ __global__ void query_bins_kernel(
 #pragma unroll
                 for (int cartesian = 0; cartesian < 3; ++cartesian) {
                     scalar_t component =
-                        wrapped_positions[3 * source + cartesian] -
-                        wrapped_positions[3 * target + cartesian];
+                        wrapped_positions[3 * target + cartesian] -
+                        wrapped_positions[3 * source + cartesian];
 #pragma unroll
                     for (int axis = 0; axis < 3; ++axis) {
                         component += static_cast<scalar_t>(wrapped_shift[axis]) *
@@ -387,8 +387,8 @@ __global__ void query_bins_kernel(
 #pragma unroll
                 for (int axis = 0; axis < 3; ++axis) {
                     output_shift[axis] = static_cast<int64_t>(wrapped_shift[axis]) -
-                        static_cast<int64_t>(atom_wraps[3 * source + axis]) +
-                        static_cast<int64_t>(atom_wraps[3 * target + axis]);
+                        static_cast<int64_t>(atom_wraps[3 * target + axis]) +
+                        static_cast<int64_t>(atom_wraps[3 * source + axis]);
                 }
                 const bool zero_shift_self =
                     neighbor_search::is_zero_shift_self_pair(source, target, output_shift);
@@ -414,7 +414,7 @@ __global__ void query_bins_kernel(
                     }
                     if constexpr (write_pairs) {
                         const int local_output = atomicAdd(warp_output_cursors + warp, 1);
-                        const int64_t output = pair_offsets[target] + local_output;
+                        const int64_t output = pair_offsets[source] + local_output;
                         pair_indices[output] = source;
                         pair_indices[n_pairs + output] = target;
 #pragma unroll
@@ -437,7 +437,7 @@ __global__ void query_bins_kernel(
             lane_count += __shfl_down_sync(0xffffffff, lane_count, delta);
         }
         if (lane == 0) {
-            target_pair_counts[target] = lane_count;
+            source_pair_counts[source] = lane_count;
         }
     }
 }
@@ -462,7 +462,7 @@ struct QueryArguments {
     scalar_t cutoff;
     scalar_t cutoff_squared;
     const int64_t* pair_offsets;
-    int64_t* target_pair_counts;
+    int64_t* source_pair_counts;
     int64_t* shift_overflow;
     int64_t n_pairs;
     int64_t* pair_indices;
@@ -494,7 +494,7 @@ void launch_query_bins(
             arguments.cutoff,
             arguments.cutoff_squared,
             arguments.pair_offsets,
-            arguments.target_pair_counts,
+            arguments.source_pair_counts,
             arguments.shift_overflow,
             arguments.n_pairs,
             arguments.pair_indices,
@@ -722,12 +722,12 @@ std::vector<torch::Tensor> find_neighbors_cuda_cell(
     });
     C10_CUDA_KERNEL_LAUNCH_CHECK();
 
-    auto target_pair_counts = torch::empty(
+    auto source_pair_counts = torch::empty(
         {n_atoms + 1}, positions.options().dtype(torch::kInt64));
     // The final slot is also a status word. The query kernel writes INT64_MIN
     // on shift overflow, and the required pair-count cumsum returns it to the host.
     C10_CUDA_CHECK(cudaMemsetAsync(
-        target_pair_counts.data_ptr<int64_t>() + n_atoms,
+        source_pair_counts.data_ptr<int64_t>() + n_atoms,
         0,
         sizeof(int64_t),
         stream));
@@ -755,8 +755,8 @@ std::vector<torch::Tensor> find_neighbors_cuda_cell(
             static_cast<scalar_t>(cutoff),
             static_cast<scalar_t>(cutoff * cutoff),
             nullptr,
-            target_pair_counts.data_ptr<int64_t>(),
-            target_pair_counts.data_ptr<int64_t>() + n_atoms,
+            source_pair_counts.data_ptr<int64_t>(),
+            source_pair_counts.data_ptr<int64_t>() + n_atoms,
             0,
             nullptr,
             nullptr};
@@ -765,7 +765,7 @@ std::vector<torch::Tensor> find_neighbors_cuda_cell(
     });
     C10_CUDA_KERNEL_LAUNCH_CHECK();
     pair_offsets.slice(0, 1, n_atoms + 2)
-        .copy_(torch::cumsum(target_pair_counts, 0, torch::kInt64));
+        .copy_(torch::cumsum(source_pair_counts, 0, torch::kInt64));
     const int64_t n_pairs = pair_offsets[n_atoms + 1].item<int64_t>();
     TORCH_CHECK(
         n_pairs >= 0,

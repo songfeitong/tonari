@@ -24,7 +24,7 @@ constexpr int kCellListRoundoffFactor = 64;
 
 
 struct CellNode {
-    int32_t source;
+    int32_t target;
     int32_t shift;
     int32_t next;
 };
@@ -196,8 +196,8 @@ inline void append_candidate(
     int64_t output_shift[3];
     for (int axis = 0; axis < 3; ++axis) {
         output_shift[axis] = static_cast<int64_t>(search_shift[axis]) -
-            static_cast<int64_t>(atom_wraps[3 * source + axis]) +
-            static_cast<int64_t>(atom_wraps[3 * target + axis]);
+            static_cast<int64_t>(atom_wraps[3 * target + axis]) +
+            static_cast<int64_t>(atom_wraps[3 * source + axis]);
     }
     const bool zero_shift_self =
         neighbor_search::is_zero_shift_self_pair(source, target, output_shift);
@@ -207,8 +207,8 @@ inline void append_candidate(
     if (!zero_shift_self && !distance_known_inside) {
         scalar_t distance_squared = scalar_t(0);
         for (int cartesian = 0; cartesian < 3; ++cartesian) {
-            scalar_t component = positions[3 * source + cartesian] -
-                positions[3 * target + cartesian];
+            scalar_t component = positions[3 * target + cartesian] -
+                positions[3 * source + cartesian];
             for (int axis = 0; axis < 3; ++axis) {
                 component += static_cast<scalar_t>(output_shift[axis]) *
                     cell[3 * axis + cartesian];
@@ -254,8 +254,8 @@ inline void append_cell_candidate(
         int64_t output_shift[3];
         for (int axis = 0; axis < 3; ++axis) {
             output_shift[axis] = static_cast<int64_t>(search_shift[axis]) -
-                static_cast<int64_t>(atom_wraps[3 * source + axis]) +
-                static_cast<int64_t>(atom_wraps[3 * target + axis]);
+                static_cast<int64_t>(atom_wraps[3 * target + axis]) +
+                static_cast<int64_t>(atom_wraps[3 * source + axis]);
         }
         if (!neighbor_search::keep_pair_identity<Mode>(
                 source, target, output_shift)) {
@@ -264,8 +264,8 @@ inline void append_cell_candidate(
     }
     scalar_t search_distance_squared = scalar_t(0);
     for (int cartesian = 0; cartesian < 3; ++cartesian) {
-        const scalar_t component = wrapped_positions[3 * source + cartesian] -
-            wrapped_positions[3 * target + cartesian] +
+        const scalar_t component = wrapped_positions[3 * target + cartesian] -
+            wrapped_positions[3 * source + cartesian] +
             translations[3 * shift + cartesian];
         search_distance_squared += component * component;
     }
@@ -298,8 +298,8 @@ void search_exhaustive(
     const int32_t* image_shifts,
     scalar_t cutoff_squared,
     PairBuffers& pairs) {
-    for (int64_t target = 0; target < n_atoms; ++target) {
-        for (int64_t source = 0; source < n_atoms; ++source) {
+    for (int64_t source = 0; source < n_atoms; ++source) {
+        for (int64_t target = 0; target < n_atoms; ++target) {
             for (int64_t shift = 0; shift < n_shifts; ++shift) {
                 append_candidate<scalar_t, Mode>(
                     source,
@@ -426,13 +426,13 @@ bool search_cell_list(
     std::vector<CellNode> nodes;
     const int64_t possible_images = n_atoms * n_shifts;
     nodes.reserve(static_cast<size_t>(std::min(possible_images, 4 * n_atoms)));
-    for (int64_t source = 0; source < n_atoms; ++source) {
+    for (int64_t target = 0; target < n_atoms; ++target) {
         for (int64_t shift = 0; shift < n_shifts; ++shift) {
             scalar_t image_position[3];
             bool inside_bounds = true;
             for (int cartesian = 0; cartesian < 3; ++cartesian) {
                 image_position[cartesian] =
-                    wrapped_positions[3 * source + cartesian] +
+                    wrapped_positions[3 * target + cartesian] +
                     translations[3 * shift + cartesian];
                 inside_bounds &= std::isfinite(image_position[cartesian]) &&
                     image_position[cartesian] >=
@@ -449,38 +449,38 @@ bool search_cell_list(
                 "cell-list node count exceeds int32 indexing");
             const int32_t node = static_cast<int32_t>(nodes.size());
             nodes.push_back(
-                {static_cast<int32_t>(source),
+                {static_cast<int32_t>(target),
                  static_cast<int32_t>(shift),
                  bin_heads[bin]});
             bin_heads[bin] = node;
         }
     }
     const scalar_t search_cutoff_squared = search_cutoff * search_cutoff;
-    for (int64_t target = 0; target < n_atoms; ++target) {
-        scalar_t target_position[3];
-        int64_t target_coordinates[3];
+    for (int64_t source = 0; source < n_atoms; ++source) {
+        scalar_t source_position[3];
+        int64_t source_coordinates[3];
         for (int cartesian = 0; cartesian < 3; ++cartesian) {
-            target_position[cartesian] =
-                wrapped_positions[3 * target + cartesian];
-            target_coordinates[cartesian] = std::clamp(
+            source_position[cartesian] =
+                wrapped_positions[3 * source + cartesian];
+            source_coordinates[cartesian] = std::clamp(
                 static_cast<int64_t>(std::floor(
-                    (target_position[cartesian] - layout.origins[cartesian]) /
+                    (source_position[cartesian] - layout.origins[cartesian]) /
                     layout.size)),
                 int64_t{0},
                 layout.dimensions[cartesian] - 1);
         }
         for (int offset_x = -1; offset_x <= 1; ++offset_x) {
-            const int64_t x = target_coordinates[0] + offset_x;
+            const int64_t x = source_coordinates[0] + offset_x;
             if (x < 0 || x >= layout.dimensions[0]) {
                 continue;
             }
             for (int offset_y = -1; offset_y <= 1; ++offset_y) {
-                const int64_t y = target_coordinates[1] + offset_y;
+                const int64_t y = source_coordinates[1] + offset_y;
                 if (y < 0 || y >= layout.dimensions[1]) {
                     continue;
                 }
                 for (int offset_z = -1; offset_z <= 1; ++offset_z) {
-                    const int64_t z = target_coordinates[2] + offset_z;
+                    const int64_t z = source_coordinates[2] + offset_z;
                     if (z < 0 || z >= layout.dimensions[2]) {
                         continue;
                     }
@@ -489,8 +489,8 @@ bool search_cell_list(
                     for (int32_t node = bin_heads[bin]; node >= 0;
                          node = nodes[node].next) {
                         append_cell_candidate<scalar_t, Mode>(
-                            nodes[node].source,
-                            target,
+                            source,
+                            nodes[node].target,
                             atom_offset,
                             nodes[node].shift,
                             positions,

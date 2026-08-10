@@ -77,7 +77,7 @@ def vesin_keys(
         positions, cell, pbc, quantities="ijS"
     )
     keys = {
-        (int(j), int(i), int(shift[0]), int(shift[1]), int(shift[2]))
+        (int(i), int(j), int(shift[0]), int(shift[1]), int(shift[2]))
         for i, j, shift in zip(first, second, shifts, strict=True)
     }
     if half_list:
@@ -114,11 +114,11 @@ def ase_keys(
     )
     neighbor_list.update(atoms)
     keys: set[PairKey] = set()
-    for target in range(len(positions)):
-        sources, shifts = neighbor_list.get_neighbors(target)
+    for source in range(len(positions)):
+        targets, shifts = neighbor_list.get_neighbors(source)
         keys.update(
-            (int(source), target, int(shift[0]), int(shift[1]), int(shift[2]))
-            for source, shift in zip(sources, shifts, strict=True)
+            (source, int(target), int(shift[0]), int(shift[1]), int(shift[2]))
+            for target, shift in zip(targets, shifts, strict=True)
         )
     return canonicalize(keys) if half_list else keys
 

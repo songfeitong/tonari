@@ -4,19 +4,19 @@
 
 ## 要解决的问题
 
-给定一个或一批有限/周期结构，需要找出 cutoff 内的所有 atom-image pairs。每个结果包含 source、target，以及施加在 source 上的整数 cell shift。最终 displacement 为：
+给定一个或一批有限/周期结构，需要找出 cutoff 内的所有 atom-image pairs。每个结果包含 source、target，以及施加在 target 上的整数 cell shift。最终 displacement 为：
 
 ```text
-positions[source] - positions[target] + cell_shift @ cell
+positions[target] - positions[source] + cell_shift @ cell
 ```
 
 一个正确的实现不能只处理正交晶胞和已经 wrap 的坐标，还要覆盖 triclinic cell、partial PBC、rank-deficient inactive rows、multiple images、periodic self-images、strict cutoff 和不同大小结构组成的 batch。
 
 ## 两种互补的搜索方式
 
-最直接的 exhaustive search 枚举每个 target、source 和相关 periodic image。它的工作量随原子数近似二次增长，但循环简单、数据连续，不需要先建立空间索引，因此在小体系上通常最快。
+最直接的 exhaustive search 枚举每个 source、target 和相关 periodic image。它的工作量随原子数近似二次增长，但循环简单、数据连续，不需要先建立空间索引，因此在小体系上通常最快。
 
-Cell list 把空间划分为与 cutoff 同量级的 bins，每个 target 只查询附近 bins。固定 density、cutoff 和平均邻居数时，其工作量接近 `O(N + P)`，其中 `P` 是必须输出的 pair 数；代价是建表、额外内存和更复杂的访问模式。
+Cell list 把空间划分为与 cutoff 同量级的 bins，每个 source 只查询附近 bins。固定 density、cutoff 和平均邻居数时，其工作量接近 `O(N + P)`，其中 `P` 是必须输出的 pair 数；代价是建表、额外内存和更复杂的访问模式。
 
 项目不把其中一种算法当作永远正确的答案，而是根据候选规模选择路径：小体系避免索引开销，大体系避免 `N²` 枚举。
 
@@ -48,13 +48,13 @@ Periodic image enumeration 只决定搜索范围；最终 pair identity 始终�
 
 CPU 按 structure 独立选择算法。常见小体系直接进入紧凑的 native exhaustive loop，避免 Python 小算子、临时张量和 cell-list 初始化。
 
-大体系使用 Cartesian cell list。算法先 wrap representatives、建立 target 区域的 bins，再把可能进入 cutoff 范围的 periodic source images 插入对应 bin。每个 target 只扫描相邻 bins，并对候选执行最终 strict predicate。极端稀疏坐标若会产生不合理的空 bin grid，则回退到不需要该分配的路径。
+大体系使用 Cartesian cell list。算法先 wrap representatives、建立 source 区域的 bins，再把可能进入 cutoff 范围的 periodic target images 插入对应 bin。每个 source 只扫描相邻 bins，并对候选执行最终 strict predicate。极端稀疏坐标若会产生不合理的空 bin grid，则回退到不需要该分配的路径。
 
 CPU backend 本身保持单线程。并行度由调用方在 DataLoader workers、进程池、DDP 或更高层 workflow 中决定，避免 backend threads 与外层并行相互叠加。
 
 ### CPU 大体系的设计取舍
 
-Cell list 不只有一种周期表示。当前实现把可能进入搜索区域的 periodic source images 放入 Cartesian bins；另一种常见设计是每个物理原子只入表一次，在查询越过周期边界的 neighboring bins 时再生成 cell shift。Vesin 是后一种设计的成熟例子；其 CPU implementation 减少了 image preparation，bin 内访问更连续，并会在重复调用间复用 output capacity。
+Cell list 不只有一种周期表示。当前实现把可能进入搜索区域的 periodic target images 放入 Cartesian bins；另一种常见设计是每个物理原子只入表一次，在查询越过周期边界的 neighboring bins 时再生成 cell shift。Vesin 是后一种设计的成熟例子；其 CPU implementation 减少了 image preparation，bin 内访问更连续，并会在重复调用间复用 output capacity。
 
 真实 scaling 确认了这种差异：32,768 原子时当前实现约 24.1 ms，Vesin 约 13.1 ms。但两者都已经使用接近 `O(N + P)` 的 cell list；当前路径没有退化为穷举，绝对时间仍很小。更常见的 Matbench 小结构分布中本项目 CPU 更快，QMugs 自然分子分布上二者基本打平，因此大型单体系的差距目前不是主要 workload 的瓶颈。
 
@@ -64,7 +64,7 @@ Cell list 不只有一种周期表示。当前实现把可能进入搜索区域�
 
 CUDA 把整个 heterogeneous batch 作为一次执行单位。`offsets` 把拼接的 positions 划分为独立 structures，kernels 根据这些边界找到每个任务所属的 cell 与 PBC；任何 pair 都不会跨结构产生。
 
-小结构走 fused exhaustive path：候选直接映射到 CUDA threads，不构造 `N²` candidate tensors。大结构走 batched cell-list pipeline：整个 batch 共同完成 wrapping、bin construction、periodic image insertion 和 target queries。不同大小的结构共享 launches，因此 GPU 不必在 Python 中逐结构循环。
+小结构走 fused exhaustive path：候选直接映射到 CUDA threads，不构造 `N²` candidate tensors。大结构走 batched cell-list pipeline：整个 batch 共同完成 wrapping、bin construction、periodic image insertion 和 source queries。不同大小的结构共享 launches，因此 GPU 不必在 Python 中逐结构循环。
 
 这也是 CUDA 相对通用单结构 neighbor-list API 的主要优势。它不是让单个距离公式更快，而是让完整 batch 只跨越一次 Python/native 边界，并让许多小体系共同填满 GPU。
 

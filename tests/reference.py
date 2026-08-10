@@ -105,11 +105,11 @@ def find_neighbors_reference(
             )
             shifts = (
                 image_shift[None, None, :]
-                - atom_wrap[:, None, :]
-                + atom_wrap[None, :, :]
+                - atom_wrap[None, :, :]
+                + atom_wrap[:, None, :]
             )
             displacements = (
-                structure_positions[:, None, :] - structure_positions[None, :, :]
+                structure_positions[None, :, :] - structure_positions[:, None, :]
             )
             for axis in range(3):
                 displacements = (

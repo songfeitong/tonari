@@ -59,8 +59,8 @@ edge_index, cell_shifts = find_neighbors(
 source, target = edge_index
 edge_cells = batch.cell[batch.batch[source]]
 edge_vectors = (
-    batch.pos[source]
-    - batch.pos[target]
+    batch.pos[target]
+    - batch.pos[source]
     + torch.einsum(
         "ni,nij->nj",
         cell_shifts.to(batch.pos.dtype),
@@ -88,8 +88,8 @@ pair_indices, cell_shifts = find_neighbors(
     cutoff,
 )
 
-# Equivalent ASE search, reordered to the same source-target convention
-target, source, ase_cell_shifts = neighbor_list("ijS", atoms, cutoff)
+# Equivalent ASE search with the same source-target and cell-shift convention
+source, target, ase_cell_shifts = neighbor_list("ijS", atoms, cutoff)
 ase_pair_indices = np.stack((source, target))
 ```
 

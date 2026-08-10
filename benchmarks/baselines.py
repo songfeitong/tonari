@@ -31,7 +31,7 @@ def vesin_gpu_batch(
             positions[start:stop], cells[batch_index], pbc[batch_index], "ijS"
         )
         pair_indices.append(
-            torch.stack((second.to(torch.int64) + start, first.to(torch.int64) + start))
+            torch.stack((first.to(torch.int64) + start, second.to(torch.int64) + start))
         )
         cell_shifts.append(shifts)
     if not pair_indices:
@@ -83,13 +83,13 @@ def torch_dense_batch(
     ) - torch.repeat_interleave(pair_offsets, pair_counts)
     expanded_counts = torch.repeat_interleave(counts, pair_counts)
     atom_offsets = torch.repeat_interleave(offsets[:-1], pair_counts)
-    target = (
+    source = (
         torch.div(local_pair, expanded_counts, rounding_mode="floor") + atom_offsets
     )
-    source = local_pair % expanded_counts + atom_offsets
+    target = local_pair % expanded_counts + atom_offsets
 
     if not torch.any(pbc):
-        displacements = positions[source] - positions[target]
+        displacements = positions[target] - positions[source]
         mask = torch.sum(displacements * displacements, dim=1) < cutoff * cutoff
         mask &= source != target
         source = source[mask]
@@ -128,10 +128,10 @@ def torch_dense_batch(
     target = target.repeat_interleave(n_images)
     pair_structure = pair_batch.repeat_interleave(n_images)
     wrapped_shifts = image_shifts.repeat(len(pair_batch), 1)
-    output_shifts = wrapped_shifts - atom_wraps[source] + atom_wraps[target]
+    output_shifts = wrapped_shifts - atom_wraps[target] + atom_wraps[source]
     displacements = (
-        wrapped_positions[source]
-        - wrapped_positions[target]
+        wrapped_positions[target]
+        - wrapped_positions[source]
         + torch.einsum(
             "ei,eij->ej", wrapped_shifts.to(positions.dtype), cells[pair_structure]
         )

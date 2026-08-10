@@ -69,13 +69,13 @@ def test_representative_translation_relabels_shift_without_changing_vectors() ->
     first_pairs, first_shifts = find_neighbors_reference(positions, *common)
     second_pairs, second_shifts = find_neighbors_reference(translated, *common)
     first_displacements = (
-        positions[first_pairs[0]]
-        - positions[first_pairs[1]]
+        positions[first_pairs[1]]
+        - positions[first_pairs[0]]
         + first_shifts.to(positions.dtype) @ cell
     )
     second_displacements = (
-        translated[second_pairs[0]]
-        - translated[second_pairs[1]]
+        translated[second_pairs[1]]
+        - translated[second_pairs[0]]
         + second_shifts.to(positions.dtype) @ cell
     )
     assert pair_keys(first_pairs, first_shifts) != pair_keys(

@@ -90,7 +90,7 @@ def test_cuda_matches_ase_for_partial_triclinic_multiple_images() -> None:
         self_interaction=False,
     )
     expected = {
-        (int(j), int(i), int(shift[0]), int(shift[1]), int(shift[2]))
+        (int(i), int(j), int(shift[0]), int(shift[1]), int(shift[2]))
         for i, j, shift in zip(first, second, shifts, strict=True)
     }
     actual = cuda_neighbors(
@@ -121,13 +121,13 @@ def test_cuda_relabels_unwrapped_representatives() -> None:
         translated, cell[None], pbc, 1.0, offsets
     )
     first_displacements = (
-        positions.cuda()[first_pairs[0]]
-        - positions.cuda()[first_pairs[1]]
+        positions.cuda()[first_pairs[1]]
+        - positions.cuda()[first_pairs[0]]
         + first_shifts.to(dtype) @ cell.cuda()
     )
     second_displacements = (
-        translated.cuda()[second_pairs[0]]
-        - translated.cuda()[second_pairs[1]]
+        translated.cuda()[second_pairs[1]]
+        - translated.cuda()[second_pairs[0]]
         + second_shifts.to(dtype) @ cell.cuda()
     )
     assert pair_keys(first_pairs, first_shifts) != pair_keys(
@@ -218,8 +218,8 @@ def test_cuda_allows_continuous_geometry_backward() -> None:
     pbc = torch.ones((1, 3), device="cuda", dtype=torch.bool)
     pair_indices, shifts = find_neighbors(positions, cells, pbc, 0.8, offsets)
     displacements = (
-        positions[pair_indices[0]]
-        - positions[pair_indices[1]]
+        positions[pair_indices[1]]
+        - positions[pair_indices[0]]
         + shifts.to(positions.dtype) @ cells[0]
     )
     torch.sum(displacements.square()).backward()
@@ -295,16 +295,18 @@ def test_cell_list_path_handles_mixed_finite_and_partial_pbc_batch() -> None:
     actual = cuda_neighbors(positions, cells, pbc, 0.55, offsets)
     assert pair_keys(*actual) == pair_keys(*expected)
     pair_indices, shifts = actual
-    pair_batch = torch.bucketize(pair_indices[1], offsets[1:].cuda(), right=True)
     source_batch = torch.bucketize(pair_indices[0], offsets[1:].cuda(), right=True)
-    assert torch.equal(source_batch, pair_batch)
+    target_batch = torch.bucketize(pair_indices[1], offsets[1:].cuda(), right=True)
+    assert torch.equal(source_batch, target_batch)
     displacements = (
-        positions.cuda()[pair_indices[0]]
-        - positions.cuda()[pair_indices[1]]
-        + torch.einsum("ei,eij->ej", shifts.to(torch.float64), cells.cuda()[pair_batch])
+        positions.cuda()[pair_indices[1]]
+        - positions.cuda()[pair_indices[0]]
+        + torch.einsum(
+            "ei,eij->ej", shifts.to(torch.float64), cells.cuda()[source_batch]
+        )
     )
     assert torch.all(torch.sum(displacements.square(), dim=1) < 0.55**2)
-    assert torch.all(shifts[pair_batch == 1, 1:] == 0)
+    assert torch.all(shifts[source_batch == 1, 1:] == 0)
 
 
 def test_cell_list_large_common_translation_uses_public_vector_formula() -> None:
@@ -334,10 +336,10 @@ def test_cell_list_large_common_translation_uses_public_vector_formula() -> None
     expected = find_neighbors(*arguments)
     actual = cuda_neighbors(*arguments)
     expected_keys = pair_keys(*expected)
-    assert (23, 52, 0, -1, 0) in expected_keys
-    assert (52, 23, 0, 1, 0) in expected_keys
-    assert (40, 61, -1, -1, 1) not in expected_keys
-    assert (61, 40, 1, 1, -1) not in expected_keys
+    assert (52, 23, 0, -1, 0) in expected_keys
+    assert (23, 52, 0, 1, 0) in expected_keys
+    assert (61, 40, -1, -1, 1) not in expected_keys
+    assert (40, 61, 1, 1, -1) not in expected_keys
     assert pair_keys(*actual) == expected_keys
 
 

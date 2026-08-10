@@ -39,12 +39,12 @@ NumPy 与 Torch 使用同一个函数，所有 array 参数必须属于同一生
 
 ## 输出与方向
 
-`pair_indices` 是 int64、形状 `(2, P)`；`source, target = pair_indices`。`cell_shifts` 是 int32、形状 `(P, 3)`，表示施加在 source image 上的整数晶胞平移。
+`pair_indices` 是 int64、形状 `(2, P)`；`source, target = pair_indices`。`cell_shifts` 是 int32、形状 `(P, 3)`，表示施加在 target image 上的整数晶胞平移。
 
 Cell vectors 按行存储。单结构中 pair `k` 的 displacement 为：
 
 ```text
-positions[source[k]] - positions[target[k]] + cell_shifts[k] @ cells
+positions[target[k]] - positions[source[k]] + cell_shifts[k] @ cells
 ```
 
 Batch 中先由 `offsets` 确定 pair 所属 structure `b`，再使用 `cells[b]`。Pairs 不会跨 structure 产生，inactive PBC axes 上的 shift 必须为零。
@@ -79,7 +79,7 @@ Pair 方向、zero-shift self 和 canonical half rule 属于共享 policy。CPU 
 
 CPU 在一个 native call 内处理 batch，并按 structure 顺序搜索。候选规模较小时使用 exhaustive path；较大时使用 Cartesian cell list。算法选择是内部性能策略，不影响结果，也不属于 public API。
 
-Exhaustive path 直接枚举 target、source 和 periodic images。Cell-list path wrap representatives、建立 cutoff-sized bins、插入可能相关的 periodic source images，再让每个 target 查询邻近 bins。Broad phase 必须保守；接近浮点边界的 candidate 会按原始 positions 与最终 shift 重算公共 strict predicate。
+Exhaustive path 直接枚举 source、target 和 periodic images。Cell-list path wrap representatives、建立 cutoff-sized bins、插入可能相关的 periodic target images，再让每个 source 查询邻近 bins。Broad phase 必须保守；接近浮点边界的 candidate 会按原始 positions 与最终 shift 重算公共 strict predicate。
 
 CPU core 不创建内部 thread pool，并在 native search 期间释放 Python GIL。调用方可以使用 DataLoader workers、进程级并行或 DDP 决定外层并行方式。
 
@@ -101,7 +101,7 @@ NumPy CPU 与 Torch CPU 通过不同的 binding 调用同一个 C++ search core�
 
 内部 reference 使用独立 exhaustive enumeration，只用于 tests 和 differential validation，不属于 public surface。Production tests 以公开 pair keys 和 displacement 公式为准，不冻结 output order 或内部算法选择。
 
-外部 Vesin 与 ASE 需要先统一 pair 方向、cell-shift convention 和 self policy，再进行 exact key comparison。性能 benchmark 与 correctness reference 是两个角色：慢但独立的实现仍可作为 reference，快的 baseline 也必须先证明语义一致。
+外部 Vesin 与 ASE 使用相同的 pair 方向和 target-shift convention；验证只需统一 half/self policy 后进行 exact key comparison。性能 benchmark 与 correctness reference 是两个角色：慢但独立的实现仍可作为 reference，快的 baseline 也必须先证明语义一致。
 
 ## 暂不支持
 

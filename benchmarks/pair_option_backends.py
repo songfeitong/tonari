@@ -87,7 +87,7 @@ class NativeCpuBackend:
 
 
 class VesinCpuBackend:
-    """Adapt Vesin's pair direction and missing zero-shift self pairs."""
+    """Adapt Vesin's missing zero-shift self pairs."""
 
     def __init__(self, cutoff: float, options: PairOptions) -> None:
         self.options = options
@@ -107,7 +107,7 @@ class VesinCpuBackend:
             "ijS",
         )
         output = (
-            torch.stack((second.to(torch.int64), first.to(torch.int64))),
+            torch.stack((first.to(torch.int64), second.to(torch.int64))),
             cell_shifts.to(torch.int32),
         )
         if self.options.half_list:
@@ -152,13 +152,13 @@ class AseCpuBackend:
         )
         pair_indices = []
         cell_shifts = []
-        for target in range(n_atoms):
-            sources, shifts = neighbor_list.get_neighbors(target)
+        for source in range(n_atoms):
+            targets, shifts = neighbor_list.get_neighbors(source)
             pair_indices.append(
                 torch.stack(
                     (
-                        torch.from_numpy(sources).to(torch.int64),
-                        torch.full((len(sources),), target, dtype=torch.int64),
+                        torch.full((len(targets),), source, dtype=torch.int64),
+                        torch.from_numpy(targets).to(torch.int64),
                     )
                 )
             )

@@ -125,8 +125,8 @@ __device__ __forceinline__ bool evaluate_candidate(
 #pragma unroll
     for (int axis = 0; axis < 3; ++axis) {
         cell_shift[axis] = static_cast<int64_t>(wrapped_shift[axis]) -
-            static_cast<int64_t>(atom_wraps[3 * source + axis]) +
-            static_cast<int64_t>(atom_wraps[3 * target + axis]);
+            static_cast<int64_t>(atom_wraps[3 * target + axis]) +
+            static_cast<int64_t>(atom_wraps[3 * source + axis]);
     }
 
     const bool zero_shift_self =
@@ -140,7 +140,7 @@ __device__ __forceinline__ bool evaluate_candidate(
 #pragma unroll
         for (int cartesian = 0; cartesian < 3; ++cartesian) {
             scalar_t component =
-                source_position[cartesian] - target_position[cartesian];
+                target_position[cartesian] - source_position[cartesian];
 #pragma unroll
             for (int axis = 0; axis < 3; ++axis) {
                 component += static_cast<scalar_t>(cell_shift[axis]) *

@@ -66,6 +66,19 @@ def test_single_structure_default_matches_explicit_batch() -> None:
     assert pair_keys(single) == pair_keys(batched)
 
 
+def test_cell_shift_translates_the_target_image() -> None:
+    positions = torch.tensor([[0.9, 0.0, 0.0], [0.1, 0.0, 0.0]])
+    cell = torch.diag(torch.tensor([1.0, 4.0, 4.0]))
+    pbc = torch.tensor([True, False, False])
+
+    output = find_neighbors(positions, cell, pbc, 0.3)
+
+    assert pair_keys(output) == {
+        (0, 1, 1, 0, 0),
+        (1, 0, -1, 0, 0),
+    }
+
+
 @pytest.mark.parametrize("scale", [1e-3, 1e3])
 @pytest.mark.parametrize("half_list", [False, True])
 @pytest.mark.parametrize("include_self", [False, True])
