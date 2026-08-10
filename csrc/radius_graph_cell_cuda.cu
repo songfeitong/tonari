@@ -208,16 +208,23 @@ __global__ void define_bins_kernel(
             const scalar_t minimum = bounds_minimum[3 * batch + cartesian];
             const scalar_t maximum = bounds_maximum[3 * batch + cartesian];
             origin = minimum - cutoff;
-            dimension = max(
-                int64_t{1},
-                static_cast<int64_t>(ceil((maximum - minimum + 2 * cutoff) / cutoff)));
+            const scalar_t dimension_value =
+                ceil((maximum - minimum + 2 * cutoff) / cutoff);
+            dimension = !isfinite(dimension_value) ||
+                    dimension_value > static_cast<scalar_t>(kMaximumDenseBins)
+                ? kMaximumDenseBins + 1
+                : max(int64_t{1}, static_cast<int64_t>(dimension_value));
         }
         bin_origins[3 * batch + cartesian] = origin;
         bin_dimensions[3 * batch + cartesian] = dimension;
-        if (count <= std::numeric_limits<int64_t>::max() / dimension) {
+        if (count <= kMaximumDenseBins / dimension) {
             count *= dimension;
         } else {
-            count = std::numeric_limits<int64_t>::max();
+            // Exact counts above the allocation limit are irrelevant. The
+            // saturated value keeps the batched cumsum representable and
+            // deterministically selects the exhaustive fallback.
+            count = kMaximumDenseBins + 1;
+            break;
         }
     }
     bin_counts[batch] = count;
@@ -545,7 +552,12 @@ std::vector<torch::Tensor> radius_graph_pbc_cell_cuda(
         bin_ptr.slice(0, batch_size, batch_size + 2).cpu();
     const int64_t* bin_result = bin_result_cpu.data_ptr<int64_t>();
     const int64_t total_bins = bin_result[0];
+    TORCH_CHECK(total_bins >= 0, "cell-list bin count exceeds the int64 range");
+    TORCH_CHECK(
+        bin_result[1] >= total_bins,
+        "cell-list bin count and status exceed the int64 range");
     const int64_t input_status = bin_result[1] - total_bins;
+    TORCH_CHECK((input_status & ~int64_t{3}) == 0, "invalid cell-list input status");
     TORCH_CHECK(
         (input_status & 1) == 0,
         "positions must be finite and periodic representative wraps must fit int32");

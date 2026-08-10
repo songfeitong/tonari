@@ -403,3 +403,20 @@ def test_cell_list_falls_back_for_extremely_sparse_bounds() -> None:
         1.0,
     )
     assert edge_keys(edge_index, shifts) == set()
+
+
+def test_batched_sparse_bin_counts_saturate_before_cumsum() -> None:
+    n_atoms = 256
+    structure = torch.full((n_atoms, 3), 1_700_000.0, dtype=torch.float64)
+    structure[0] = 0.0
+    positions = torch.cat((structure, structure))
+    arguments = (
+        positions,
+        torch.tensor([0, n_atoms, 2 * n_atoms]),
+        torch.zeros((2, 3, 3), dtype=torch.float64),
+        torch.zeros((2, 3), dtype=torch.bool),
+        1.0,
+    )
+    expected = radius_graph_pbc(*arguments)
+    actual = cuda_graph(*arguments)
+    assert edge_keys(*actual) == edge_keys(*expected)
