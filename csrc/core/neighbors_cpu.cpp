@@ -515,20 +515,20 @@ bool search_cell_list(
 template <typename scalar_t, neighbor_search::PairMode Mode>
 PairBuffers build_neighbor_pairs(
     std::span<const scalar_t> positions,
-    std::span<const int64_t> offsets,
+    std::span<const int64_t> batch_ptr,
     std::span<const scalar_t> cells,
     std::span<const scalar_t> duals,
     std::span<const int32_t> image_shifts,
     std::span<const int64_t> image_offsets,
     double cutoff) {
     const scalar_t* position_data = positions.data();
-    const int64_t* offsets_data = offsets.data();
+    const int64_t* batch_ptr_data = batch_ptr.data();
     const scalar_t* cell_data = cells.data();
     const scalar_t* dual_data = duals.data();
     const int32_t* image_shift_data = image_shifts.data();
     const int64_t* image_offsets_data = image_offsets.data();
     const int64_t n_atoms_total = static_cast<int64_t>(positions.size() / 3);
-    const int64_t batch_size = static_cast<int64_t>(offsets.size() - 1);
+    const int64_t batch_size = static_cast<int64_t>(batch_ptr.size() - 1);
     const scalar_t scalar_cutoff = static_cast<scalar_t>(cutoff);
     const scalar_t cutoff_squared = static_cast<scalar_t>(cutoff * cutoff);
 
@@ -537,8 +537,8 @@ PairBuffers build_neighbor_pairs(
     pairs.targets.reserve(static_cast<size_t>(n_atoms_total) * 32);
     pairs.shifts.reserve(static_cast<size_t>(n_atoms_total) * 96);
     for (int64_t batch = 0; batch < batch_size; ++batch) {
-        const int64_t atom_offset = offsets_data[batch];
-        const int64_t n_atoms = offsets_data[batch + 1] - atom_offset;
+        const int64_t atom_offset = batch_ptr_data[batch];
+        const int64_t n_atoms = batch_ptr_data[batch + 1] - atom_offset;
         if (n_atoms == 0) {
             continue;
         }
@@ -621,7 +621,7 @@ PairBuffers build_neighbor_pairs(
 template <typename scalar_t>
 PairBuffers dispatch_neighbor_pairs(
     std::span<const scalar_t> positions,
-    std::span<const int64_t> offsets,
+    std::span<const int64_t> batch_ptr,
     std::span<const scalar_t> cells,
     std::span<const scalar_t> duals,
     std::span<const int32_t> image_shifts,
@@ -631,7 +631,7 @@ PairBuffers dispatch_neighbor_pairs(
     auto build = [&]<neighbor_search::PairMode Mode>() {
         return build_neighbor_pairs<scalar_t, Mode>(
             positions,
-            offsets,
+            batch_ptr,
             cells,
             duals,
             image_shifts,
@@ -657,15 +657,15 @@ PairBuffers dispatch_neighbor_pairs(
 template <typename scalar_t>
 neighbor_search::PairBuffers neighbor_search::find_neighbors_cpu(
     std::span<const scalar_t> positions,
-    std::span<const int64_t> offsets,
+    std::span<const int64_t> batch_ptr,
     std::span<const scalar_t> cells,
     std::span<const uint8_t> pbc,
     double cutoff,
     PairMode mode) {
     require_input(positions.size() % 3 == 0, "positions must have shape (N_total, 3)");
-    require_input(!offsets.empty(), "offsets must have shape (B + 1,)");
+    require_input(!batch_ptr.empty(), "batch_ptr must have shape (B + 1,)");
     const int64_t n_atoms = static_cast<int64_t>(positions.size() / 3);
-    const int64_t batch_size = static_cast<int64_t>(offsets.size() - 1);
+    const int64_t batch_size = static_cast<int64_t>(batch_ptr.size() - 1);
     require_input(
         cells.size() == static_cast<size_t>(9 * batch_size),
         "cells must have shape (B, 3, 3)");
@@ -675,8 +675,8 @@ neighbor_search::PairBuffers neighbor_search::find_neighbors_cpu(
     require_input(
         std::isfinite(cutoff) && cutoff > 0,
         "cutoff must be finite and positive");
-    require_input(offsets.front() == 0, "offsets must start at zero");
-    require_input(offsets.back() == n_atoms, "offsets must end at N_total");
+    require_input(batch_ptr.front() == 0, "batch_ptr must start at zero");
+    require_input(batch_ptr.back() == n_atoms, "batch_ptr must end at N_total");
     require_input(
         n_atoms < std::numeric_limits<int32_t>::max(),
         "the current implementation supports fewer than 2^31 atoms");
@@ -685,9 +685,9 @@ neighbor_search::PairBuffers neighbor_search::find_neighbors_cpu(
     atom_counts.reserve(static_cast<size_t>(batch_size));
     for (int64_t batch = 0; batch < batch_size; ++batch) {
         require_input(
-            offsets[batch + 1] >= offsets[batch],
-            "offsets must be nondecreasing");
-        atom_counts.push_back(offsets[batch + 1] - offsets[batch]);
+            batch_ptr[batch + 1] >= batch_ptr[batch],
+            "batch_ptr must be nondecreasing");
+        atom_counts.push_back(batch_ptr[batch + 1] - batch_ptr[batch]);
     }
     std::vector<double> cells_double(cells.begin(), cells.end());
     const PeriodicMetadata metadata = build_periodic_metadata(
@@ -696,7 +696,7 @@ neighbor_search::PairBuffers neighbor_search::find_neighbors_cpu(
         metadata.duals.begin(), metadata.duals.end());
     return dispatch_neighbor_pairs<scalar_t>(
         positions,
-        offsets,
+        batch_ptr,
         cells,
         duals,
         metadata.image_shifts,

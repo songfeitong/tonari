@@ -48,7 +48,7 @@ BACKENDS: dict[str, Backend] = {
 def call_backend(
     backend: Backend, batch: StructureBatch, cutoff: float
 ) -> tuple[Tensor, Tensor]:
-    return backend(batch.positions, batch.cells, batch.pbc, cutoff, batch.offsets)
+    return backend(batch.positions, batch.cells, batch.pbc, cutoff, batch.batch_ptr)
 
 
 def validate_external_reference(
@@ -152,7 +152,7 @@ def benchmark_workload(
     dense_candidate_limit: int,
 ) -> dict[str, object]:
     candidate_counts = [
-        dense_candidate_count(batch.offsets, batch.cells, batch.pbc, cutoff)
+        dense_candidate_count(batch.batch_ptr, batch.cells, batch.pbc, cutoff)
         for batch in batches
     ]
     source_ids = [source_id for batch in batches for source_id in batch.source_ids]
@@ -251,7 +251,7 @@ def main() -> None:
     batches = load_gpu_batches(dataset, args.batch_size, args.seed, device)
     candidate_counts = np.asarray(
         [
-            dense_candidate_count(batch.offsets, batch.cells, batch.pbc, args.cutoff)
+            dense_candidate_count(batch.batch_ptr, batch.cells, batch.pbc, args.cutoff)
             for batch in batches
         ]
     )

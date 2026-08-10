@@ -61,29 +61,29 @@ def test_numpy_batch_matches_torch() -> None:
     )
     cells = np.stack((np.zeros((3, 3)), np.diag([0.5, 8.0, 8.0])))
     pbc = np.array([[False, False, False], [True, False, False]])
-    offsets = np.array([0, 2, 3], dtype=np.int64)
-    actual = find_neighbors(positions, cells, pbc, 0.6, offsets)
+    batch_ptr = np.array([0, 2, 3], dtype=np.int64)
+    actual = find_neighbors(positions, cells, pbc, 0.6, batch_ptr)
     expected = find_neighbors(
         torch.from_numpy(positions),
         torch.from_numpy(cells),
         torch.from_numpy(pbc),
         0.6,
-        torch.from_numpy(offsets),
+        torch.from_numpy(batch_ptr),
     )
     assert numpy_pair_keys(actual) == torch_pair_keys(expected)
 
 
-@pytest.mark.parametrize("argument", ["cells", "pbc", "offsets"])
+@pytest.mark.parametrize("argument", ["cells", "pbc", "batch_ptr"])
 def test_numpy_and_torch_inputs_cannot_be_mixed(argument: str) -> None:
     arrays: dict[str, np.ndarray | torch.Tensor | None] = {
         "cells": np.zeros((3, 3), dtype=np.float64),
         "pbc": np.zeros(3, dtype=np.bool_),
-        "offsets": None,
+        "batch_ptr": None,
     }
-    if argument == "offsets":
+    if argument == "batch_ptr":
         arrays["cells"] = np.zeros((1, 3, 3), dtype=np.float64)
         arrays["pbc"] = np.zeros((1, 3), dtype=np.bool_)
-        arrays["offsets"] = torch.tensor([0, 2])
+        arrays["batch_ptr"] = torch.tensor([0, 2])
     else:
         arrays[argument] = torch.from_numpy(arrays[argument])
     with pytest.raises(TypeError, match="must all be NumPy arrays"):
@@ -92,7 +92,7 @@ def test_numpy_and_torch_inputs_cannot_be_mixed(argument: str) -> None:
             arrays["cells"],
             arrays["pbc"],
             1.0,
-            arrays["offsets"],
+            arrays["batch_ptr"],
         )
 
 

@@ -10,7 +10,7 @@ pair_indices, cell_shifts = find_neighbors(
     cells,
     pbc,
     cutoff,
-    offsets=None,
+    batch_ptr=None,
     *,
     half_list=False,
     include_self=False,
@@ -22,18 +22,18 @@ pair_indices, cell_shifts = find_neighbors(
 - `positions`: `(N, 3)`
 - `cells`: `(3, 3)`
 - `pbc`: `(3,)`
-- `offsets=None`
+- `batch_ptr=None`
 
 Batch 输入：
 
 - `positions`: `(N_total, 3)`，按 structure 拼接
 - `cells`: `(B, 3, 3)`
 - `pbc`: `(B, 3)`
-- `offsets`: `(B + 1,)`
+- `batch_ptr`: `(B + 1,)`
 
-`offsets` 从零开始、非递减，最后一个值等于 `N_total`。相邻的相同值表示 empty structure；`offsets=None` 等价于单结构边界 `[0, N]`。
+`batch_ptr` 从零开始、非递减，最后一个值等于 `N_total`。相邻的相同值表示 empty structure；`batch_ptr=None` 等价于单结构边界 `[0, N]`。
 
-NumPy 与 Torch 使用同一个函数，所有 array 参数必须属于同一生态。NumPy 只走 CPU；Torch 根据 `positions.device` 选择 CPU 或 CUDA。`positions` 和 `cells` 必须使用相同的 `float32` 或 `float64` dtype，`pbc` 为 bool，`offsets` 为 int64；Torch arrays 还必须位于同一 device。
+NumPy 与 Torch 使用同一个函数，所有 array 参数必须属于同一生态。NumPy 只走 CPU；Torch 根据 `positions.device` 选择 CPU 或 CUDA。`positions` 和 `cells` 必须使用相同的 `float32` 或 `float64` dtype，`pbc` 为 bool，`batch_ptr` 为 int64；Torch arrays 还必须位于同一 device。
 
 函数与具体长度单位无关，但 `positions`、`cells` 和 `cutoff` 必须使用同一单位。`cutoff` 必须有限且为正数。
 
@@ -47,7 +47,7 @@ Cell vectors 按行存储。单结构中 pair `k` 的 displacement 为：
 positions[target[k]] - positions[source[k]] + cell_shifts[k] @ cells
 ```
 
-Batch 中先由 `offsets` 确定 pair 所属 structure `b`，再使用 `cells[b]`。Pairs 不会跨 structure 产生，inactive PBC axes 上的 shift 必须为零。
+Batch 中先由 `batch_ptr` 确定 pair 所属 structure `b`，再使用 `cells[b]`。Pairs 不会跨 structure 产生，inactive PBC axes 上的 shift 必须为零。
 
 结果只包含 squared distance 严格小于 `cutoff**2` 的 atom-image pairs。输出顺序没有保证，调用者不能把 backend 当前遍历顺序当作接口契约。
 

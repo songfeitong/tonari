@@ -26,7 +26,7 @@ CPU 与 CUDA 共享 active-cell geometry、image range 和 pair identity，但�
 
 ## 2026-08-10：统一公共 API 与 NumPy/PyTorch 语义
 
-公共入口收敛为 `find_neighbors(positions, cells, pbc, cutoff, offsets=None)`，返回 `pair_indices` 与施加在 target 上的 `cell_shifts`。单结构与 batch、finite 与 periodic geometry 使用同一模型，旧接口不保留 alias。
+公共入口收敛为 `find_neighbors(positions, cells, pbc, cutoff, batch_ptr=None)`，返回 `pair_indices` 与施加在 target 上的 `cell_shifts`。`batch_ptr` 专指拼接 structures 的边界，可直接接收 PyG `Batch.ptr`，并与内部 image、bin 和 pair offsets 区分。单结构与 batch、finite 与 periodic geometry 使用同一模型，旧接口不保留 alias。
 
 NumPy 与 PyTorch 使用同一个 public function。随后项目进一步拆出 NumPy frontend、Torch frontend、独立 bindings 与 framework-neutral C++ core，使 NumPy CPU 不再借道 Tensor 或 LibTorch。CUDA 所需 metadata 和 schedule 也从 Python 收回 native provider。
 

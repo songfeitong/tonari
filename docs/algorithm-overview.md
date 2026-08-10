@@ -22,7 +22,7 @@ Cell list 把空间划分为与 cutoff 同量级的 bins，每个 source 只查�
 
 ```mermaid
 flowchart LR
-    A["positions / cells / pbc / offsets"] --> B["统一 periodic geometry"]
+    A["positions / cells / pbc / batch_ptr"] --> B["统一 periodic geometry"]
     B --> C{"执行设备"}
     C -- "CPU" --> D{"逐 structure 选择"}
     D -- "小候选空间" --> E["CPU exhaustive"]
@@ -62,7 +62,7 @@ Cell list 不只有一种周期表示。当前实现把可能进入搜索区域�
 
 ## CUDA 路径
 
-CUDA 把整个 heterogeneous batch 作为一次执行单位。`offsets` 把拼接的 positions 划分为独立 structures，kernels 根据这些边界找到每个任务所属的 cell 与 PBC；任何 pair 都不会跨结构产生。
+CUDA 把整个 heterogeneous batch 作为一次执行单位。`batch_ptr` 把拼接的 positions 划分为独立 structures，kernels 根据这些边界找到每个任务所属的 cell 与 PBC；任何 pair 都不会跨结构产生。
 
 小结构走 fused exhaustive path：候选直接映射到 CUDA threads，不构造 `N²` candidate tensors。大结构走 batched cell-list pipeline：整个 batch 共同完成 wrapping、bin construction、periodic image insertion 和 source queries。不同大小的结构共享 launches，因此 GPU 不必在 Python 中逐结构循环。
 

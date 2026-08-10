@@ -28,19 +28,19 @@ class QmugsStructureDataset(Dataset[dict[str, object]]):
         self.heavy_atom_boundaries = tuple(
             manifest["sampling"]["heavy_atom_boundaries"]
         )
-        offsets = cache["offsets"]
-        if len(entries) + 1 != len(offsets):
+        batch_ptr = cache["batch_ptr"]
+        if len(entries) + 1 != len(batch_ptr):
             raise ValueError("QMugs cache and manifest contain different sample sizes")
         if list(cache["source_ids"]) != [entry["source_id"] for entry in entries]:
             raise ValueError("QMugs cache and manifest select different structures")
         if any(
-            entry["n_atoms"] != int(offsets[index + 1] - offsets[index])
+            entry["n_atoms"] != int(batch_ptr[index + 1] - batch_ptr[index])
             for index, entry in enumerate(entries)
         ):
             raise ValueError("QMugs cache and manifest disagree on atom counts")
 
         self.positions = torch.from_numpy(cache["positions"]).to(dtype)
-        self.offsets = torch.from_numpy(offsets)
+        self.batch_ptr = torch.from_numpy(batch_ptr)
         self.atomic_numbers = torch.from_numpy(cache["atomic_numbers"])
         self.entries = tuple(entries)
         self.zero_cell = torch.zeros((3, 3), dtype=dtype)
@@ -50,8 +50,8 @@ class QmugsStructureDataset(Dataset[dict[str, object]]):
         return len(self.entries)
 
     def __getitem__(self, index: int) -> dict[str, object]:
-        start = int(self.offsets[index])
-        stop = int(self.offsets[index + 1])
+        start = int(self.batch_ptr[index])
+        stop = int(self.batch_ptr[index + 1])
         entry = self.entries[index]
         return {
             "positions": self.positions[start:stop],

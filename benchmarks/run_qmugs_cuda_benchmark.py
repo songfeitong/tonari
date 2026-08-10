@@ -26,7 +26,7 @@ CUDA_EXTENSION = load_torch_cuda()
 def median_batch(batches: list[StructureBatch], cutoff: float) -> StructureBatch:
     candidate_counts = np.asarray(
         [
-            dense_candidate_count(batch.offsets, batch.cells, batch.pbc, cutoff)
+            dense_candidate_count(batch.batch_ptr, batch.cells, batch.pbc, cutoff)
             for batch in batches
         ]
     )

@@ -30,25 +30,25 @@ def find_neighbors_reference(
     cells: Tensor,
     pbc: Tensor,
     cutoff: float,
-    offsets: Tensor | None = None,
+    batch_ptr: Tensor | None = None,
     *,
     half_list: bool = False,
     include_self: bool = False,
 ) -> tuple[Tensor, Tensor]:
     """Find neighbors exhaustively for development-time correctness checks."""
 
-    positions, cells, pbc, offsets = normalize_torch_inputs(
-        positions, cells, pbc, offsets
+    positions, cells, pbc, batch_ptr = normalize_torch_inputs(
+        positions, cells, pbc, batch_ptr
     )
     cutoff = float(cutoff)
     cutoff_squared = cutoff * cutoff
     int32_range = torch.iinfo(torch.int32)
-    validate_torch_inputs(positions, cells, pbc, cutoff, offsets)
-    offsets_cpu = offsets.detach().cpu()
-    if offsets_cpu[0].item() != 0 or offsets_cpu[-1].item() != len(positions):
-        raise ValueError("offsets must start at zero and end at N_total")
-    if torch.any(offsets_cpu[1:] < offsets_cpu[:-1]):
-        raise ValueError("offsets must be nondecreasing")
+    validate_torch_inputs(positions, cells, pbc, cutoff, batch_ptr)
+    batch_ptr_cpu = batch_ptr.detach().cpu()
+    if batch_ptr_cpu[0].item() != 0 or batch_ptr_cpu[-1].item() != len(positions):
+        raise ValueError("batch_ptr must start at zero and end at N_total")
+    if torch.any(batch_ptr_cpu[1:] < batch_ptr_cpu[:-1]):
+        raise ValueError("batch_ptr must be nondecreasing")
     if not torch.all(torch.isfinite(positions)):
         raise ValueError("positions must contain only finite values")
     if not torch.all(torch.isfinite(cells)):
@@ -57,9 +57,9 @@ def find_neighbors_reference(
     pair_indices: list[Tensor] = []
     pair_shifts: list[Tensor] = []
     total_image_count = 0
-    for batch_index in range(offsets.numel() - 1):
-        start = int(offsets_cpu[batch_index])
-        stop = int(offsets_cpu[batch_index + 1])
+    for batch_index in range(batch_ptr.numel() - 1):
+        start = int(batch_ptr_cpu[batch_index])
+        stop = int(batch_ptr_cpu[batch_index + 1])
         structure_positions = positions[start:stop]
         if stop == start:
             continue

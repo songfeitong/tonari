@@ -19,7 +19,7 @@ struct PairBuffers {
 template <typename scalar_t>
 PairBuffers find_neighbors_cpu(
     std::span<const scalar_t> positions,
-    std::span<const int64_t> offsets,
+    std::span<const int64_t> batch_ptr,
     std::span<const scalar_t> cells,
     std::span<const uint8_t> pbc,
     double cutoff,

@@ -80,7 +80,7 @@ class NativeCpuBackend:
             batch.cells,
             batch.pbc,
             cutoff,
-            batch.offsets,
+            batch.batch_ptr,
             half_list=self.options.half_list,
             include_self=self.options.include_self,
         )

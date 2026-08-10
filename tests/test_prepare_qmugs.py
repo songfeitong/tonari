@@ -145,13 +145,13 @@ def test_dense_baseline_supports_finite_batches() -> None:
         [[0.0, 0.0, 0.0], [0.5, 0.0, 0.0], [10.0, 0.0, 0.0]],
         dtype=torch.float64,
     )
-    offsets = torch.tensor([0, 2, 3])
+    batch_ptr = torch.tensor([0, 2, 3])
     cells = torch.zeros((2, 3, 3), dtype=torch.float64)
     pbc = torch.zeros((2, 3), dtype=torch.bool)
 
-    pair_indices, cell_shifts = torch_dense_batch(positions, cells, pbc, 1.0, offsets)
+    pair_indices, cell_shifts = torch_dense_batch(positions, cells, pbc, 1.0, batch_ptr)
 
-    assert dense_candidate_count(offsets, cells, pbc, 1.0) == 5
+    assert dense_candidate_count(batch_ptr, cells, pbc, 1.0) == 5
     assert set(map(tuple, pair_indices.T.tolist())) == {(0, 1), (1, 0)}
     assert torch.count_nonzero(cell_shifts) == 0
 
@@ -163,7 +163,7 @@ def test_qmugs_cache_and_workload_selection(tmp_path: Path) -> None:
     np.savez_compressed(
         cache,
         positions=np.zeros((5, 3), dtype=np.float64),
-        offsets=np.asarray([0, 2, 5], dtype=np.int64),
+        batch_ptr=np.asarray([0, 2, 5], dtype=np.int64),
         atomic_numbers=np.asarray([1, 1, 6, 1, 1], dtype=np.int32),
         source_ids=np.asarray(["CHEMBL1/conf_00", "CHEMBL2/conf_01"]),
     )
@@ -195,7 +195,7 @@ def test_qmugs_cache_archive_is_deterministic(tmp_path: Path) -> None:
     second = tmp_path / "second.npz"
     arrays = {
         "positions": np.arange(12, dtype=np.float64).reshape(4, 3),
-        "offsets": np.asarray([0, 4], dtype=np.int64),
+        "batch_ptr": np.asarray([0, 4], dtype=np.int64),
     }
 
     write_deterministic_npz(first, **arrays)

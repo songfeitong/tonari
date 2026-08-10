@@ -38,13 +38,13 @@ def main() -> None:
     batch = collate_structures([structure]).to(torch.device("cuda"))
     for _ in range(3):
         find_neighbors(
-            batch.positions, batch.cells, batch.pbc, args.cutoff, batch.offsets
+            batch.positions, batch.cells, batch.pbc, args.cutoff, batch.batch_ptr
         )
     torch.cuda.synchronize()
     torch.cuda.nvtx.range_push("profile_find_neighbors")
     for _ in range(args.iterations):
         find_neighbors(
-            batch.positions, batch.cells, batch.pbc, args.cutoff, batch.offsets
+            batch.positions, batch.cells, batch.pbc, args.cutoff, batch.batch_ptr
         )
     torch.cuda.nvtx.range_pop()
     torch.cuda.synchronize()

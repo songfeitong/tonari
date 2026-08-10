@@ -61,7 +61,7 @@ def test_single_structure_default_matches_explicit_batch() -> None:
         cell[None],
         pbc[None],
         1.3,
-        offsets=torch.tensor([0, len(positions)]),
+        batch_ptr=torch.tensor([0, len(positions)]),
     )
     assert pair_keys(single) == pair_keys(batched)
 
@@ -103,7 +103,7 @@ def test_neighbor_identity_is_independent_of_length_unit(
 
 
 @pytest.mark.parametrize(
-    ("cells", "pbc", "offsets", "message"),
+    ("cells", "pbc", "batch_ptr", "message"),
     [
         (
             torch.zeros((1, 3, 3)),
@@ -128,18 +128,18 @@ def test_neighbor_identity_is_independent_of_length_unit(
 def test_single_and_batch_shapes_are_unambiguous(
     cells: torch.Tensor,
     pbc: torch.Tensor,
-    offsets: torch.Tensor | None,
+    batch_ptr: torch.Tensor | None,
     message: str,
 ) -> None:
     with pytest.raises(ValueError, match=message):
-        find_neighbors(torch.zeros((2, 3)), cells, pbc, 1.0, offsets)
+        find_neighbors(torch.zeros((2, 3)), cells, pbc, 1.0, batch_ptr)
 
 
-def test_batch_offsets_define_structure_boundaries() -> None:
+def test_batch_ptr_defines_structure_boundaries() -> None:
     positions = torch.tensor([[0.0, 0.0, 0.0], [0.4, 0.0, 0.0], [0.0, 0.0, 0.0]])
     cells = torch.zeros((2, 3, 3))
     pbc = torch.zeros((2, 3), dtype=torch.bool)
     pair_indices, _ = find_neighbors(
-        positions, cells, pbc, 0.6, offsets=torch.tensor([0, 2, 3])
+        positions, cells, pbc, 0.6, batch_ptr=torch.tensor([0, 2, 3])
     )
     assert torch.all(pair_indices < 2)

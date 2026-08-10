@@ -37,7 +37,7 @@ __device__ __forceinline__ int64_t segment_for_index(
 template <typename scalar_t>
 __global__ void prepare_atom_wraps_kernel(
     const scalar_t* positions,
-    const int64_t* offsets,
+    const int64_t* batch_ptr,
     const scalar_t* duals,
     int64_t n_atoms,
     int64_t batch_size,
@@ -61,7 +61,7 @@ __global__ void prepare_atom_wraps_kernel(
             return;
         }
     }
-    const int64_t batch = segment_for_index(atom, offsets, batch_size);
+    const int64_t batch = segment_for_index(atom, batch_ptr, batch_size);
     const scalar_t* dual = duals + 9 * batch;
     const scalar_t upper_bound = static_cast<scalar_t>(2147483648.0);
 #pragma unroll
@@ -91,7 +91,7 @@ __device__ __forceinline__ bool evaluate_candidate(
     int64_t task_index,
     int64_t batch_index,
     const scalar_t* positions,
-    const int64_t* offsets,
+    const int64_t* batch_ptr,
     const scalar_t* cells,
     const int32_t* atom_wraps,
     const int32_t* image_shifts,
@@ -101,8 +101,8 @@ __device__ __forceinline__ bool evaluate_candidate(
     int64_t& target,
     int64_t (&cell_shift)[3],
     int64_t* shift_overflow) {
-    const int64_t atom_start = offsets[batch_index];
-    const int64_t n_atoms = offsets[batch_index + 1] - atom_start;
+    const int64_t atom_start = batch_ptr[batch_index];
+    const int64_t n_atoms = batch_ptr[batch_index + 1] - atom_start;
     const int64_t shift_start = image_offsets[batch_index];
     const int64_t n_shifts = image_offsets[batch_index + 1] - shift_start;
     const int64_t n_tasks = n_atoms * n_atoms * n_shifts;
@@ -171,7 +171,7 @@ __device__ __forceinline__ bool evaluate_candidate(
 template <typename scalar_t, neighbor_search::PairMode Mode>
 __global__ void count_pairs_kernel(
     const scalar_t* positions,
-    const int64_t* offsets,
+    const int64_t* batch_ptr,
     const scalar_t* cells,
     const int32_t* atom_wraps,
     const int32_t* image_shifts,
@@ -192,7 +192,7 @@ __global__ void count_pairs_kernel(
         task_index,
         batch_index,
         positions,
-        offsets,
+        batch_ptr,
         cells,
         atom_wraps,
         image_shifts,
@@ -219,7 +219,7 @@ __global__ void count_pairs_kernel(
 template <typename scalar_t, neighbor_search::PairMode Mode>
 __global__ void write_pairs_kernel(
     const scalar_t* positions,
-    const int64_t* offsets,
+    const int64_t* batch_ptr,
     const scalar_t* cells,
     const int32_t* atom_wraps,
     const int32_t* image_shifts,
@@ -242,7 +242,7 @@ __global__ void write_pairs_kernel(
         task_index,
         batch_index,
         positions,
-        offsets,
+        batch_ptr,
         cells,
         atom_wraps,
         image_shifts,
@@ -283,7 +283,7 @@ __global__ void write_pairs_kernel(
 template <typename scalar_t, neighbor_search::PairMode Mode>
 void launch_count_pairs(
     const torch::Tensor& positions,
-    const torch::Tensor& offsets,
+    const torch::Tensor& batch_ptr,
     const torch::Tensor& cells,
     const torch::Tensor& atom_wraps,
     const torch::Tensor& image_shifts,
@@ -296,7 +296,7 @@ void launch_count_pairs(
     cudaStream_t stream) {
     count_pairs_kernel<scalar_t, Mode><<<total_blocks, kBlockSize, 0, stream>>>(
         positions.data_ptr<scalar_t>(),
-        offsets.data_ptr<int64_t>(),
+        batch_ptr.data_ptr<int64_t>(),
         cells.data_ptr<scalar_t>(),
         atom_wraps.data_ptr<int32_t>(),
         image_shifts.data_ptr<int32_t>(),
@@ -313,7 +313,7 @@ template <typename scalar_t>
 void dispatch_count_pairs(
     neighbor_search::PairMode mode,
     const torch::Tensor& positions,
-    const torch::Tensor& offsets,
+    const torch::Tensor& batch_ptr,
     const torch::Tensor& cells,
     const torch::Tensor& atom_wraps,
     const torch::Tensor& image_shifts,
@@ -327,7 +327,7 @@ void dispatch_count_pairs(
     auto launch = [&]<neighbor_search::PairMode Mode>() {
         launch_count_pairs<scalar_t, Mode>(
             positions,
-            offsets,
+            batch_ptr,
             cells,
             atom_wraps,
             image_shifts,
@@ -359,7 +359,7 @@ void dispatch_count_pairs(
 template <typename scalar_t, neighbor_search::PairMode Mode>
 void launch_write_pairs(
     const torch::Tensor& positions,
-    const torch::Tensor& offsets,
+    const torch::Tensor& batch_ptr,
     const torch::Tensor& cells,
     const torch::Tensor& atom_wraps,
     const torch::Tensor& image_shifts,
@@ -375,7 +375,7 @@ void launch_write_pairs(
     cudaStream_t stream) {
     write_pairs_kernel<scalar_t, Mode><<<total_blocks, kBlockSize, 0, stream>>>(
         positions.data_ptr<scalar_t>(),
-        offsets.data_ptr<int64_t>(),
+        batch_ptr.data_ptr<int64_t>(),
         cells.data_ptr<scalar_t>(),
         atom_wraps.data_ptr<int32_t>(),
         image_shifts.data_ptr<int32_t>(),
@@ -394,7 +394,7 @@ template <typename scalar_t>
 void dispatch_write_pairs(
     neighbor_search::PairMode mode,
     const torch::Tensor& positions,
-    const torch::Tensor& offsets,
+    const torch::Tensor& batch_ptr,
     const torch::Tensor& cells,
     const torch::Tensor& atom_wraps,
     const torch::Tensor& image_shifts,
@@ -411,7 +411,7 @@ void dispatch_write_pairs(
     auto launch = [&]<neighbor_search::PairMode Mode>() {
         launch_write_pairs<scalar_t, Mode>(
             positions,
-            offsets,
+            batch_ptr,
             cells,
             atom_wraps,
             image_shifts,
@@ -447,7 +447,7 @@ void dispatch_write_pairs(
 
 std::vector<torch::Tensor> find_neighbors_cuda_exhaustive(
     const torch::Tensor& positions,
-    const torch::Tensor& offsets,
+    const torch::Tensor& batch_ptr,
     const torch::Tensor& cells,
     const torch::Tensor& duals,
     const torch::Tensor& image_shifts,
@@ -458,21 +458,21 @@ std::vector<torch::Tensor> find_neighbors_cuda_exhaustive(
     bool half_list,
     bool include_self) {
     TORCH_CHECK(positions.is_cuda(), "positions must be a CUDA tensor");
-    TORCH_CHECK(offsets.is_cuda() && cells.is_cuda() && duals.is_cuda(), "all inputs must be CUDA tensors");
+    TORCH_CHECK(batch_ptr.is_cuda() && cells.is_cuda() && duals.is_cuda(), "all inputs must be CUDA tensors");
     TORCH_CHECK(image_shifts.is_cuda() && image_offsets.is_cuda() && block_offsets.is_cuda(), "all metadata must be CUDA tensors");
-    TORCH_CHECK(positions.is_contiguous() && offsets.is_contiguous() && cells.is_contiguous(), "inputs must be contiguous");
+    TORCH_CHECK(positions.is_contiguous() && batch_ptr.is_contiguous() && cells.is_contiguous(), "inputs must be contiguous");
     TORCH_CHECK(duals.is_contiguous() && image_shifts.is_contiguous(), "metadata must be contiguous");
     TORCH_CHECK(image_offsets.is_contiguous() && block_offsets.is_contiguous(), "metadata must be contiguous");
     TORCH_CHECK(positions.scalar_type() == cells.scalar_type(), "positions and cells must have the same dtype");
     TORCH_CHECK(positions.scalar_type() == duals.scalar_type(), "positions and duals must have the same dtype");
-    TORCH_CHECK(offsets.scalar_type() == torch::kInt64, "offsets must have dtype int64");
+    TORCH_CHECK(batch_ptr.scalar_type() == torch::kInt64, "batch_ptr must have dtype int64");
     TORCH_CHECK(image_shifts.scalar_type() == torch::kInt32, "image_shifts must have dtype int32");
     TORCH_CHECK(image_offsets.scalar_type() == torch::kInt64 && block_offsets.scalar_type() == torch::kInt64, "metadata pointers must have dtype int64");
     TORCH_CHECK(total_blocks >= 0 && total_blocks < (int64_t{1} << 31), "invalid number of CUDA blocks");
 
     const c10::cuda::CUDAGuard device_guard(positions.device());
     const auto stream = at::cuda::getCurrentCUDAStream(positions.get_device());
-    const int64_t batch_size = offsets.numel() - 1;
+    const int64_t batch_size = batch_ptr.numel() - 1;
     const auto mode = neighbor_search::pair_mode(half_list, include_self);
     auto pair_indices = torch::empty({2, 0}, positions.options().dtype(torch::kInt64));
     auto cell_shifts = torch::empty({0, 3}, positions.options().dtype(torch::kInt32));
@@ -489,7 +489,7 @@ std::vector<torch::Tensor> find_neighbors_cuda_exhaustive(
             (positions.size(0) + kBlockSize - 1) / kBlockSize;
         prepare_atom_wraps_kernel<scalar_t><<<position_blocks, kBlockSize, 0, stream>>>(
             positions.data_ptr<scalar_t>(),
-            offsets.data_ptr<int64_t>(),
+            batch_ptr.data_ptr<int64_t>(),
             duals.data_ptr<scalar_t>(),
             positions.size(0),
             batch_size,
@@ -499,7 +499,7 @@ std::vector<torch::Tensor> find_neighbors_cuda_exhaustive(
         dispatch_count_pairs<scalar_t>(
             mode,
             positions,
-            offsets,
+            batch_ptr,
             cells,
             atom_wraps,
             image_shifts,
@@ -536,7 +536,7 @@ std::vector<torch::Tensor> find_neighbors_cuda_exhaustive(
         dispatch_write_pairs<scalar_t>(
             mode,
             positions,
-            offsets,
+            batch_ptr,
             cells,
             atom_wraps,
             image_shifts,

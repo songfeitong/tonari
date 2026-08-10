@@ -167,14 +167,14 @@ def write_sample_cache(
         [np.asarray(values, dtype=np.int32) for values in numbers_rows], axis=0
     )
     counts = np.asarray([len(values) for values in positions_rows], dtype=np.int64)
-    offsets = np.concatenate((np.zeros(1, dtype=np.int64), np.cumsum(counts)))
+    batch_ptr = np.concatenate((np.zeros(1, dtype=np.int64), np.cumsum(counts)))
     cells = np.asarray(structures["cell"].to_pylist(), dtype=np.float64)
     pbc = np.asarray(structures["pbc"].to_pylist(), dtype=np.bool_)
     sample_path.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(
         sample_path,
         positions=positions,
-        offsets=offsets,
+        batch_ptr=batch_ptr,
         cells=cells,
         pbc=pbc,
         atomic_numbers=atomic_numbers,

@@ -35,11 +35,11 @@ def test_cpu_matches_reference_for_mixed_batch(dtype: torch.dtype) -> None:
             torch.rand((4, 3), generator=generator, dtype=dtype) @ periodic_cell,
         )
     )
-    offsets = torch.tensor([0, 7, 12, 16])
+    batch_ptr = torch.tensor([0, 7, 12, 16])
     cells = torch.stack((torch.zeros((3, 3), dtype=dtype), partial_cell, periodic_cell))
     pbc = torch.tensor([[False, False, False], [True, True, False], [True, True, True]])
-    expected = find_neighbors_reference(positions, cells, pbc, 1.35, offsets)
-    actual = find_neighbors(positions, cells, pbc, 1.35, offsets)
+    expected = find_neighbors_reference(positions, cells, pbc, 1.35, batch_ptr)
+    actual = find_neighbors(positions, cells, pbc, 1.35, batch_ptr)
     assert pair_keys(*actual) == pair_keys(*expected)
 
 
@@ -230,10 +230,10 @@ def test_cpu_cell_list_path_matches_reference(dtype: torch.dtype) -> None:
         [[8.0, 0.4, 0.1], [0.2, 7.5, 0.5], [0.3, 0.1, 9.0]], dtype=dtype
     )
     positions = torch.rand((n_atoms, 3), generator=generator, dtype=dtype) @ cell
-    offsets = torch.tensor([0, n_atoms])
+    batch_ptr = torch.tensor([0, n_atoms])
     pbc = torch.ones((1, 3), dtype=torch.bool)
-    expected = find_neighbors_reference(positions, cell[None], pbc, 1.2, offsets)
-    actual = find_neighbors(positions, cell[None], pbc, 1.2, offsets)
+    expected = find_neighbors_reference(positions, cell[None], pbc, 1.2, batch_ptr)
+    actual = find_neighbors(positions, cell[None], pbc, 1.2, batch_ptr)
     assert pair_keys(*actual) == pair_keys(*expected)
 
 

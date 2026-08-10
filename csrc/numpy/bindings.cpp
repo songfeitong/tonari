@@ -18,14 +18,14 @@ namespace {
 template <typename scalar_t>
 std::pair<py::array, py::array> find_neighbors_typed(
     const py::array& positions,
-    const py::array& offsets,
+    const py::array& batch_ptr,
     const py::array& cells,
     const py::array& pbc,
     double cutoff,
     bool half_list,
     bool include_self) {
     const auto position_info = positions.request();
-    const auto offset_info = offsets.request();
+    const auto batch_ptr_info = batch_ptr.request();
     const auto cell_info = cells.request();
     const auto pbc_info = pbc.request();
     neighbor_search::PairBuffers pairs;
@@ -36,8 +36,8 @@ std::pair<py::array, py::array> find_neighbors_typed(
                 static_cast<const scalar_t*>(position_info.ptr),
                 static_cast<size_t>(position_info.size)),
             std::span(
-                static_cast<const int64_t*>(offset_info.ptr),
-                static_cast<size_t>(offset_info.size)),
+                static_cast<const int64_t*>(batch_ptr_info.ptr),
+                static_cast<size_t>(batch_ptr_info.size)),
             std::span(
                 static_cast<const scalar_t*>(cell_info.ptr),
                 static_cast<size_t>(cell_info.size)),
@@ -74,7 +74,7 @@ std::pair<py::array, py::array> find_neighbors_typed(
 
 std::pair<py::array, py::array> find_neighbors(
     const py::array& positions,
-    const py::array& offsets,
+    const py::array& batch_ptr,
     const py::array& cells,
     const py::array& pbc,
     double cutoff,
@@ -86,11 +86,11 @@ std::pair<py::array, py::array> find_neighbors(
         }
     };
     require_contiguous(positions, "positions");
-    require_contiguous(offsets, "offsets");
+    require_contiguous(batch_ptr, "batch_ptr");
     require_contiguous(cells, "cells");
     require_contiguous(pbc, "pbc");
-    if (!offsets.dtype().is(py::dtype::of<int64_t>())) {
-        throw py::value_error("offsets must have dtype int64");
+    if (!batch_ptr.dtype().is(py::dtype::of<int64_t>())) {
+        throw py::value_error("batch_ptr must have dtype int64");
     }
     if (!pbc.dtype().is(py::dtype::of<bool>())) {
         throw py::value_error("pbc must have dtype bool");
@@ -100,11 +100,11 @@ std::pair<py::array, py::array> find_neighbors(
     }
     if (positions.dtype().is(py::dtype::of<float>())) {
         return find_neighbors_typed<float>(
-            positions, offsets, cells, pbc, cutoff, half_list, include_self);
+            positions, batch_ptr, cells, pbc, cutoff, half_list, include_self);
     }
     if (positions.dtype().is(py::dtype::of<double>())) {
         return find_neighbors_typed<double>(
-            positions, offsets, cells, pbc, cutoff, half_list, include_self);
+            positions, batch_ptr, cells, pbc, cutoff, half_list, include_self);
     }
     throw py::value_error("positions must have dtype float32 or float64");
 }

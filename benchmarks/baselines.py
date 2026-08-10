@@ -18,15 +18,15 @@ def vesin_gpu_batch(
     cells: Tensor,
     pbc: Tensor,
     cutoff: float,
-    offsets: Tensor,
+    batch_ptr: Tensor,
 ) -> tuple[Tensor, Tensor]:
     """Run Vesin 0.6.1 on each structure and concatenate the directed neighbor lists."""
 
-    offsets_cpu = offsets.cpu().tolist()
+    batch_ptr_cpu = batch_ptr.cpu().tolist()
     neighbor_list = vesin_gpu_neighbor_list(cutoff)
     pair_indices = []
     cell_shifts = []
-    for batch_index, (start, stop) in enumerate(pairwise(offsets_cpu)):
+    for batch_index, (start, stop) in enumerate(pairwise(batch_ptr_cpu)):
         first, second, shifts = neighbor_list.compute(
             positions[start:stop], cells[batch_index], pbc[batch_index], "ijS"
         )
@@ -43,9 +43,9 @@ def vesin_gpu_batch(
 
 
 def dense_candidate_count(
-    offsets: Tensor, cells: Tensor, pbc: Tensor, cutoff: float
+    batch_ptr: Tensor, cells: Tensor, pbc: Tensor, cutoff: float
 ) -> int:
-    counts = (offsets[1:] - offsets[:-1]).to(torch.int64)
+    counts = (batch_ptr[1:] - batch_ptr[:-1]).to(torch.int64)
     if not torch.any(pbc):
         return int(torch.sum(counts * counts).cpu())
     if not torch.all(pbc):
@@ -64,7 +64,7 @@ def torch_dense_batch(
     cells: Tensor,
     pbc: Tensor,
     cutoff: float,
-    offsets: Tensor,
+    batch_ptr: Tensor,
 ) -> tuple[Tensor, Tensor]:
     """Materialize all atom pairs and, for full PBC, padded periodic images.
 
@@ -72,7 +72,7 @@ def torch_dense_batch(
     """
 
     device = positions.device
-    counts = offsets[1:] - offsets[:-1]
+    counts = batch_ptr[1:] - batch_ptr[:-1]
     pair_counts = counts * counts
     pair_batch = torch.repeat_interleave(
         torch.arange(len(counts), device=device), pair_counts
@@ -82,7 +82,7 @@ def torch_dense_batch(
         int(pair_counts.sum()), device=device
     ) - torch.repeat_interleave(pair_offsets, pair_counts)
     expanded_counts = torch.repeat_interleave(counts, pair_counts)
-    atom_offsets = torch.repeat_interleave(offsets[:-1], pair_counts)
+    atom_offsets = torch.repeat_interleave(batch_ptr[:-1], pair_counts)
     source = (
         torch.div(local_pair, expanded_counts, rounding_mode="floor") + atom_offsets
     )

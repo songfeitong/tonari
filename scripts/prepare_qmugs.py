@@ -332,12 +332,12 @@ def write_sample(
         )
 
     atom_counts = np.asarray([len(row) for row in positions_rows], dtype=np.int64)
-    offsets = np.concatenate((np.zeros(1, dtype=np.int64), np.cumsum(atom_counts)))
+    batch_ptr = np.concatenate((np.zeros(1, dtype=np.int64), np.cumsum(atom_counts)))
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     write_deterministic_npz(
         cache_path,
         positions=np.concatenate(positions_rows),
-        offsets=offsets,
+        batch_ptr=batch_ptr,
         atomic_numbers=np.concatenate(number_rows),
         source_ids=np.asarray([entry["source_id"] for entry in entries]),
     )

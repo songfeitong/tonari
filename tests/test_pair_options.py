@@ -282,12 +282,14 @@ def test_mixed_batch_pair_options_match_individual_structures(
         )
     )
     pbc = torch.tensor([[False, False, False], [True, False, False]])
-    offsets = torch.tensor([0, 0, 2, 3])
+    batch_ptr = torch.tensor([0, 0, 2, 3])
     cells = torch.cat((torch.zeros((1, 3, 3), dtype=torch.float64), cells))
     pbc = torch.cat((torch.zeros((1, 3), dtype=torch.bool), pbc))
     options = {"half_list": half_list, "include_self": include_self}
 
-    batched = pair_keys(find_neighbors(positions, cells, pbc, 0.6, offsets, **options))
+    batched = pair_keys(
+        find_neighbors(positions, cells, pbc, 0.6, batch_ptr, **options)
+    )
     first = pair_keys(find_neighbors(positions[:2], cells[1], pbc[1], 0.6, **options))
     second = {
         (source + 2, target + 2, shift_x, shift_y, shift_z)

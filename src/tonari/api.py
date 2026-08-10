@@ -15,7 +15,7 @@ def find_neighbors(
     cells: Tensor,
     pbc: Tensor,
     cutoff: float,
-    offsets: Tensor | None = None,
+    batch_ptr: Tensor | None = None,
     *,
     half_list: bool = False,
     include_self: bool = False,
@@ -28,7 +28,7 @@ def find_neighbors(
     cells: NDArray[np.float32] | NDArray[np.float64],
     pbc: NDArray[np.bool_],
     cutoff: float,
-    offsets: NDArray[np.int64] | None = None,
+    batch_ptr: NDArray[np.int64] | None = None,
     *,
     half_list: bool = False,
     include_self: bool = False,
@@ -40,7 +40,7 @@ def find_neighbors(
     cells: Tensor | np.ndarray,
     pbc: Tensor | np.ndarray,
     cutoff: float,
-    offsets: Tensor | np.ndarray | None = None,
+    batch_ptr: Tensor | np.ndarray | None = None,
     *,
     half_list: bool = False,
     include_self: bool = False,
@@ -54,7 +54,7 @@ def find_neighbors(
             or ``float64``. Torch inputs may be on CPU or CUDA; NumPy inputs use
             the CPU backend. All values must be finite.
         cells: Cartesian cell vectors stored as rows. Use shape ``(3, 3)`` when
-            ``offsets`` is ``None`` and ``(B, 3, 3)`` for a batch. Its floating
+            ``batch_ptr`` is ``None`` and ``(B, 3, 3)`` for a batch. Its floating
             dtype and, for Torch, device must match ``positions``. All values
             must be finite. For every nonempty structure, the rows enabled by
             ``pbc`` must be linearly independent; inactive rows and the full
@@ -64,7 +64,7 @@ def find_neighbors(
             ``bool`` and the array ecosystem/device must match ``positions``.
         cutoff: Strict, finite, positive distance cutoff. ``positions``,
             ``cells``, and ``cutoff`` must use the same length unit.
-        offsets: Optional ``int64`` structure boundaries in the concatenated
+        batch_ptr: Optional ``int64`` structure boundaries in the concatenated
             ``positions``, with shape ``(B + 1,)``. It must start at zero, be
             nondecreasing, and end at ``N_total``. ``None`` denotes one
             structure and is equivalent to ``[0, N]``. Its array ecosystem
@@ -85,13 +85,13 @@ def find_neighbors(
         and shape ``(num_pairs, 3)``. Each shift translates the target image.
         For one structure, pair ``k`` has Cartesian displacement
         ``positions[target[k]] - positions[source[k]] + cell_shifts[k] @
-        cells``. For a batch, first locate structure ``b`` from ``offsets`` and
+        cells``. For a batch, first locate structure ``b`` from ``batch_ptr`` and
         use the same formula with ``cells[b]``. Both outputs are dimensionless.
 
     Raises:
         TypeError: If array arguments mix PyTorch and NumPy, use an unsupported
             container type, or either pair option is not a Python ``bool``.
-        ValueError: If frontend shapes, dtypes, devices, offsets, cutoff,
+        ValueError: If frontend shapes, dtypes, devices, batch_ptr, cutoff,
             periodic cells, or host-validated index/resource bounds are invalid.
         RuntimeError: If the required native CPU or CUDA extension is missing;
             if native search discovers nonfinite positions or a representative
@@ -147,7 +147,7 @@ def find_neighbors(
             cells,
             pbc,
             cutoff,
-            offsets,
+            batch_ptr,
             half_list=half_list,
             include_self=include_self,
         )
@@ -163,7 +163,7 @@ def find_neighbors(
             cells,
             pbc,
             cutoff,
-            offsets,
+            batch_ptr,
             half_list=half_list,
             include_self=include_self,
         )

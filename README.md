@@ -18,7 +18,7 @@ pair_indices, cell_shifts = find_neighbors(
     cells,
     pbc,
     cutoff,
-    offsets=None,
+    batch_ptr=None,
     *,
     half_list=False,
     include_self=False,
@@ -53,7 +53,7 @@ edge_index, cell_shifts = find_neighbors(
     batch.cell,
     batch.pbc,
     cutoff=self.cutoff,
-    offsets=batch.ptr,
+    batch_ptr=batch.ptr,
 )
 
 source, target = edge_index
@@ -97,7 +97,7 @@ Pairs are included only when their distance is strictly smaller than `cutoff`. O
 
 ## Batches
 
-For a batch, concatenate all atomic positions and use `offsets` to mark structure boundaries. `cells` and `pbc` then contain one entry per structure.
+For a batch, concatenate all atomic positions and use `batch_ptr` to mark structure boundaries. `cells` and `pbc` then contain one entry per structure.
 
 Here, `B` is the number of structures and `N_total` is the total number of atoms across the batch.
 
@@ -106,9 +106,9 @@ Here, `B` is the number of structures and `N_total` is the total number of atoms
 | `positions` | `(N_total, 3)` |
 | `cells`     | `(B, 3, 3)`    |
 | `pbc`       | `(B, 3)`       |
-| `offsets`   | `(B + 1,)`     |
+| `batch_ptr` | `(B + 1,)`     |
 
-`offsets=None` denotes a single structure with `N` atoms and is equivalent to boundaries `[0, N]`. Returned pairs never cross structure boundaries.
+`batch_ptr=None` denotes a single structure with `N` atoms and is equivalent to boundaries `[0, N]`. Returned pairs never cross structure boundaries.
 
 ## Options
 

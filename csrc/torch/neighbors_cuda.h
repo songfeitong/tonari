@@ -8,7 +8,7 @@
 
 std::vector<torch::Tensor> find_neighbors_cuda_exhaustive(
     const torch::Tensor& positions,
-    const torch::Tensor& offsets,
+    const torch::Tensor& batch_ptr,
     const torch::Tensor& cells,
     const torch::Tensor& duals,
     const torch::Tensor& image_shifts,
@@ -21,7 +21,7 @@ std::vector<torch::Tensor> find_neighbors_cuda_exhaustive(
 
 std::vector<torch::Tensor> find_neighbors_cuda_cell(
     const torch::Tensor& positions,
-    const torch::Tensor& offsets,
+    const torch::Tensor& batch_ptr,
     const torch::Tensor& cells,
     const torch::Tensor& duals,
     const torch::Tensor& image_shifts,

@@ -18,7 +18,7 @@ def test_finite_directed_pairs_exclude_onsite_and_strict_boundary() -> None:
         torch.zeros((1, 3, 3)),
         torch.zeros((1, 3), dtype=torch.bool),
         cutoff=1.0,
-        offsets=torch.tensor([0, 3]),
+        batch_ptr=torch.tensor([0, 3]),
     )
     assert pair_keys(pair_indices, shifts) == {(1, 2, 0, 0, 0), (2, 1, 0, 0, 0)}
 
@@ -29,7 +29,7 @@ def test_periodic_small_cell_retains_self_images_and_multiple_images() -> None:
         torch.diag(torch.tensor([1.0, 9.0, 9.0]))[None],
         torch.tensor([[True, False, False]]),
         cutoff=2.1,
-        offsets=torch.tensor([0, 1]),
+        batch_ptr=torch.tensor([0, 1]),
     )
     assert pair_keys(pair_indices, shifts) == {
         (0, 0, -2, 0, 0),
@@ -46,7 +46,7 @@ def test_mixed_batch_uses_each_structure_cell_and_never_crosses() -> None:
         torch.stack((torch.zeros((3, 3)), torch.diag(torch.tensor([0.5, 8.0, 8.0])))),
         torch.tensor([[False, False, False], [True, False, False]]),
         cutoff=0.6,
-        offsets=torch.tensor([0, 2, 3]),
+        batch_ptr=torch.tensor([0, 2, 3]),
     )
     keys = pair_keys(pair_indices, shifts)
     assert {(0, 1, 0, 0, 0), (1, 0, 0, 0, 0)} <= keys

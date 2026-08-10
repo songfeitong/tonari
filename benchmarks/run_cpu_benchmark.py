@@ -73,7 +73,7 @@ def production_cpu(batch: StructureBatch, cutoff: float) -> tuple[Tensor, Tensor
         batch.cells,
         batch.pbc,
         cutoff,
-        batch.offsets,
+        batch.batch_ptr,
     )
 
 

@@ -41,7 +41,7 @@ torch::Tensor tensor_from_vector(
 
 std::vector<torch::Tensor> find_neighbors(
     const torch::Tensor& positions,
-    const torch::Tensor& offsets,
+    const torch::Tensor& batch_ptr,
     const torch::Tensor& cells,
     const torch::Tensor& pbc,
     double cutoff,
@@ -49,21 +49,21 @@ std::vector<torch::Tensor> find_neighbors(
     bool include_self) {
     TORCH_CHECK(positions.is_cuda(), "positions must be a CUDA tensor");
     TORCH_CHECK(
-        offsets.is_cuda() && cells.is_cuda() && pbc.is_cuda(),
+        batch_ptr.is_cuda() && cells.is_cuda() && pbc.is_cuda(),
         "all inputs must be CUDA tensors");
     TORCH_CHECK(
-        positions.is_contiguous() && offsets.is_contiguous() &&
+        positions.is_contiguous() && batch_ptr.is_contiguous() &&
             cells.is_contiguous() && pbc.is_contiguous(),
         "all inputs must be contiguous");
     TORCH_CHECK(positions.dim() == 2 && positions.size(1) == 3);
-    TORCH_CHECK(offsets.dim() == 1 && offsets.numel() > 0);
-    TORCH_CHECK(cells.sizes() == torch::IntArrayRef({offsets.numel() - 1, 3, 3}));
-    TORCH_CHECK(pbc.sizes() == torch::IntArrayRef({offsets.numel() - 1, 3}));
+    TORCH_CHECK(batch_ptr.dim() == 1 && batch_ptr.numel() > 0);
+    TORCH_CHECK(cells.sizes() == torch::IntArrayRef({batch_ptr.numel() - 1, 3, 3}));
+    TORCH_CHECK(pbc.sizes() == torch::IntArrayRef({batch_ptr.numel() - 1, 3}));
     TORCH_CHECK(positions.scalar_type() == cells.scalar_type());
     TORCH_CHECK(
         positions.scalar_type() == torch::kFloat32 ||
             positions.scalar_type() == torch::kFloat64);
-    TORCH_CHECK(offsets.scalar_type() == torch::kInt64);
+    TORCH_CHECK(batch_ptr.scalar_type() == torch::kInt64);
     TORCH_CHECK(pbc.scalar_type() == torch::kBool);
     neighbor_search::require_input(
         std::isfinite(cutoff) && cutoff > 0,
@@ -72,26 +72,26 @@ std::vector<torch::Tensor> find_neighbors(
         positions.size(0) < kInt32IndexLimit,
         "the current implementation supports fewer than 2^31 atoms");
 
-    const auto offsets_cpu = offsets.to(torch::kCPU).contiguous();
+    const auto batch_ptr_cpu = batch_ptr.to(torch::kCPU).contiguous();
     const auto cells_cpu = cells.to(torch::kCPU, torch::kFloat64).contiguous();
     const auto pbc_cpu = pbc.to(torch::kCPU).contiguous();
-    const int64_t* offset_data = offsets_cpu.data_ptr<int64_t>();
-    const int64_t batch_size = offsets.numel() - 1;
+    const int64_t* batch_ptr_data = batch_ptr_cpu.data_ptr<int64_t>();
+    const int64_t batch_size = batch_ptr.numel() - 1;
     neighbor_search::require_input(
-        offset_data[0] == 0,
-        "offsets must start at zero");
+        batch_ptr_data[0] == 0,
+        "batch_ptr must start at zero");
     neighbor_search::require_input(
-        offset_data[batch_size] == positions.size(0),
-        "offsets must end at N_total");
+        batch_ptr_data[batch_size] == positions.size(0),
+        "batch_ptr must end at N_total");
 
     std::vector<int64_t> atom_counts;
     atom_counts.reserve(static_cast<size_t>(batch_size));
     int64_t maximum_atoms = 0;
     for (int64_t batch = 0; batch < batch_size; ++batch) {
         neighbor_search::require_input(
-            offset_data[batch + 1] >= offset_data[batch],
-            "offsets must be nondecreasing");
-        const int64_t count = offset_data[batch + 1] - offset_data[batch];
+            batch_ptr_data[batch + 1] >= batch_ptr_data[batch],
+            "batch_ptr must be nondecreasing");
+        const int64_t count = batch_ptr_data[batch + 1] - batch_ptr_data[batch];
         atom_counts.push_back(count);
         maximum_atoms = std::max(maximum_atoms, count);
     }
@@ -169,7 +169,7 @@ std::vector<torch::Tensor> find_neighbors(
         total_nodes < kInt32IndexLimit) {
         return find_neighbors_cuda_cell(
             positions,
-            offsets,
+            batch_ptr,
             cells,
             duals,
             image_shifts,
@@ -187,7 +187,7 @@ std::vector<torch::Tensor> find_neighbors(
         "the exhaustive CUDA path requires fewer than 2^31 thread blocks");
     return find_neighbors_cuda_exhaustive(
         positions,
-        offsets,
+        batch_ptr,
         cells,
         duals,
         image_shifts,

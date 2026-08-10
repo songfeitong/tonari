@@ -16,7 +16,7 @@ namespace {
 template <typename scalar_t>
 std::vector<torch::Tensor> find_neighbors_typed(
     const torch::Tensor& positions,
-    const torch::Tensor& offsets,
+    const torch::Tensor& batch_ptr,
     const torch::Tensor& cells,
     const torch::Tensor& pbc,
     double cutoff,
@@ -32,8 +32,8 @@ std::vector<torch::Tensor> find_neighbors_typed(
             positions.data_ptr<scalar_t>(),
             static_cast<size_t>(positions.numel())),
         std::span(
-            offsets.data_ptr<int64_t>(),
-            static_cast<size_t>(offsets.numel())),
+            batch_ptr.data_ptr<int64_t>(),
+            static_cast<size_t>(batch_ptr.numel())),
         std::span(
             cells.data_ptr<scalar_t>(),
             static_cast<size_t>(cells.numel())),
@@ -67,7 +67,7 @@ std::vector<torch::Tensor> find_neighbors_typed(
 
 std::vector<torch::Tensor> find_neighbors(
     const torch::Tensor& positions,
-    const torch::Tensor& offsets,
+    const torch::Tensor& batch_ptr,
     const torch::Tensor& cells,
     const torch::Tensor& pbc,
     double cutoff,
@@ -75,13 +75,13 @@ std::vector<torch::Tensor> find_neighbors(
     bool include_self) {
     TORCH_CHECK(!positions.is_cuda(), "positions must be a CPU tensor");
     TORCH_CHECK(
-        !offsets.is_cuda() && !cells.is_cuda() && !pbc.is_cuda(),
+        !batch_ptr.is_cuda() && !cells.is_cuda() && !pbc.is_cuda(),
         "all inputs must be CPU tensors");
     TORCH_CHECK(
-        positions.is_contiguous() && offsets.is_contiguous() &&
+        positions.is_contiguous() && batch_ptr.is_contiguous() &&
             cells.is_contiguous() && pbc.is_contiguous(),
         "all inputs must be contiguous");
-    TORCH_CHECK(offsets.scalar_type() == torch::kInt64);
+    TORCH_CHECK(batch_ptr.scalar_type() == torch::kInt64);
     TORCH_CHECK(pbc.scalar_type() == torch::kBool);
     TORCH_CHECK(positions.scalar_type() == cells.scalar_type());
     std::vector<torch::Tensor> result;
@@ -89,7 +89,7 @@ std::vector<torch::Tensor> find_neighbors(
         positions.scalar_type(), "neighbor_search_cpu", [&] {
             result = find_neighbors_typed<scalar_t>(
                 positions,
-                offsets,
+                batch_ptr,
                 cells,
                 pbc,
                 cutoff,

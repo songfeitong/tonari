@@ -36,7 +36,7 @@ def call_production(
         batch.cells,
         batch.pbc,
         cutoff,
-        batch.offsets,
+        batch.batch_ptr,
         half_list=options.half_list,
         include_self=options.include_self,
     )
@@ -79,7 +79,7 @@ def validate_modes(batches: list[StructureBatch], cutoff: float) -> dict[str, ob
                 batch.cells,
                 batch.pbc,
                 cutoff,
-                batch.offsets,
+                batch.batch_ptr,
             )
         )
         if full != vesin:
