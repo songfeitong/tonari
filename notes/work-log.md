@@ -1,93 +1,49 @@
 # 工作记录
 
-## 2026-08-09：物理约定与第一版 CUDA search
+本文只记录项目为何形成当前设计，帮助理解主要取舍。它不是接口规范，也不保存每次调试、审查返工和 benchmark 波动；当前行为以 README、architecture、algorithm overview 和 design 为准。
 
-首先从 ELFES theory/design 固定不可妥协的物理约定：cell vectors 按行；periodicity 只由 `pbc[3]` 决定；active rows 可以形成 rank-1/2 lattice；每个 pair 的连续量是 `positions[source] - positions[target] + cell_shifts @ cell`；cutoff 使用严格 `<`；只排除 source、target 与 zero shift 同时相同的 onsite pair；periodic self-images 和同一 atom pair 的 multiple images 都必须保留。Vesin 0.6.1 只作为外部 correctness reference 与 baseline，没有复制或移植其源码。
+## 2026-08-09：确定物理语义并实现 CUDA 原型
 
-第一版 CUDA 路径没有 materialize `N² × images` tensors，而是把候选映射到 CUDA threads，先计数、精确分配，再写出结果。小 workload 使用 exhaustive search；大 workload 使用 batched Cartesian cell list。Cell-list pipeline 在 device 上完成 representative wrapping、AABB、periodic source-image insertion、每 target 查询、prefix sum 与输出。异质 batch 从入口到输出只经过一组 native launch sequence，而不是 Python 逐结构循环。
+项目首先从 ELFES 的理论与设计文档固定物理约定：cell vectors 按行；periodicity 只由 `pbc` 决定；shift 施加在 source image；cutoff 使用严格 `<`；periodic self-images 与 multiple images 必须保留。Vesin 只作为外部 reference 和 baseline，没有复制其实现。
 
-早期 Python metadata 对代表性 batch 约 2.59 ms，明显超过 raw kernels，因此优化重点先放在边界层。将 1–3 维 periodic geometry 移入 native shared metadata 后，固定成本显著下降。大结构路径选择 cutoff-sized Cartesian bins；cutoff/2 bins 虽减少 visited nodes，却把 neighbor-bin loops 从最多 27 增到最多 125，端到端反而变慢，已经撤销。
+第一版 CUDA search 已采用小体系 exhaustive、大体系 batched cell list 的总体路线。关键判断是把完整 batch 作为执行单位，不在 Python 中逐结构构图，也不 materialize `N² × images` candidate tensors。
 
-Nsight Systems 还否决了一项看似合理的优化：把 fused wrapping/AABB atomics 拆成独立 CUB reductions 后，wrapping kernel 变小，但 reductions 本身更贵，总 GPU work 和 NVTX wall time都回退。这个结果促使项目始终以完整 one-shot call 为性能单位，而不是单看某个 kernel。
+早期 profiling 显示 Python/Torch metadata 的固定成本高于 raw kernels，因此 periodic geometry 和 schedule preparation 被逐步移入 native boundary。后续优化始终以完整 one-shot call 为测量单位，而不是只看单个 kernel。
 
-## 2026-08-09：真实数据与 CUDA 边界加固
+## 2026-08-09：建立真实晶体 benchmark
 
-ColabFit 直接 XYZ 下载在本机遇到 reCAPTCHA，因此改用同一官方数据的固定 Hugging Face Parquet revision，并保存文件大小与 SHA-256。`scripts/prepare_matbench.py` 从 `matbench_mp_e_form` 确定性抽取 1,536 个 structures，覆盖 1–444 atoms、1,343 个 formulas 和多种 cell shapes。Raw data 与 tensor cache 保持 ignored；仓库只提交 manifest 和复现脚本；没有下载 OMat24，也没有保留 labels。
+`scripts/prepare_matbench.py` 从固定 revision 的 `matbench_mp_e_form` 中确定性抽取 1,536 个真实晶体，覆盖不同 atom counts、cell shapes 与 compositions。Raw data 和 cache 保持 Git ignored，仓库只提交 source 信息、抽样方法和 manifest；没有下载 OMat24，也没有保留无关 labels。
 
-第一轮独立审查发现：极端未 wrap representatives 可让 int32 `cell_shifts` 静默溢出；empty periodic structure 会按 tiny cell 枚举大量 images；NaN/Inf positions 或 inactive cell rows 会静默给出错误结果；过早的 exhaustive grid limit 会拒绝本可走 cell list 的输入。最终保持输出为 int32，并要求 representative wrap 与最终 shift 都可表示，否则直接报错；empty structure 使用零 image count；finite/range 检查进入 O(N) prepare；grid limit 只在实际选择 exhaustive path 时生效。
+这套 workload 同时承担 correctness differential、真实 DataLoader epoch 和 real-derived supercell scaling，取代随机点与手工晶体作为主要性能证据。
 
-边界检查的第一版把 finite predicate 重复放进每个 candidate 并增加同步，真实 epoch 回退约 22%。修复后检查恢复为 O(N)，error status 与已有 synchronization 合并，性能回到原区间。这个过程确认 correctness hardening 也必须经过真实 workload profile。
+## 2026-08-10：加入 CPU backend 与共享 geometry
 
-## 2026-08-10：CPU backend 与共享 geometry
+CPU backend 没有包在 CUDA 路径外层，而是从公共 periodic geometry 和 pair policy 出发独立设计。小候选空间使用紧凑 exhaustive loop，大候选空间使用 Cartesian cell list；batch 内 structures 顺序处理，外层 workflow 决定并行度。
 
-CPU 工作没有在 CUDA API 外加一个 device `if`。实现先拆出真正共享的 periodic geometry，再分别设计 native CPU hybrid search 与 CUDA schedule。CPU 可以接受 batch，但逐 structure 搜索；CUDA 继续整个 batch pipeline。Native build 始终包含 CPU extension，CUDA extension 按环境可选。
+CPU 与 CUDA 共享 active-cell geometry、image range 和 pair identity，但保留各自的数据布局和调度。独立审查推动 canonical displacement predicate、empty-structure behavior、rank handling、unwrapped representatives 和资源边界在两端形成一致语义。
 
-旧 metadata 使用多个小型 Torch operators；在 `batch_size=1` 的 1,536 次调用中 dispatcher 成为主要成本。新的 native geometry 在一个 C++ call 中完成 finite/rank check、active dual、repeat range 和 image enumeration，并用 long-double one-sided Jacobi SVD 直接处理最多 3×3 active rows，避免 Gram matrix 平方条件数。
+## 2026-08-10：统一公共 API 与 NumPy/PyTorch 语义
 
-CPU production 采用 hybrid search：候选规模小时 exhaustive，规模大时把相关 periodic source images 插入 cutoff-sized Cartesian bins，每个 target 扫描相邻 27 bins。内部 crossover 按 `N² × image_count` 的真实候选规模选择；完整 Matbench epoch sweep 后选定 16,384。CPU 不创建内部 thread pool，使 DDP、DataLoader workers 或调用者可以控制并行层级。
+公共入口收敛为 `find_neighbors(positions, cells, pbc, cutoff, offsets=None)`，返回 `pair_indices` 与施加在 source 上的 `cell_shifts`。单结构与 batch、finite 与 periodic geometry 使用同一模型，旧接口不保留 alias。
 
-两项 CPU 优化被 benchmark 否决。利用 reverse-pair 对称性只计算一半距离增加了 branch 与 paired writes，32,768-atom case 反而从约 18.5 ms 退到 20.9 ms；把 linked nodes 改为额外排序的 contiguous bins 也没有端到端收益。真正有效的低成本改进包括 native metadata、合理 output reserve、紧凑 int32 nodes、只插入 target bounds 附近的 periodic images、`gil_scoped_release`，以及删除即使 profiler 未开启也会执行的高频 `steady_clock::now()`。
+NumPy 与 PyTorch 使用同一个 public function。随后项目进一步拆出 NumPy frontend、Torch frontend、独立 bindings 与 framework-neutral C++ core，使 NumPy CPU 不再借道 Tensor 或 LibTorch。CUDA 所需 metadata 和 schedule 也从 Python 收回 native provider。
 
-## 2026-08-10：CPU 独立审查与统一语义
+这次重构确立了当前依赖方向：public API 只做 dispatch，frontend 处理数组生态，binding/provider 处理 native ownership，core 负责共享物理语义与 CPU search。
 
-CPU reviewer 找到四个核心反例：corner-bin pruning 在 strict boundary 附近只保留一个方向；empty structure 仍在 rank/repeat 前处理 tiny cell；Gram rank check 拒绝合法近共线 rows；wrapped-coordinate cutoff 对大 representatives 发生 cancellation。处理方式不是添加 magic epsilon，而是删除低收益 pruning、empty early return、直接 SVD，以及把 original positions/output shift 的公共公式作为 canonical predicate。
+## 2026-08-10：补充真实分子 workload
 
-第二轮审查又找到 CUDA cell-list 与 CPU 对 float32 大共同晶格平移的 pair-set 分歧。为了避免复制另一套容易漂移的 boundary-shell 逻辑，CUDA prepare 检测 nonzero wraps 后将 whole call 路由到已有 canonical exhaustive path。随后又修复 batched sparse bin counts 单项不溢出但 cumsum 溢为负数的问题：超过实际用途的 bin count 在 device 上饱和为 safety limit + 1，host 稳定选择 sparse fallback。
+周期晶体不能代表有限分子，因此项目选择 QMugs 而不是更小的 QM9。准备脚本从每个 ChEMBL 分子的 conformers 中确定性选择一个最低能结构，再构造自然分布和 size-balanced 两组互不重叠的 4,096-molecule samples。
 
-最终 reviewer 对 12,000 个 rank/scale/condition-number geometry cases、数千个 strict-boundary/unwrapped/sparse differential cases、全部 1,536 个真实 structures 与 2,780,158 个 Vesin keys 做复核，在 clean revision `3851726124e9db81859682fc3f7e3c9a2231d310` 给出 PASS。
+结果显示 CPU 在自然分子分布上与 Vesin 基本打平，小分子区间领先、大分子区间逐渐落后；CUDA 的主要收益仍来自 batch amortization。这个趋势与 Matbench supercell scaling 一致，也明确了项目并不追求所有尺度上的 CPU 优势。
 
-## 2026-08-10：第一性原理 API 重构为 tonari
+## 2026-08-10：原生 half list 与 zero-shift self
 
-项目随后重命名为 `tonari`，并删除旧 API，而不是保留 alias。公共面只剩 `find_neighbors(positions, cells, pbc, cutoff, offsets=None)`；`offsets=None` 是单结构，batched `offsets` 是拼接 positions 的 boundaries。返回 `pair_indices` 与 `cell_shifts`，方向统一为 source、target，shift 施加在 source 上。核心层只使用 neighbor、pair、source、target、cell shift、displacement 与 distance；只有未来 PyG/GNN adapter 才把结果映射为 `edge_index` 和 `edge_vectors`。
+公共 API 增加 keyword-only `half_list` 与 `include_self`，默认行为不变。Full/half/self policy 进入共享 native candidate acceptance，而不是 Python 后处理。Vesin 与 ASE adapters 统一方向和 self 语义后，为四种模式提供外部 exact reference。
 
-同一个入口现在按输入生态 dispatch。Torch 输入返回同 device 的 Torch tensors，CPU/CUDA 分别进入 native backend；NumPy 输入通过 `torch.from_numpy` 进入相同 native CPU backend，再以共享 storage 的安全方式返回 NumPy arrays。不可写、未对齐或 negative-stride arrays 只在必要时复制；NumPy/Torch 混用被明确拒绝。公共 docstring 使用 Torch style，覆盖 shape、dtype/device、batch、方向、strict cutoff、periodic images、单位、autograd 与可运行示例。
+Half list 在 CPU 与 CUDA 上都真实减少 output pairs 和内存；zero-shift self 与 periodic self-images 保持清楚区分。独立审查重点验证这些不变量，没有围绕亚毫秒性能差异反复调优。
 
-这次重构还发现一个不常见但真实的 CPU 性能因素：Ninja 按 object filename 排序链接，重命名后 hot function 地址变化，完整 epoch 从约 144 ms 退到约 165 ms，而 machine code bytes 完全相同。将共享实现命名为 `geometry.*` 后，link order 和 hot address 恢复，性能也恢复。这里只记录经同进程 direct native A/B 证明的现象，不把它包装成可移植的通用优化规律。
+## 当前定位
 
-API 重构后第一轮共 68 项 CUDA-visible tests 全过，CPU-only 环境为 46 passed/22 skipped，公共 docstring 10 个 examples 全过。新增测试覆盖 NumPy/Torch 同一入口、ecosystem mixing rejection、single/batch 等价、CPU/CUDA/reference exact identity，以及 positions/cells/cutoff 一致缩放后的单位无关性。
+项目现在是一套公共语义、三个 provider：NumPy CPU、Torch CPU 和 Torch CUDA。CPU 适合常见小结构、NumPy workflow 和无 GPU 环境；CUDA 面向模型入口的真实 batch；Vesin 与 ASE 保留为外部 baseline/reference。
 
-最终 API reviewer 继续找到两个边界。0-D positions 在构造隐式 offsets 时先执行 `len()`，导致 Torch 与 NumPy 都抛 TypeError 而不是 public docstring 约定的 invalid-shape ValueError；修复后 shape validation 先于 normalization。更重要的是，CUDA cell-list 在 kernel 内对已 cast 的 float32 cutoff 平方，而其他路径对 Python double cutoff 平方后再 cast，255/256-atom crossover 在精心构造的 1 ulp boundary 上分别返回两条与零条 pairs。最终 query kernel 同时接收 bin-sizing cutoff 与统一舍入的 `cutoff_squared`，跨 CPU/reference/CUDA 和 exhaustive/cell-list 的回归均返回相同两条有向 pairs。加入两项回归后测试矩阵为 CUDA-visible 74 passed，CPU-only 50 passed/24 skipped。
-
-## 2026-08-10：最终真实 benchmark
-
-CPU 最终正式 run 使用 `DataLoader(batch_size=1)`、float64、固定 CPU 31、单线程、每 backend/workload 至少 2 秒 warmup，并在 API/documentation 修复后的 clean revision 上独占重跑。全部 Matbench keys 与复用 `NeighborList` 的 Vesin exact match。tonari 完整 epoch 为 143.999 ms，Vesin 为 248.459 ms，即 tonari 在真实小体系分布上快 1.73×；相对旧正式 run 两者都只变化约 0.1%。64 atoms 仍领先，约 512 atoms 到交叉区，1,728 atoms 以上 Vesin 明显更快。
-
-CUDA 最终正式 run 使用 `DataLoader(batch_size=32)`、float32、整 batch H2D 后计时，并在 strict-cutoff reviewer 修复后的 clean revision 上重跑。tonari 完整 epoch 为 12.107 ms，逐结构 Vesin GPU 为 494.393 ms；median 32-structure batch 为 0.2252 ms，对应 Vesin 9.2855 ms 与 dense PyTorch 42.7812 ms。相对修复前正式 run，epoch 与 median batch 分别只变化约 +0.7% 与 +1.1%。64–32,768 atom真实结构/派生 supercells 上，tonari CUDA 均领先逐结构 Vesin；dense baseline 从 4,096 atoms 起因候选规模超过安全限额跳过。
-
-最终 Nsight profile 在 32,768 atoms 上测得全部 CUDA kernels 约 0.1356 ms/call，CUDA memory operations 约 0.0061 ms/call，NVTX one-shot range 约 0.3031 ms/call。Raw trace 保持 ignored；仓库提交复现脚本、summary 和完整 CSV aggregates。ELFES 只做只读需求核对：其当前 two-center 用法可由未来 adapter 在 scalar broad cutoff 后做 half-list canonicalization、species filtering 与 onsite addition，本轮没有修改或接入 ELFES。
-
-最终独立 reviewer 在 clean HEAD `715fcf2ffdb1ef00489d241212a6bb00c5b38184` 给出 PASS，无 confirmed blocker。除完整 test/Matbench/performance/provenance 复核外，它又执行 100 组 NumPy/Torch/CPU/CUDA/reference mixed-batch differential、30 组大 unwrapped differential 和 200 组 float32 cutoff crossover，并确认旧 package、native symbol、tracked file、ignored build object、egg-info 与 pycache 均已从项目 workspace 清除。
-
-## 2026-08-10：QMugs finite-molecule benchmark
-
-Matbench 只能说明周期晶体 workflow，且其中大量结构很小。补充数据最终选择 QMugs，而不是 QM9：官方数据包含 665,911 个 ChEMBL 分子、1,992,984 个 conformers，平均约 30.6 个重原子且最大 100 个重原子，更接近常见药物样模型输入。只下载 2.03 GB summary 和 7.18 GB structures archive，不下载 wavefunctions、vibrational spectra 或任何额外 labels；raw data 全部保留在 Git-ignored cache。
-
-抽样没有把同一分子的三个 conformers 当三份独立数据。脚本先为每个 ChEMBL ID 选择 GFN2-xTB 总能量最低的 conformer，再用稳定 hash 取 4,096 个自然分布 population samples，并在 population 外按八个重原子区间各取 512 个组成 4,096 个 size-balanced samples。Population 的总原子数中位数为 52，balanced 为 71，最大分子 221 atoms。Source files、selection table 和 cache 均固定 SHA；NPZ writer 使用固定 ZIP metadata，避免 `np.savez_compressed` 的时间戳让同一抽样产生不同文件 hash。
-
-Benchmark data layer 从 Matbench 文件中拆出真正共享的 `StructureBatch` 与 collate；QMugs dataset 只把 zero cell 与 false PBC 补到同一 batch contract。Dense baseline 同时支持 uniformly finite 与 full-PBC data。Vesin GPU baseline 改为跨 calls 复用同一个 `NeighborList`，避免把 object construction 算成竞争对手开销。原 Matbench CPU/CUDA smoke runs、81 项 CUDA-visible tests 和 Ruff 均通过，production native search code没有变化。
-
-首版 CPU JSON 在 clean revision `70a09d2fbe737a61677d68b3f5fbf1b685f2610e` 上给出 population 154.674 ms 对 179.283 ms，但独立 reviewer 在同一 source/data 下只能稳定复现约 173–175 ms，且 JSON 没记录 `amd-pstate-epp` policy，因此该 headline 被撤回。Benchmark shared helpers 随后移入不依赖 CUDA extension 的 `benchmarks/common.py`，CPU-only build 可独立导入 runner；runner 也开始记录 governor、EPP、boost 与 frequency bounds。最终在 clean revision `dca205966ab5643451b0f4c7d97cbc7c11123c57`、Python 3.12.13、CPU31、`performance/performance` policy 下重跑：population 为 169.700 ms 对 Vesin 169.554 ms，基本打平；size-balanced 为 303.687 对 281.308 ms。逐档结果显示 `tonari` 在 4–30-heavy-atom bins 领先 1.03–1.20×，31–40 档进入 crossover，之后 Vesin 逐渐领先。
-
-最终 CUDA JSON 使用项目 `.venv`、Python 3.12.13 与当前 extension binary 在 clean revision `e4f2bf421bb42df1928f69bd592223abcd233ea6` 上重跑，使 source-tree binary hash、测试与正式 provenance 完全一致。Population epoch 在 batch size 8/32/64/128 下分别为 44.065/11.958/6.396/3.844 ms；bs=64 的逐结构 Vesin 为 905.611 ms。Population representative batch 中 `tonari` 0.1054 ms、Vesin 13.9742 ms、finite dense baseline 0.2981 ms；最大的 81–100-heavy-atom representative batch 为 0.1362/15.8172/0.7736 ms。与周期晶体相比，finite dense 没有 image padding，所以差距合理地缩小；而相对 Vesin 的主要优势仍来自整个 batch 一次进入 native pipeline。
-
-CPU/CUDA 在全部 8,192 个分子、15,144,842 个 keys 上与 Vesin exact match；九个 CUDA representative batches 的 1,322,646 个 keys 又与 dense baseline exact match。本轮不复制分子制造大单体系，改用真实 population 的 batch-size scaling 检查 GPU amortization。
-
-## 2026-08-10：Native half list与zero-shift self pair
-
-公共API增加keyword-only `half_list=False`与`include_self=False`，默认行为不变。C++共享`PairMode`集中定义zero-shift self与lexicographical canonical half规则，CPU和CUDA都在native candidate acceptance、count/write阶段使用compile-time specialization；Python reference复用同一Python canonical helper，NumPy继续走相同CPU backend。Zero-shift self显式绕过普通distance predicate，periodic self-images仍按strict cutoff参与；half只去除`(source, target, S)`与`(target, source, -S)`的reverse redundancy。
-
-新增测试把四种mode覆盖到NumPy、Torch CPU、Torch CUDA、reference、single/batch、strict boundary、multiple images、periodic self-images、unwrapped CUDA fallback与一致单位缩放。Vesin adapter明确补其不原生提供的zero-shift self；ASE使用`skin=0`、原生`self_interaction`和one-way/both-way，并把外部方向归一化为公开canonical key。
-
-性能只做了能回答架构问题的真实Matbench测量。256结构CPU benchmark中，tonari/Vesin/ASE四种mode全部exact；half/no-self把output从14.15 MB减至7.07 MB并把tonari从27.59降至24.25 ms。完整1,536结构CUDA benchmark中，四种mode不变量和默认Vesin exact均通过；half/no-self把output从77.84 MB减至38.92 MB、peak allocation从4.73 MB减至2.42 MB，epoch从11.26降至10.91 ms。一次同policy、同compiler重建的pre-feature/current CPU A/B为168.36/170.32 ms，约1.2%差异，不构成明显默认路径回归。`include_self`没有可辨认的不合理成本，默认CUDA hot path也没有显示回归；按任务要求没有围绕亚毫秒波动反复调优。
-
-独立reviewer聚焦核心实现后只确认一个reference blocker：极小正cutoff的平方可能在geometry dtype下溢为零，production仍按契约原生加入zero-shift self，但reference原先依赖`0 < cutoff_squared`而漏掉diagonal。修复让zero image diagonal按`include_self`显式置真或置假，并覆盖float32/float64 underflow及full/half；修复后119项GPU-visible tests通过。
-
-## 2026-08-10：Frontend、provider 与 neutral core 分层
-
-随着项目同时支持NumPy、PyTorch、CPU与CUDA，原先以Torch为中心的内部边界不再合适：NumPy虽然复用了CPU算法，却必须经过Tensor和LibTorch；CUDA所需的periodic metadata、algorithm choice与schedule tensors则由Python组装。公共API因此承担了超出输入适配的职责，framework和backend之间也形成了不必要的耦合。
-
-本轮删除了这条历史路径，未保留兼容wrapper。公共`api.py`现在只做ecosystem dispatch；NumPy与Torch frontends分别负责自己的shape、dtype、device和contiguity；独立的NumPy与Torch CPU bindings共同调用`csrc/core/`中的framework-neutral C++ geometry与search implementation。该core只依赖C++标准库，不包含Python、NumPy或Torch headers。NumPy production调用已用阻断Torch import的独立进程验证，并确认其native extension不链接LibTorch。
-
-CUDA一侧把metadata construction、host/device transfer、schedule construction与exhaustive/cell-list选择收回单个native provider。Python不再传递duals、image shifts、block offsets或node offsets等实现专用tensors，也不再暴露可被冻结为事实API的planning helpers。CPU与CUDA仍共享periodic geometry和pair policy，但保留各自适合硬件的search implementation。
-
-重构没有改变`find_neighbors`的public signature、pair方向、strict cutoff、half/self policy或integer/resource contract。最终完整GPU-visible test matrix为119 passed；CPU-only matrix、standalone C++20 core compilation和public docstring examples另行验证。全部1,536个Matbench结构继续在CPU/CUDA上与Vesin精确一致；短性能回归中CPU epoch与历史结果同一量级，CUDA epoch没有退化。这里不因几毫秒环境波动重写正式benchmark结论，验证目标只是不引入明显架构性性能回归。
+尚未实现的 prepared workspace、Verlet cache、GNN adapter 和发布 wheel matrix 都应在出现真实需求后单独设计，不应通过继续扩大当前 API 来提前猜测。
