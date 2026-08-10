@@ -40,6 +40,14 @@ QMugs benchmark 加入后，同一独立 reviewer 对官方来源、抽样、cac
 
 独立 reviewer 最终在 clean HEAD `50623cdab8229b4f9bb1c4ba8e5bd91e79b1bdb5` 给出 PASS，无 confirmed blocker。它确认 81 项 GPU-visible tests、57 passed/24 skipped 的 CPU-only matrix、Ruff、权威 `--prose-wrap never` Prettier、offline lock、Git status/diff/fsck、正式 JSON 的 revision/clean flag/hash/statistics 与中文文档全部通过。
 
+## Half list与zero-shift self增量终审
+
+本轮review按用户要求聚焦核心代码，不重新审计大型数据下载，也不把毫秒级benchmark波动或文档措辞当作blocker。审查范围是公开half/self语义、zero-shift self与periodic self-image区分、CPU/CUDA exhaustive与cell-list count/write、unwrapped fallback、NumPy/Torch/reference一致性，以及Vesin/ASE adapter的方向和self处理。
+
+首轮核心证据包括115项GPU-visible tests、78 passed/37 skipped的CPU-only matrix、86组四mode CPU/CUDA/reference定向差分，以及192组tonari/Vesin/ASE exact differential。Reviewer未发现native count/write、默认hot path、external adapter或整体架构问题，只确认一个reference blocker：极小正cutoff的平方在geometry dtype下溢为零时，production按契约加入zero-shift self，但reference原先依赖distance comparison而漏掉diagonal。
+
+修复把zero-image mask的diagonal按`include_self`显式置真或置假，不影响非零shift的periodic self-images；回归覆盖float32 `1e-30`、float64 `1e-200`与full/half。作者侧完整suite增至119项并全部通过；reviewer又独立复跑四种underflow组合，确认CPU/reference/CUDA都精确返回唯一`(0, 0, [0, 0, 0])`，相关pair-option tests为31 passed。最终在clean HEAD `8e1cccc56e4f2dbd4231ef49f175470c39d9c5e4`给出PASS，无新的core correctness、性能或架构blocker。
+
 ## 已知限制
 
 One-shot API 每次重建 metadata 并按真实 pair 数精确分配输出；prepared metadata 需要单独设计 ownership 与 invalidation contract。极小非空 periodic cell 的物理 neighbor set 本身可能包含大量 images，因此 metadata/output memory 仍会随真实结果增长。CUDA 对 large unwrapped representatives 使用 whole-call exhaustive fallback，保证统一语义但不保证大体系仍维持 cell-list complexity。CPU 大体系的 Vesin 实现当前更成熟；QMugs 自然分布上两者基本打平，`tonari` 的 CPU 优势集中在更小分子。CPU timing 对 power policy 敏感，正式 JSON 已记录；CUDA JSON 保存 minimum/median/maximum 而不保存全部原始 samples。超过 9 GB 的 QMugs raw/cache 全量审计不适合常规 CI，因此依赖固定 URL、size、SHA 与本次正式审计。Benchmark 排除 data loading/H2D，Vesin GPU 受其逐 structure API 约束；本轮遵循真实工作流，没有人为构造超大单分子 scaling。Raw Nsight trace 保持 Git ignored，仓库提交可复现脚本、summary 和完整 CSV aggregates。
