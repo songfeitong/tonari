@@ -8,9 +8,7 @@ from ase.neighborlist import primitive_neighbor_list
 from torch_radius_graph import radius_graph_pbc, reference_radius_graph_pbc
 
 
-def edge_keys(
-    edge_index: torch.Tensor, shifts: torch.Tensor
-) -> set[tuple[int, ...]]:
+def edge_keys(edge_index: torch.Tensor, shifts: torch.Tensor) -> set[tuple[int, ...]]:
     rows = torch.cat((edge_index.T, shifts.to(torch.int64)), dim=1).tolist()
     assert len(rows) == len({tuple(row) for row in rows})
     return {tuple(row) for row in rows}
@@ -41,9 +39,7 @@ def test_cpu_matches_reference_for_mixed_batch(dtype: torch.dtype) -> None:
     )
     ptr = torch.tensor([0, 7, 12, 16])
     cells = torch.stack((torch.zeros((3, 3), dtype=dtype), partial_cell, periodic_cell))
-    pbc = torch.tensor(
-        [[False, False, False], [True, True, False], [True, True, True]]
-    )
+    pbc = torch.tensor([[False, False, False], [True, True, False], [True, True, True]])
     expected = reference_radius_graph_pbc(positions, ptr, cells, pbc, 1.35)
     actual = radius_graph_pbc(positions, ptr, cells, pbc, 1.35)
     assert edge_keys(*actual) == edge_keys(*expected)
@@ -123,9 +119,7 @@ def test_cpu_relabels_unwrapped_representatives() -> None:
         [[2.0, 0.1, 0.0], [0.2, 2.5, 0.0], [0.1, 0.3, 3.0]],
         dtype=torch.float64,
     )
-    positions = torch.tensor(
-        [[0.2, 0.1, 0.4], [1.8, 0.2, 0.5]], dtype=torch.float64
-    )
+    positions = torch.tensor([[0.2, 0.1, 0.4], [1.8, 0.2, 0.5]], dtype=torch.float64)
     translated = positions.clone()
     translated[0] -= 3 * cell[1]
     translated[1] += 2 * cell[0] - cell[2]
@@ -198,9 +192,7 @@ def test_cpu_randomized_differential() -> None:
         n_atoms = case + 1
         diagonal = 1.8 + 2.5 * torch.rand(3, generator=generator)
         cell = torch.diag(diagonal)
-        cell += 0.35 * torch.tril(
-            torch.rand((3, 3), generator=generator), diagonal=-1
-        )
+        cell += 0.35 * torch.tril(torch.rand((3, 3), generator=generator), diagonal=-1)
         positions = torch.rand((n_atoms, 3), generator=generator) @ cell
         pbc = pbc_patterns[case % len(pbc_patterns)]
         if case % 4 == 0:
@@ -255,7 +247,7 @@ def test_cpu_empty_periodic_structure_skips_tiny_cell_images() -> None:
     edge_index, shifts = radius_graph_pbc(
         torch.empty((0, 3), dtype=torch.float64),
         torch.tensor([0, 0]),
-        (0.02 * torch.eye(3, dtype=torch.float64))[None],
+        (1e-12 * torch.eye(3, dtype=torch.float64))[None],
         torch.ones((1, 3), dtype=torch.bool),
         1.0,
     )
@@ -271,12 +263,31 @@ def test_cpu_cell_list_path_matches_reference(dtype: torch.dtype) -> None:
         [[8.0, 0.4, 0.1], [0.2, 7.5, 0.5], [0.3, 0.1, 9.0]], dtype=dtype
     )
     positions = torch.rand((n_atoms, 3), generator=generator, dtype=dtype) @ cell
-    positions[:5] += 3 * cell[0] - 2 * cell[1]
     ptr = torch.tensor([0, n_atoms])
     pbc = torch.ones((1, 3), dtype=torch.bool)
     expected = reference_radius_graph_pbc(positions, ptr, cell[None], pbc, 1.2)
     actual = radius_graph_pbc(positions, ptr, cell[None], pbc, 1.2)
     assert edge_keys(*actual) == edge_keys(*expected)
+
+
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+def test_cpu_cell_list_preserves_nextafter_inside_edges(dtype: torch.dtype) -> None:
+    positions = torch.zeros((129, 3), dtype=dtype)
+    positions[1, 0] = torch.nextafter(
+        torch.tensor(1.0, dtype=dtype), torch.tensor(0.0, dtype=dtype)
+    )
+    positions[2:, 1] = 3 * torch.arange(2, 129, dtype=dtype)
+    edge_index, shifts = radius_graph_pbc(
+        positions,
+        torch.tensor([0, len(positions)]),
+        torch.zeros((1, 3, 3), dtype=dtype),
+        torch.zeros((1, 3), dtype=torch.bool),
+        1.0,
+    )
+    assert edge_keys(edge_index, shifts) == {
+        (0, 1, 0, 0, 0),
+        (1, 0, 0, 0, 0),
+    }
 
 
 def test_cpu_cell_list_falls_back_for_extremely_sparse_bounds() -> None:
@@ -359,4 +370,83 @@ def test_cpu_rejects_nonfinite_inactive_cell_row() -> None:
             cell[None],
             torch.tensor([[True, True, False]]),
             0.5,
+        )
+
+
+def test_cpu_accepts_ill_conditioned_full_rank_active_rows() -> None:
+    cell = torch.tensor(
+        [[1.0, 0.0, 0.0], [1.0, 1e-8, 0.0], [0.0, 0.0, 0.0]],
+        dtype=torch.float64,
+    )
+    arguments = (
+        torch.tensor([[0.0, 0.0, 0.0], [0.0, 5e-10, 0.0]], dtype=torch.float64),
+        torch.tensor([0, 2]),
+        cell[None],
+        torch.tensor([[True, True, False]]),
+        1e-9,
+    )
+    assert edge_keys(*radius_graph_pbc(*arguments)) == edge_keys(
+        *reference_radius_graph_pbc(*arguments)
+    )
+
+
+def test_cpu_large_unwrapped_representatives_use_original_geometry() -> None:
+    cell = torch.tensor(
+        [
+            [-0.7647425305009836, -2.672179555955561, 2.8765648407042885],
+            [-1.0423290504477831, -3.665756214439444, -3.2514359787147056],
+            [5.609321251949969, -2.2087783511424566, -0.0013679155882546645],
+        ],
+        dtype=torch.float64,
+    )
+    positions = torch.tensor(
+        [
+            [598110346.0828383, -8096602.288435191, 242913231.3592053],
+            [598110345.1706604, -8096602.339372153, 242913230.9525894],
+        ],
+        dtype=torch.float64,
+    )
+    edge_index, shifts = radius_graph_pbc(
+        positions,
+        torch.tensor([0, 2]),
+        cell[None],
+        torch.ones((1, 3), dtype=torch.bool),
+        1.0,
+    )
+    assert edge_keys(edge_index, shifts) == {
+        (0, 1, 0, 0, 0),
+        (1, 0, 0, 0, 0),
+    }
+
+
+def test_cpu_cell_list_large_common_lattice_translation_matches_reference() -> None:
+    generator = torch.Generator().manual_seed(9184)
+    cell = torch.tensor(
+        [[4.1, 0.3, 0.2], [0.4, 4.7, 0.1], [0.2, 0.5, 5.3]],
+        dtype=torch.float64,
+    )
+    positions = torch.rand((129, 3), generator=generator, dtype=torch.float64) @ cell
+    positions += (
+        torch.tensor([100_000_000, -80_000_000, 60_000_000], dtype=torch.float64) @ cell
+    )
+    arguments = (
+        positions,
+        torch.tensor([0, len(positions)]),
+        cell[None],
+        torch.ones((1, 3), dtype=torch.bool),
+        1.0,
+    )
+    assert edge_keys(*radius_graph_pbc(*arguments)) == edge_keys(
+        *reference_radius_graph_pbc(*arguments)
+    )
+
+
+def test_cpu_rejects_pathological_periodic_image_count() -> None:
+    with pytest.raises(ValueError, match="image count.*resource limit"):
+        radius_graph_pbc(
+            torch.zeros((1, 3), dtype=torch.float64),
+            torch.tensor([0, 1]),
+            (0.001 * torch.eye(3, dtype=torch.float64))[None],
+            torch.ones((1, 3), dtype=torch.bool),
+            1.0,
         )

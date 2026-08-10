@@ -231,7 +231,7 @@ def test_empty_periodic_structure_does_not_enumerate_tiny_cell_images() -> None:
     edge_index, shifts = cuda_graph(
         torch.empty((0, 3), dtype=torch.float64),
         torch.tensor([0, 0]),
-        (0.02 * torch.eye(3, dtype=torch.float64))[None],
+        (1e-12 * torch.eye(3, dtype=torch.float64))[None],
         torch.ones((1, 3), dtype=torch.bool),
         1.0,
     )

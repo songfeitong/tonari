@@ -15,6 +15,7 @@ constexpr int64_t kExhaustiveCandidateLimit = 16384;
 // Avoid pathological dense allocation for sparse finite coordinates.
 constexpr int64_t kMaximumDenseBins = int64_t{1} << 26;
 constexpr int64_t kMaximumBinsPerImage = 64;
+constexpr int kCellListRoundoffFactor = 64;
 
 
 struct GraphBuffers {
@@ -104,13 +105,15 @@ void prepare_positions(
                 "positions must contain only finite values");
         }
         for (int axis = 0; axis < 3; ++axis) {
-            scalar_t fractional = scalar_t(0);
+            long double fractional = 0.0L;
             for (int cartesian = 0; cartesian < 3; ++cartesian) {
-                fractional += position[cartesian] * dual[3 * cartesian + axis];
+                fractional += static_cast<long double>(position[cartesian]) *
+                    static_cast<long double>(dual[3 * cartesian + axis]);
             }
             TORCH_CHECK(
-                std::isfinite(fractional) && fractional >= -wrap_upper_bound &&
-                    fractional < wrap_upper_bound,
+                std::isfinite(fractional) &&
+                    fractional >= -static_cast<long double>(wrap_upper_bound) &&
+                    fractional < static_cast<long double>(wrap_upper_bound),
                 "atom representatives require periodic wraps outside the int32 range");
             atom_wraps[3 * atom + axis] =
                 static_cast<int32_t>(std::floor(fractional));
@@ -148,15 +151,82 @@ std::vector<scalar_t> image_translations(
 
 
 template <typename scalar_t>
+bool conservative_cell_list_cutoff(
+    const scalar_t* positions,
+    const scalar_t* cell,
+    int64_t n_atoms,
+    const std::vector<scalar_t>& wrapped_positions,
+    const std::vector<int32_t>& atom_wraps,
+    const int32_t* image_shifts,
+    int64_t n_shifts,
+    scalar_t cutoff,
+    scalar_t& search_cutoff) {
+    long double maximum_position[3] = {};
+    int64_t maximum_wrap[3] = {};
+    int64_t maximum_image_shift[3] = {};
+    for (int64_t atom = 0; atom < n_atoms; ++atom) {
+        for (int cartesian = 0; cartesian < 3; ++cartesian) {
+            if (!std::isfinite(wrapped_positions[3 * atom + cartesian])) {
+                return false;
+            }
+            maximum_position[cartesian] = std::max(
+                maximum_position[cartesian],
+                std::abs(static_cast<long double>(
+                    positions[3 * atom + cartesian])));
+        }
+        for (int axis = 0; axis < 3; ++axis) {
+            maximum_wrap[axis] = std::max(
+                maximum_wrap[axis],
+                std::abs(static_cast<int64_t>(atom_wraps[3 * atom + axis])));
+        }
+    }
+    for (int64_t shift = 0; shift < n_shifts; ++shift) {
+        for (int axis = 0; axis < 3; ++axis) {
+            maximum_image_shift[axis] = std::max(
+                maximum_image_shift[axis],
+                std::abs(static_cast<int64_t>(image_shifts[3 * shift + axis])));
+        }
+    }
+    long double operation_scale = 0.0L;
+    for (int cartesian = 0; cartesian < 3; ++cartesian) {
+        long double component_scale = 2 * maximum_position[cartesian];
+        for (int axis = 0; axis < 3; ++axis) {
+            const int64_t maximum_output_shift =
+                maximum_image_shift[axis] + 2 * maximum_wrap[axis];
+            component_scale += static_cast<long double>(maximum_output_shift) *
+                std::abs(static_cast<long double>(cell[3 * axis + cartesian]));
+        }
+        operation_scale = std::max(operation_scale, component_scale);
+    }
+    // Wrapped and direct displacement formulas are algebraically identical,
+    // but their floating-point cancellation differs for remote representatives.
+    const long double padding = kCellListRoundoffFactor *
+        std::numeric_limits<scalar_t>::epsilon() * operation_scale;
+    const long double padded_cutoff =
+        static_cast<long double>(cutoff) + padding;
+    if (!std::isfinite(padded_cutoff) ||
+        padded_cutoff > 2 * static_cast<long double>(cutoff) ||
+        padded_cutoff > std::numeric_limits<scalar_t>::max()) {
+        return false;
+    }
+    search_cutoff = std::nextafter(
+        static_cast<scalar_t>(padded_cutoff),
+        std::numeric_limits<scalar_t>::infinity());
+    return std::isfinite(search_cutoff);
+}
+
+
+template <typename scalar_t>
 inline void append_candidate(
     int64_t source,
     int64_t target,
     int64_t atom_offset,
     int64_t shift,
-    const std::vector<scalar_t>& wrapped_positions,
+    const scalar_t* positions,
+    const scalar_t* cell,
     const std::vector<int32_t>& atom_wraps,
     const int32_t* image_shifts,
-    const std::vector<scalar_t>& translations,
+    bool distance_known_inside,
     scalar_t cutoff_squared,
     GraphBuffers& graph) {
     const int32_t* search_shift = image_shifts + 3 * shift;
@@ -164,24 +234,31 @@ inline void append_candidate(
         search_shift[2] == 0) {
         return;
     }
-    scalar_t distance_squared = scalar_t(0);
-    for (int cartesian = 0; cartesian < 3; ++cartesian) {
-        const scalar_t component = wrapped_positions[3 * source + cartesian] -
-            wrapped_positions[3 * target + cartesian] +
-            translations[3 * shift + cartesian];
-        distance_squared += component * component;
-    }
-    if (distance_squared >= cutoff_squared) {
-        return;
-    }
     int64_t output_shift[3];
     for (int axis = 0; axis < 3; ++axis) {
         output_shift[axis] = static_cast<int64_t>(search_shift[axis]) -
             static_cast<int64_t>(atom_wraps[3 * source + axis]) +
             static_cast<int64_t>(atom_wraps[3 * target + axis]);
+    }
+    if (!distance_known_inside) {
+        scalar_t distance_squared = scalar_t(0);
+        for (int cartesian = 0; cartesian < 3; ++cartesian) {
+            scalar_t component = positions[3 * source + cartesian] -
+                positions[3 * target + cartesian];
+            for (int axis = 0; axis < 3; ++axis) {
+                component += static_cast<scalar_t>(output_shift[axis]) *
+                    cell[3 * axis + cartesian];
+            }
+            distance_squared += component * component;
+        }
+        if (distance_squared >= cutoff_squared) {
+            return;
+        }
+    }
+    for (const int64_t value : output_shift) {
         TORCH_CHECK(
-            output_shift[axis] >= std::numeric_limits<int32_t>::min() &&
-                output_shift[axis] <= std::numeric_limits<int32_t>::max(),
+            value >= std::numeric_limits<int32_t>::min() &&
+                value <= std::numeric_limits<int32_t>::max(),
             "a cell shift required by the cutoff graph exceeds the int32 output range");
     }
     graph.sources.push_back(atom_offset + source);
@@ -193,14 +270,55 @@ inline void append_candidate(
 
 
 template <typename scalar_t>
-void search_exhaustive(
+inline void append_cell_candidate(
+    int64_t source,
+    int64_t target,
     int64_t atom_offset,
-    int64_t n_atoms,
-    int64_t n_shifts,
+    int64_t shift,
+    const scalar_t* positions,
+    const scalar_t* cell,
     const std::vector<scalar_t>& wrapped_positions,
     const std::vector<int32_t>& atom_wraps,
     const int32_t* image_shifts,
     const std::vector<scalar_t>& translations,
+    scalar_t search_cutoff_squared,
+    scalar_t inner_cutoff_squared,
+    scalar_t cutoff_squared,
+    GraphBuffers& graph) {
+    scalar_t search_distance_squared = scalar_t(0);
+    for (int cartesian = 0; cartesian < 3; ++cartesian) {
+        const scalar_t component = wrapped_positions[3 * source + cartesian] -
+            wrapped_positions[3 * target + cartesian] +
+            translations[3 * shift + cartesian];
+        search_distance_squared += component * component;
+    }
+    if (search_distance_squared >= search_cutoff_squared) {
+        return;
+    }
+    append_candidate(
+        source,
+        target,
+        atom_offset,
+        shift,
+        positions,
+        cell,
+        atom_wraps,
+        image_shifts,
+        search_distance_squared < inner_cutoff_squared,
+        cutoff_squared,
+        graph);
+}
+
+
+template <typename scalar_t>
+void search_exhaustive(
+    int64_t atom_offset,
+    int64_t n_atoms,
+    int64_t n_shifts,
+    const scalar_t* positions,
+    const scalar_t* cell,
+    const std::vector<int32_t>& atom_wraps,
+    const int32_t* image_shifts,
     scalar_t cutoff_squared,
     GraphBuffers& graph) {
     for (int64_t target = 0; target < n_atoms; ++target) {
@@ -211,10 +329,11 @@ void search_exhaustive(
                     target,
                     atom_offset,
                     shift,
-                    wrapped_positions,
+                    positions,
+                    cell,
                     atom_wraps,
                     image_shifts,
-                    translations,
+                    false,
                     cutoff_squared,
                     graph);
             }
@@ -299,11 +418,15 @@ bool search_cell_list(
     int64_t atom_offset,
     int64_t n_atoms,
     int64_t n_shifts,
+    const scalar_t* positions,
+    const scalar_t* cell,
     const std::vector<scalar_t>& wrapped_positions,
     const std::vector<int32_t>& atom_wraps,
     const int32_t* image_shifts,
     const std::vector<scalar_t>& translations,
-    scalar_t cutoff,
+    scalar_t search_cutoff,
+    scalar_t inner_cutoff_squared,
+    scalar_t cutoff_squared,
     GraphBuffers& graph) {
     TORCH_CHECK(
         n_atoms < std::numeric_limits<int32_t>::max() &&
@@ -316,7 +439,7 @@ bool search_cell_list(
             wrapped_positions,
             n_atoms,
             n_shifts,
-            cutoff,
+            search_cutoff,
             bounds_minimum,
             bounds_maximum,
             layout)) {
@@ -336,9 +459,9 @@ bool search_cell_list(
                     translations[3 * shift + cartesian];
                 inside_bounds &= std::isfinite(image_position[cartesian]) &&
                     image_position[cartesian] >=
-                        bounds_minimum[cartesian] - cutoff &&
+                        bounds_minimum[cartesian] - search_cutoff &&
                     image_position[cartesian] <=
-                        bounds_maximum[cartesian] + cutoff;
+                        bounds_maximum[cartesian] + search_cutoff;
             }
             if (!inside_bounds) {
                 continue;
@@ -355,12 +478,13 @@ bool search_cell_list(
             bin_heads[bin] = node;
         }
     }
-    const scalar_t cutoff_squared = cutoff * cutoff;
+    const scalar_t search_cutoff_squared = search_cutoff * search_cutoff;
     for (int64_t target = 0; target < n_atoms; ++target) {
         scalar_t target_position[3];
         int64_t target_coordinates[3];
         for (int cartesian = 0; cartesian < 3; ++cartesian) {
-            target_position[cartesian] = wrapped_positions[3 * target + cartesian];
+            target_position[cartesian] =
+                wrapped_positions[3 * target + cartesian];
             target_coordinates[cartesian] = std::clamp(
                 static_cast<int64_t>(std::floor(
                     (target_position[cartesian] - layout.origins[cartesian]) /
@@ -383,43 +507,23 @@ bool search_cell_list(
                     if (z < 0 || z >= layout.dimensions[2]) {
                         continue;
                     }
-                    const int offsets[3] = {offset_x, offset_y, offset_z};
-                    scalar_t minimum_distance_squared = scalar_t(0);
-                    for (int cartesian = 0; cartesian < 3; ++cartesian) {
-                        scalar_t separation = scalar_t(0);
-                        if (offsets[cartesian] < 0) {
-                            const scalar_t upper = layout.origins[cartesian] +
-                                (target_coordinates[cartesian] +
-                                 offsets[cartesian] + 1) *
-                                    layout.size;
-                            separation = target_position[cartesian] - upper;
-                        } else if (offsets[cartesian] > 0) {
-                            const scalar_t lower = layout.origins[cartesian] +
-                                (target_coordinates[cartesian] +
-                                 offsets[cartesian]) *
-                                    layout.size;
-                            separation = lower - target_position[cartesian];
-                        }
-                        minimum_distance_squared += separation * separation;
-                    }
-                    // Reject corner bins that the 3x3x3 stencil touches but the
-                    // cutoff sphere cannot intersect.
-                    if (minimum_distance_squared >= cutoff_squared) {
-                        continue;
-                    }
                     const int64_t bin =
                         (x * layout.dimensions[1] + y) * layout.dimensions[2] + z;
                     for (int32_t node = bin_heads[bin]; node >= 0;
                          node = nodes[node].next) {
-                        append_candidate(
+                        append_cell_candidate(
                             nodes[node].source,
                             target,
                             atom_offset,
                             nodes[node].shift,
+                            positions,
+                            cell,
                             wrapped_positions,
                             atom_wraps,
                             image_shifts,
                             translations,
+                            search_cutoff_squared,
+                            inner_cutoff_squared,
                             cutoff_squared,
                             graph);
                     }
@@ -475,29 +579,60 @@ GraphBuffers build_radius_graph(
             atom_wraps);
         const int32_t* structure_shifts =
             image_shift_data + 3 * shift_offset;
+        if (candidate_count_at_most(
+                n_atoms, n_shifts, kExhaustiveCandidateLimit)) {
+            search_exhaustive(
+                atom_offset,
+                n_atoms,
+                n_shifts,
+                position_data + 3 * atom_offset,
+                cell,
+                atom_wraps,
+                structure_shifts,
+                cutoff_squared,
+                graph);
+            continue;
+        }
         const auto translations =
             image_translations(structure_shifts, cell, n_shifts);
-
-        if (candidate_count_at_most(
-                n_atoms, n_shifts, kExhaustiveCandidateLimit) ||
+        scalar_t search_cutoff = scalar_t(0);
+        const bool cell_list_cutoff_is_safe = conservative_cell_list_cutoff(
+                position_data + 3 * atom_offset,
+                cell,
+                n_atoms,
+                wrapped_positions,
+                atom_wraps,
+                structure_shifts,
+                n_shifts,
+                scalar_cutoff,
+                search_cutoff);
+        // Candidates safely inside the error band keep the fast wrapped
+        // distance; only the boundary shell needs the direct public formula.
+        const scalar_t inner_cutoff = std::max(
+            scalar_t(0), 2 * scalar_cutoff - search_cutoff);
+        if (!cell_list_cutoff_is_safe ||
             !search_cell_list(
                 atom_offset,
                 n_atoms,
                 n_shifts,
+                position_data + 3 * atom_offset,
+                cell,
                 wrapped_positions,
                 atom_wraps,
                 structure_shifts,
                 translations,
-                scalar_cutoff,
+                search_cutoff,
+                inner_cutoff * inner_cutoff,
+                cutoff_squared,
                 graph)) {
             search_exhaustive(
                 atom_offset,
                 n_atoms,
                 n_shifts,
-                wrapped_positions,
+                position_data + 3 * atom_offset,
+                cell,
                 atom_wraps,
                 structure_shifts,
-                translations,
                 cutoff_squared,
                 graph);
         }
