@@ -5,7 +5,7 @@
 #include <cub/block/block_scan.cuh>
 
 #include "neighbors_cuda.h"
-#include "pair_policy.h"
+#include "../core/pair_policy.h"
 
 #include <cstdint>
 #include <limits>
@@ -86,7 +86,7 @@ __global__ void prepare_atom_wraps_kernel(
 }
 
 
-template <typename scalar_t, tonari::PairMode Mode>
+template <typename scalar_t, neighbor_search::PairMode Mode>
 __device__ __forceinline__ bool evaluate_candidate(
     int64_t task_index,
     int64_t batch_index,
@@ -130,8 +130,8 @@ __device__ __forceinline__ bool evaluate_candidate(
     }
 
     const bool zero_shift_self =
-        tonari::is_zero_shift_self_pair(source, target, cell_shift);
-    if (!tonari::keep_pair_identity<Mode>(source, target, cell_shift)) {
+        neighbor_search::is_zero_shift_self_pair(source, target, cell_shift);
+    if (!neighbor_search::keep_pair_identity<Mode>(source, target, cell_shift)) {
         return false;
     }
 
@@ -168,7 +168,7 @@ __device__ __forceinline__ bool evaluate_candidate(
 }
 
 
-template <typename scalar_t, tonari::PairMode Mode>
+template <typename scalar_t, neighbor_search::PairMode Mode>
 __global__ void count_pairs_kernel(
     const scalar_t* positions,
     const int64_t* offsets,
@@ -216,7 +216,7 @@ __global__ void count_pairs_kernel(
 }
 
 
-template <typename scalar_t, tonari::PairMode Mode>
+template <typename scalar_t, neighbor_search::PairMode Mode>
 __global__ void write_pairs_kernel(
     const scalar_t* positions,
     const int64_t* offsets,
@@ -280,7 +280,7 @@ __global__ void write_pairs_kernel(
 }
 
 
-template <typename scalar_t, tonari::PairMode Mode>
+template <typename scalar_t, neighbor_search::PairMode Mode>
 void launch_count_pairs(
     const torch::Tensor& positions,
     const torch::Tensor& offsets,
@@ -311,7 +311,7 @@ void launch_count_pairs(
 
 template <typename scalar_t>
 void dispatch_count_pairs(
-    tonari::PairMode mode,
+    neighbor_search::PairMode mode,
     const torch::Tensor& positions,
     const torch::Tensor& offsets,
     const torch::Tensor& cells,
@@ -324,7 +324,7 @@ void dispatch_count_pairs(
     torch::Tensor& count_result,
     int64_t total_blocks,
     cudaStream_t stream) {
-    auto launch = [&]<tonari::PairMode Mode>() {
+    auto launch = [&]<neighbor_search::PairMode Mode>() {
         launch_count_pairs<scalar_t, Mode>(
             positions,
             offsets,
@@ -340,23 +340,23 @@ void dispatch_count_pairs(
             stream);
     };
     switch (mode) {
-        case tonari::PairMode::Full:
-            launch.template operator()<tonari::PairMode::Full>();
+        case neighbor_search::PairMode::Full:
+            launch.template operator()<neighbor_search::PairMode::Full>();
             break;
-        case tonari::PairMode::FullWithSelf:
-            launch.template operator()<tonari::PairMode::FullWithSelf>();
+        case neighbor_search::PairMode::FullWithSelf:
+            launch.template operator()<neighbor_search::PairMode::FullWithSelf>();
             break;
-        case tonari::PairMode::Half:
-            launch.template operator()<tonari::PairMode::Half>();
+        case neighbor_search::PairMode::Half:
+            launch.template operator()<neighbor_search::PairMode::Half>();
             break;
-        case tonari::PairMode::HalfWithSelf:
-            launch.template operator()<tonari::PairMode::HalfWithSelf>();
+        case neighbor_search::PairMode::HalfWithSelf:
+            launch.template operator()<neighbor_search::PairMode::HalfWithSelf>();
             break;
     }
 }
 
 
-template <typename scalar_t, tonari::PairMode Mode>
+template <typename scalar_t, neighbor_search::PairMode Mode>
 void launch_write_pairs(
     const torch::Tensor& positions,
     const torch::Tensor& offsets,
@@ -392,7 +392,7 @@ void launch_write_pairs(
 
 template <typename scalar_t>
 void dispatch_write_pairs(
-    tonari::PairMode mode,
+    neighbor_search::PairMode mode,
     const torch::Tensor& positions,
     const torch::Tensor& offsets,
     const torch::Tensor& cells,
@@ -408,7 +408,7 @@ void dispatch_write_pairs(
     torch::Tensor& cell_shifts,
     int64_t total_blocks,
     cudaStream_t stream) {
-    auto launch = [&]<tonari::PairMode Mode>() {
+    auto launch = [&]<neighbor_search::PairMode Mode>() {
         launch_write_pairs<scalar_t, Mode>(
             positions,
             offsets,
@@ -427,17 +427,17 @@ void dispatch_write_pairs(
             stream);
     };
     switch (mode) {
-        case tonari::PairMode::Full:
-            launch.template operator()<tonari::PairMode::Full>();
+        case neighbor_search::PairMode::Full:
+            launch.template operator()<neighbor_search::PairMode::Full>();
             break;
-        case tonari::PairMode::FullWithSelf:
-            launch.template operator()<tonari::PairMode::FullWithSelf>();
+        case neighbor_search::PairMode::FullWithSelf:
+            launch.template operator()<neighbor_search::PairMode::FullWithSelf>();
             break;
-        case tonari::PairMode::Half:
-            launch.template operator()<tonari::PairMode::Half>();
+        case neighbor_search::PairMode::Half:
+            launch.template operator()<neighbor_search::PairMode::Half>();
             break;
-        case tonari::PairMode::HalfWithSelf:
-            launch.template operator()<tonari::PairMode::HalfWithSelf>();
+        case neighbor_search::PairMode::HalfWithSelf:
+            launch.template operator()<neighbor_search::PairMode::HalfWithSelf>();
             break;
     }
 }
@@ -445,7 +445,7 @@ void dispatch_write_pairs(
 }  // namespace
 
 
-std::vector<torch::Tensor> find_neighbors_cuda(
+std::vector<torch::Tensor> find_neighbors_cuda_exhaustive(
     const torch::Tensor& positions,
     const torch::Tensor& offsets,
     const torch::Tensor& cells,
@@ -473,7 +473,7 @@ std::vector<torch::Tensor> find_neighbors_cuda(
     const c10::cuda::CUDAGuard device_guard(positions.device());
     const auto stream = at::cuda::getCurrentCUDAStream(positions.get_device());
     const int64_t batch_size = offsets.numel() - 1;
-    const auto mode = tonari::pair_mode(half_list, include_self);
+    const auto mode = neighbor_search::pair_mode(half_list, include_self);
     auto pair_indices = torch::empty({2, 0}, positions.options().dtype(torch::kInt64));
     auto cell_shifts = torch::empty({0, 3}, positions.options().dtype(torch::kInt32));
     if (total_blocks == 0) {

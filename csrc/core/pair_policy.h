@@ -4,15 +4,15 @@
 
 
 #if defined(__CUDACC__)
-#define TONARI_HOST_DEVICE __host__ __device__
-#define TONARI_FORCE_INLINE __forceinline__
+#define NEIGHBOR_SEARCH_HOST_DEVICE __host__ __device__
+#define NEIGHBOR_SEARCH_FORCE_INLINE __forceinline__
 #else
-#define TONARI_HOST_DEVICE
-#define TONARI_FORCE_INLINE inline
+#define NEIGHBOR_SEARCH_HOST_DEVICE
+#define NEIGHBOR_SEARCH_FORCE_INLINE inline
 #endif
 
 
-namespace tonari {
+namespace neighbor_search {
 
 enum class PairMode : uint8_t {
     Full = 0,
@@ -39,7 +39,7 @@ inline constexpr bool kIncludeSelf =
     Mode == PairMode::FullWithSelf || Mode == PairMode::HalfWithSelf;
 
 
-TONARI_HOST_DEVICE TONARI_FORCE_INLINE bool is_zero_shift_self_pair(
+NEIGHBOR_SEARCH_HOST_DEVICE NEIGHBOR_SEARCH_FORCE_INLINE bool is_zero_shift_self_pair(
     int64_t source,
     int64_t target,
     const int64_t (&cell_shift)[3]) {
@@ -48,7 +48,7 @@ TONARI_HOST_DEVICE TONARI_FORCE_INLINE bool is_zero_shift_self_pair(
 }
 
 
-TONARI_HOST_DEVICE TONARI_FORCE_INLINE bool is_canonical_half_pair(
+NEIGHBOR_SEARCH_HOST_DEVICE NEIGHBOR_SEARCH_FORCE_INLINE bool is_canonical_half_pair(
     int64_t source,
     int64_t target,
     const int64_t (&cell_shift)[3]) {
@@ -65,7 +65,7 @@ TONARI_HOST_DEVICE TONARI_FORCE_INLINE bool is_canonical_half_pair(
 
 
 template <PairMode Mode>
-TONARI_HOST_DEVICE TONARI_FORCE_INLINE bool keep_pair_identity(
+NEIGHBOR_SEARCH_HOST_DEVICE NEIGHBOR_SEARCH_FORCE_INLINE bool keep_pair_identity(
     int64_t source,
     int64_t target,
     const int64_t (&cell_shift)[3]) {
@@ -78,8 +78,8 @@ TONARI_HOST_DEVICE TONARI_FORCE_INLINE bool keep_pair_identity(
     return true;
 }
 
-}  // namespace tonari
+}  // namespace neighbor_search
 
 
-#undef TONARI_FORCE_INLINE
-#undef TONARI_HOST_DEVICE
+#undef NEIGHBOR_SEARCH_FORCE_INLINE
+#undef NEIGHBOR_SEARCH_HOST_DEVICE

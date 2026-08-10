@@ -22,7 +22,9 @@ from benchmarks.run_cpu_benchmark import (
     validate_external_reference,
 )
 from benchmarks.structure_data import StructureBatch
-from tonari import _C_cpu
+from tonari._extensions import load_torch_cpu
+
+CPU_EXTENSION = load_torch_cpu()
 
 
 def load_workloads(
@@ -113,7 +115,7 @@ def main() -> None:
             "torch_num_threads": torch.get_num_threads(),
             "repository_revision": git_revision(repository_root),
             "repository_worktree_clean": worktree_clean,
-            "cpu_extension_sha256": file_sha256(Path(_C_cpu.__file__)),
+            "cpu_extension_sha256": file_sha256(Path(CPU_EXTENSION.__file__)),
             "vesin_version": __import__("vesin").__version__,
         },
         "method": {

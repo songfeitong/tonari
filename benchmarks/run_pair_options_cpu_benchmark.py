@@ -24,8 +24,8 @@ from benchmarks.common import (
 from benchmarks.matbench_data import MatbenchStructureDataset
 from benchmarks.pair_option_backends import (
     AseCpuBackend,
+    NativeCpuBackend,
     PairOptions,
-    TonariCpuBackend,
     VesinCpuBackend,
 )
 from benchmarks.run_cpu_benchmark import (
@@ -33,7 +33,9 @@ from benchmarks.run_cpu_benchmark import (
     load_single_structure_batches,
 )
 from benchmarks.structure_data import StructureBatch
-from tonari import _C_cpu
+from tonari._extensions import load_torch_cpu
+
+CPU_EXTENSION = load_torch_cpu()
 
 Backend = Callable[[StructureBatch, float], tuple[torch.Tensor, torch.Tensor]]
 
@@ -45,7 +47,7 @@ def validate_backends(
         "vesin_cpu_reused": VesinCpuBackend(cutoff, options),
         "ase_primitive_rebuilt": AseCpuBackend(cutoff, options),
     }
-    production = TonariCpuBackend(options)
+    production = NativeCpuBackend(options)
     total_pairs = 0
     for batch_index, batch in enumerate(batches):
         actual = canonical_keys(production(batch, cutoff))
@@ -118,7 +120,7 @@ def benchmark_mode(
     warmup_seconds: float,
 ) -> dict[str, object]:
     backends: dict[str, Backend] = {
-        "tonari_cpu": TonariCpuBackend(options),
+        "native_cpu": NativeCpuBackend(options),
         "vesin_cpu_reused": VesinCpuBackend(cutoff, options),
         "ase_primitive_rebuilt": AseCpuBackend(cutoff, options),
     }
@@ -207,7 +209,7 @@ def main() -> None:
             "torch_num_threads": torch.get_num_threads(),
             "repository_revision": git_revision(repository_root),
             "repository_worktree_clean": worktree_clean,
-            "cpu_extension_sha256": file_sha256(Path(_C_cpu.__file__)),
+            "cpu_extension_sha256": file_sha256(Path(CPU_EXTENSION.__file__)),
             "vesin_version": __import__("vesin").__version__,
             "ase_version": ase.__version__,
         },
@@ -218,7 +220,7 @@ def main() -> None:
             "data_loading_timed": False,
             "warmup_seconds_per_backend_and_mode": args.warmup_seconds,
             "statistic": "median wall time; all samples retained",
-            "tonari": "public one-shot find_neighbors output",
+            "native": "public one-shot find_neighbors output",
             "vesin": (
                 "one NeighborList reused per mode; full_list matches the requested "
                 "mode; sorted=False; n_threads=1; zero-shift self pairs are added "
@@ -230,7 +232,7 @@ def main() -> None:
                 "build called for every structure"
             ),
             "half_list_normalization": (
-                "external one-way pairs are reoriented by tonari's public "
+                "external one-way pairs are reoriented by the public "
                 "lexicographic canonical rule inside the timed adapters"
             ),
         },

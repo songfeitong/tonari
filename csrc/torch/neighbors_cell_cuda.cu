@@ -3,7 +3,7 @@
 #include <c10/cuda/CUDAGuard.h>
 
 #include "neighbors_cuda.h"
-#include "pair_policy.h"
+#include "../core/pair_policy.h"
 
 #include <cstdint>
 #include <limits>
@@ -291,7 +291,7 @@ __global__ void insert_images_kernel(
 }
 
 
-template <typename scalar_t, bool write_pairs, tonari::PairMode Mode>
+template <typename scalar_t, bool write_pairs, neighbor_search::PairMode Mode>
 __global__ void query_bins_kernel(
     const int64_t* offsets,
     const scalar_t* cells,
@@ -391,8 +391,8 @@ __global__ void query_bins_kernel(
                         static_cast<int64_t>(atom_wraps[3 * target + axis]);
                 }
                 const bool zero_shift_self =
-                    tonari::is_zero_shift_self_pair(source, target, output_shift);
-                if (tonari::keep_pair_identity<Mode>(
+                    neighbor_search::is_zero_shift_self_pair(source, target, output_shift);
+                if (neighbor_search::keep_pair_identity<Mode>(
                         source, target, output_shift) &&
                     (zero_shift_self || distance_squared < cutoff_squared)) {
                     bool shift_fits = true;
@@ -470,7 +470,7 @@ struct QueryArguments {
 };
 
 
-template <typename scalar_t, bool write_pairs, tonari::PairMode Mode>
+template <typename scalar_t, bool write_pairs, neighbor_search::PairMode Mode>
 void launch_query_bins(
     const QueryArguments<scalar_t>& arguments,
     int64_t blocks,
@@ -504,30 +504,30 @@ void launch_query_bins(
 
 template <typename scalar_t, bool write_pairs>
 void dispatch_query_bins(
-    tonari::PairMode mode,
+    neighbor_search::PairMode mode,
     const QueryArguments<scalar_t>& arguments,
     int64_t blocks,
     cudaStream_t stream) {
     switch (mode) {
-        case tonari::PairMode::Full:
-            launch_query_bins<scalar_t, write_pairs, tonari::PairMode::Full>(
+        case neighbor_search::PairMode::Full:
+            launch_query_bins<scalar_t, write_pairs, neighbor_search::PairMode::Full>(
                 arguments, blocks, stream);
             break;
-        case tonari::PairMode::FullWithSelf:
+        case neighbor_search::PairMode::FullWithSelf:
             launch_query_bins<
                 scalar_t,
                 write_pairs,
-                tonari::PairMode::FullWithSelf>(arguments, blocks, stream);
+                neighbor_search::PairMode::FullWithSelf>(arguments, blocks, stream);
             break;
-        case tonari::PairMode::Half:
-            launch_query_bins<scalar_t, write_pairs, tonari::PairMode::Half>(
+        case neighbor_search::PairMode::Half:
+            launch_query_bins<scalar_t, write_pairs, neighbor_search::PairMode::Half>(
                 arguments, blocks, stream);
             break;
-        case tonari::PairMode::HalfWithSelf:
+        case neighbor_search::PairMode::HalfWithSelf:
             launch_query_bins<
                 scalar_t,
                 write_pairs,
-                tonari::PairMode::HalfWithSelf>(arguments, blocks, stream);
+                neighbor_search::PairMode::HalfWithSelf>(arguments, blocks, stream);
             break;
     }
 }
@@ -558,7 +558,7 @@ void validate_cell_inputs(
 }  // namespace
 
 
-std::vector<torch::Tensor> find_neighbors_cell_cuda(
+std::vector<torch::Tensor> find_neighbors_cuda_cell(
     const torch::Tensor& positions,
     const torch::Tensor& offsets,
     const torch::Tensor& cells,
@@ -586,7 +586,7 @@ std::vector<torch::Tensor> find_neighbors_cell_cuda(
     const auto stream = at::cuda::getCurrentCUDAStream(positions.get_device());
     const int64_t n_atoms = positions.size(0);
     const int64_t batch_size = offsets.numel() - 1;
-    const auto mode = tonari::pair_mode(half_list, include_self);
+    const auto mode = neighbor_search::pair_mode(half_list, include_self);
     auto pair_indices = torch::empty({2, 0}, positions.options().dtype(torch::kInt64));
     auto cell_shifts = torch::empty({0, 3}, positions.options().dtype(torch::kInt32));
     if (n_atoms == 0) {
@@ -663,7 +663,7 @@ std::vector<torch::Tensor> find_neighbors_cell_cuda(
             total_blocks < (int64_t{1} << 31),
             "unwrapped representatives require the exhaustive CUDA path with "
             "fewer than 2^31 thread blocks");
-        return find_neighbors_cuda(
+        return find_neighbors_cuda_exhaustive(
             positions,
             offsets,
             cells,
@@ -682,7 +682,7 @@ std::vector<torch::Tensor> find_neighbors_cell_cuda(
             total_blocks < (int64_t{1} << 31),
             "the cell-list bin layout exceeds its safety limits and the exhaustive "
             "fallback requires fewer than 2^31 thread blocks");
-        return find_neighbors_cuda(
+        return find_neighbors_cuda_exhaustive(
             positions,
             offsets,
             cells,

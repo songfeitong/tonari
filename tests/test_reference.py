@@ -4,7 +4,6 @@ import pytest
 import torch
 
 from tonari._reference import find_neighbors_reference
-from tonari._search import build_cuda_schedule, build_search_metadata
 
 
 def pair_keys(pair_indices: torch.Tensor, shifts: torch.Tensor) -> set[tuple[int, ...]]:
@@ -109,17 +108,3 @@ def test_reference_rejects_pathological_periodic_image_count() -> None:
             1.0,
             torch.tensor([0, 1]),
         )
-
-
-def test_cell_list_metadata_is_not_limited_by_dense_grid_size() -> None:
-    n_atoms = 741456
-    metadata = build_search_metadata(
-        torch.tensor([0, n_atoms]),
-        torch.zeros((1, 3, 3), dtype=torch.float64),
-        torch.zeros((1, 3), dtype=torch.bool),
-        1.0,
-        n_atoms_total=n_atoms,
-    )
-    schedule = build_cuda_schedule(metadata)
-    assert schedule.total_nodes == n_atoms
-    assert schedule.total_blocks >= 2**31

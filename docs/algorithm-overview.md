@@ -18,22 +18,25 @@
 
 ```mermaid
 flowchart LR
-    A["NumPy 或 PyTorch<br/>positions / cells / pbc / offsets"] --> B["统一 frontend<br/>shape / dtype / ecosystem"]
-    B --> C["公共 native geometry<br/>active duals / image shifts"]
-    C --> D{"输入生态与 device"}
-    D -- "NumPy 或 Torch CPU" --> E{"每个 structure 的<br/>candidate count"}
-    E -- "小" --> F["CPU exhaustive"]
-    E -- "大" --> G["CPU Cartesian cell list"]
-    D -- "Torch CUDA" --> H{"batch 内最大 structure"}
-    H -- "小" --> I["CUDA fused exhaustive"]
-    H -- "大" --> J["CUDA batched cell list"]
-    F --> K["pair_indices + cell_shifts"]
-    G --> K
-    I --> K
-    J --> K
+    A["NumPy 或 PyTorch<br/>positions / cells / pbc / offsets"] --> B{"输入生态与 device"}
+    B -- "NumPy" --> C["NumPy thin binding"]
+    B -- "Torch CPU" --> D["Torch CPU thin binding"]
+    C --> E["共享 C++ geometry<br/>与 CPU search core"]
+    D --> E
+    E --> F{"每个 structure 的<br/>candidate count"}
+    F -- "小" --> G["CPU exhaustive"]
+    F -- "大" --> H["CPU Cartesian cell list"]
+    B -- "Torch CUDA" --> I["CUDA provider<br/>geometry + schedule"]
+    I --> J{"batch 内最大 structure"}
+    J -- "小" --> K["CUDA fused exhaustive"]
+    J -- "大" --> L["CUDA batched cell list"]
+    G --> M["pair_indices + cell_shifts"]
+    H --> M
+    K --> M
+    L --> M
 ```
 
-公共语义不随生态或 device 改变。NumPy frontend 只负责安全的 array-to-Tensor view/copy 决策并复用 CPU native path；Torch CPU 与 CUDA 共享 periodic metadata 和返回约定，但各自使用符合硬件成本模型的搜索实现。
+公共语义不随生态或device改变。NumPy与Torch CPU拥有各自很薄的binding，但真正的periodic geometry、pair policy和CPU search只实现一次；CUDA extension调用同一geometry core，同时保留符合GPU成本模型的独立搜索与调度。
 
 ## 主要优化技巧
 
@@ -75,7 +78,7 @@ CUDA 事先不知道 `num_pairs`，因此先 count、prefix sum、精确分配�
 
 ### 7. NumPy 不是第二套算法
 
-NumPy input 在安全时通过 `torch.from_numpy` 与 native CPU backend 共享内存；frontend 只对 non-writeable、unaligned 或 negative-stride arrays 预先复制，native boundary 只在 layout 非 contiguous 时做必要 packing。Native code 与 correctness tests 完全复用，不存在“NumPy 版”和“PyTorch 版”长期漂移的问题。Output Tensor 的 CPU storage 直接导出为 NumPy arrays。
+NumPy input以contiguous buffer直接进入独立binding，output也由该binding直接创建为NumPy arrays；整个调用不import Torch、不创建Tensor，也不链接LibTorch。Torch CPU binding读取Tensor storage并调用同一个framework-neutral C++ core。两种frontend只负责各自生态的类型和内存适配，搜索算法与物理语义仍然只有一份。
 
 ### 8. 连构建产物布局都必须用 wall time 验证
 

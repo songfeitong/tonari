@@ -47,7 +47,7 @@ def _append_zero_shift_self_pairs(
     )
 
 
-class TonariCpuBackend:
+class NativeCpuBackend:
     def __init__(self, options: PairOptions) -> None:
         self.options = options
 

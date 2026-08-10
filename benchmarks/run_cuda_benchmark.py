@@ -32,11 +32,14 @@ from benchmarks.matbench_data import (
     select_scaling_structure,
 )
 from benchmarks.structure_data import StructureBatch, collate_structures
-from tonari import _C_cuda, find_neighbors
+from tonari import find_neighbors
+from tonari._extensions import load_torch_cuda
+
+CUDA_EXTENSION = load_torch_cuda()
 
 Backend = Callable[[Tensor, Tensor, Tensor, float, Tensor], tuple[Tensor, Tensor]]
 BACKENDS: dict[str, Backend] = {
-    "tonari_cuda": find_neighbors,
+    "production_cuda": find_neighbors,
     "vesin_gpu_per_structure": vesin_gpu_batch,
     "torch_dense_batch": torch_dense_batch,
 }
@@ -162,7 +165,7 @@ def benchmark_workload(
         "dense_candidate_count_max": max(candidate_counts),
         "backends": {},
     }
-    for backend_name in ("tonari_cuda", "vesin_gpu_per_structure"):
+    for backend_name in ("production_cuda", "vesin_gpu_per_structure"):
         results["backends"][backend_name] = measure_backend(
             backend_name, batches, cutoff, repeats
         )
@@ -299,7 +302,7 @@ def main() -> None:
             "compute_capability": list(torch.cuda.get_device_capability()),
             "repository_revision": git_revision(repository_root),
             "repository_worktree_clean": worktree_clean,
-            "cuda_extension_sha256": file_sha256(Path(_C_cuda.__file__)),
+            "cuda_extension_sha256": file_sha256(Path(CUDA_EXTENSION.__file__)),
             "vesin_version": __import__("vesin").__version__,
             "equiformer_v3_reference_revision": git_revision(
                 repository_root.parent / "references" / "repos" / "equiformer_v3"

@@ -18,7 +18,9 @@ from benchmarks.run_cuda_benchmark import (
     validate_external_reference,
 )
 from benchmarks.structure_data import StructureBatch
-from tonari import _C_cuda
+from tonari._extensions import load_torch_cuda
+
+CUDA_EXTENSION = load_torch_cuda()
 
 
 def median_batch(batches: list[StructureBatch], cutoff: float) -> StructureBatch:
@@ -166,7 +168,7 @@ def main() -> None:
             "compute_capability": list(torch.cuda.get_device_capability()),
             "repository_revision": git_revision(repository_root),
             "repository_worktree_clean": worktree_clean,
-            "cuda_extension_sha256": file_sha256(Path(_C_cuda.__file__)),
+            "cuda_extension_sha256": file_sha256(Path(CUDA_EXTENSION.__file__)),
             "vesin_version": __import__("vesin").__version__,
         },
         "method": {

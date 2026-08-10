@@ -2,7 +2,7 @@
 
 `tonari` 是一个同时面向 NumPy 与 PyTorch、CPU 与 CUDA 的通用 neighbor-search 实验项目。它用一个公共函数返回 strict cutoff 内的 full directed 或 canonical half atom-image pairs；finite 与 periodic geometry 使用同一接口，periodicity 只由 `pbc` 表达，核心接口不依赖 GNN/PyG 术语。Production implementation 不依赖 Vesin 或 ASE；二者只用于外部 correctness reference 与公平性能 baseline。
 
-第一次阅读建议从[算法总览](docs/algorithm-overview.md)开始；精确契约与内部结构见[设计文档](docs/design.md)，真实晶体与分子测量见[性能方法与结果](docs/benchmark.md)，开发取舍见[工作记录](notes/work-log.md)，独立审查见[终审记录](docs/review.md)。
+第一次阅读建议从[算法总览](docs/algorithm-overview.md)开始；项目的分层和依赖方向见[架构介绍](docs/architecture.md)，精确契约与内部算法见[设计文档](docs/design.md)，真实晶体与分子测量见[性能方法与结果](docs/benchmark.md)，开发取舍见[工作记录](notes/work-log.md)，独立审查见[终审记录](docs/review.md)。
 
 ## 公共 API
 
@@ -21,7 +21,7 @@ pair_indices, cell_shifts = find_neighbors(
 
 单结构输入使用 `positions: (N, 3)`、`cells: (3, 3)`、`pbc: (3,)`，无需构造 `offsets`。Batch 输入把原子坐标拼接成 `positions: (N_total, 3)`，并传入 `cells: (B, 3, 3)`、`pbc: (B, 3)` 与 `offsets: (B + 1,)`；`offsets` 从零开始、非递减，最后一个元素等于 `N_total`。
 
-Torch 输入返回 Torch tensors，可位于 CPU 或 CUDA；NumPy 输入返回 NumPy arrays，并复用同一 native CPU backend。所有 array 参数必须属于同一生态，NumPy/Torch 混用会被明确拒绝。`positions` 与 `cells` 使用相同的 `float32` 或 `float64` dtype，Torch arrays 还必须位于同一 device；`pbc` 为 bool，`offsets` 为 int64。函数与具体长度单位无关，但 `positions`、`cells` 和 `cutoff` 必须使用同一单位。
+Torch 输入返回 Torch tensors，可位于 CPU 或 CUDA；NumPy 输入返回 NumPy arrays。两种 CPU 入口调用同一个 framework-neutral C++ search core，但分别使用薄的 NumPy 与 Torch binding，因此 NumPy 调用不会导入或经过 Torch runtime。所有 array 参数必须属于同一生态，NumPy/Torch 混用会被明确拒绝。`positions` 与 `cells` 使用相同的 `float32` 或 `float64` dtype，Torch arrays 还必须位于同一 device；`pbc` 为 bool，`offsets` 为 int64。函数与具体长度单位无关，但 `positions`、`cells` 和 `cutoff` 必须使用同一单位。
 
 ```python
 import torch
@@ -63,16 +63,14 @@ Pair identity 是离散结果，不参与 autograd。Torch `positions` 与 `cell
 
 ## 构建与验证
 
-CPU build 需要 Python 3.12、PyTorch 2.12.1、C++20 compiler 和 Ninja。如果 PyTorch 与本机 CUDA toolkit 都可用，`setup.py` 同时构建 `_C_cpu` 与 `_C_cuda`；否则只构建始终可用的 CPU extension。NumPy 是明确的运行时依赖。
+当前开发构建需要 Python 3.12、PyTorch 2.12.1、pybind11、C++20 compiler 和 Ninja。如果 PyTorch 与本机 CUDA toolkit 都可用，构建会生成独立的 NumPy CPU、Torch CPU 与 Torch CUDA extensions；没有 CUDA toolkit 时仍可构建两个 CPU providers。NumPy 是基础运行时依赖，Torch 在项目 metadata 中作为可选功能声明，但当前 source build 仍用它编译 Torch providers；正式 wheel 组织留到发布阶段决定。
 
 本机执行复用 ELFES 已有环境，没有重新下载 Python、PyTorch 或 PyG：
 
 ```bash
 cd /home/ftsong/projects/elfes-workspace/tonari
-/home/ftsong/projects/elfes-workspace/elfes/.venv/bin/python setup.py build_ext --inplace
-
-PYTHONPATH=src CUDA_VISIBLE_DEVICES=1 \
-  /home/ftsong/projects/elfes-workspace/elfes/.venv/bin/python -m pytest -q
+uv sync --group dev --group data
+CUDA_VISIBLE_DEVICES=1 uv run python -m pytest -q
 ```
 
 系统 CUDA toolkit 为 13.2，而 PyTorch wheel 使用 CUDA 13.0 构建，因此 extension build 会出现 minor-version warning；当前机器上的编译、导入、完整测试与 benchmark 均成功。正式发布工具链仍应优先让 toolkit minor version 与 PyTorch wheel 对齐。

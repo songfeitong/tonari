@@ -1,16 +1,12 @@
 from __future__ import annotations
 
-from typing import overload
+from typing import TYPE_CHECKING, overload
 
 import numpy as np
-import torch
 from numpy.typing import NDArray
-from torch import Tensor
 
-from ._search import build_cuda_schedule, build_search_metadata, validate_torch_inputs
-
-_CELL_LIST_MINIMUM_ATOMS = 256
-_INT32_INDEX_LIMIT = 2**31
+if TYPE_CHECKING:
+    from torch import Tensor
 
 
 @overload
@@ -143,9 +139,10 @@ def find_neighbors(
 
     if not isinstance(half_list, bool) or not isinstance(include_self, bool):
         raise TypeError("half_list and include_self must be bool")
-    if isinstance(positions, Tensor):
-        _require_matching_ecosystem(Tensor, cells=cells, pbc=pbc, offsets=offsets)
-        return _find_neighbors_torch(
+    if isinstance(positions, np.ndarray):
+        from ._numpy_frontend import find_neighbors_numpy
+
+        return find_neighbors_numpy(
             positions,
             cells,
             pbc,
@@ -154,9 +151,14 @@ def find_neighbors(
             half_list=half_list,
             include_self=include_self,
         )
-    if isinstance(positions, np.ndarray):
-        _require_matching_ecosystem(np.ndarray, cells=cells, pbc=pbc, offsets=offsets)
-        return _find_neighbors_numpy(
+    try:
+        import torch
+    except ImportError:
+        torch = None
+    if torch is not None and isinstance(positions, torch.Tensor):
+        from ._torch_frontend import find_neighbors_torch
+
+        return find_neighbors_torch(
             positions,
             cells,
             pbc,
@@ -166,144 +168,3 @@ def find_neighbors(
             include_self=include_self,
         )
     raise TypeError("positions must be a PyTorch tensor or NumPy array")
-
-
-def _require_matching_ecosystem(
-    expected_type: type[Tensor | np.ndarray],
-    **arrays: Tensor | np.ndarray | None,
-) -> None:
-    for name, array in arrays.items():
-        if array is not None and not isinstance(array, expected_type):
-            ecosystem = "PyTorch tensors" if expected_type is Tensor else "NumPy arrays"
-            raise TypeError(
-                f"positions, cells, pbc, and offsets must all be {ecosystem}; "
-                f"{name} has type {type(array).__name__}"
-            )
-
-
-def _normalize_torch_inputs(
-    positions: Tensor,
-    cells: Tensor,
-    pbc: Tensor,
-    offsets: Tensor | None,
-) -> tuple[Tensor, Tensor, Tensor, Tensor]:
-    if positions.ndim != 2 or positions.shape[1] != 3:
-        raise ValueError("positions must have shape (N_total, 3)")
-    if offsets is None:
-        if cells.ndim != 2 or cells.shape != (3, 3):
-            raise ValueError("single-structure cells must have shape (3, 3)")
-        if pbc.ndim != 1 or pbc.shape != (3,):
-            raise ValueError("single-structure pbc must have shape (3,)")
-        offsets = torch.tensor(
-            [0, len(positions)], dtype=torch.int64, device=positions.device
-        )
-        cells = cells.unsqueeze(0)
-        pbc = pbc.unsqueeze(0)
-    else:
-        if cells.ndim != 3:
-            raise ValueError("batched cells must have shape (B, 3, 3)")
-        if pbc.ndim != 2:
-            raise ValueError("batched pbc must have shape (B, 3)")
-    return positions, cells, pbc, offsets
-
-
-def _find_neighbors_torch(
-    positions: Tensor,
-    cells: Tensor,
-    pbc: Tensor,
-    cutoff: float,
-    offsets: Tensor | None,
-    *,
-    half_list: bool,
-    include_self: bool,
-) -> tuple[Tensor, Tensor]:
-    positions, cells, pbc, offsets = _normalize_torch_inputs(
-        positions, cells, pbc, offsets
-    )
-    cutoff = float(cutoff)
-    validate_torch_inputs(positions, cells, pbc, cutoff, offsets)
-    metadata = build_search_metadata(
-        offsets, cells, pbc, cutoff, n_atoms_total=len(positions)
-    )
-    arguments = (
-        positions.detach().contiguous(),
-        offsets.contiguous(),
-        cells.detach().contiguous(),
-        metadata.duals.contiguous(),
-        metadata.image_shifts,
-        metadata.image_offsets,
-    )
-    if not positions.is_cuda:
-        try:
-            from . import _C_cpu
-        except ImportError as error:
-            raise RuntimeError(
-                "the tonari CPU extension is not built; install the project"
-            ) from error
-        return _C_cpu.find_neighbors_cpu(*arguments, cutoff, half_list, include_self)
-
-    try:
-        from . import _C_cuda
-    except ImportError as error:
-        raise RuntimeError(
-            "the tonari CUDA extension is not built; install with a CUDA toolkit"
-        ) from error
-    schedule = build_cuda_schedule(metadata)
-    cuda_arguments = (*arguments, schedule.block_offsets)
-    if (
-        metadata.maximum_atoms >= _CELL_LIST_MINIMUM_ATOMS
-        and schedule.total_nodes < _INT32_INDEX_LIMIT
-    ):
-        return _C_cuda.find_neighbors_cell_cuda(
-            *cuda_arguments,
-            schedule.node_offsets,
-            schedule.total_blocks,
-            schedule.total_nodes,
-            cutoff,
-            half_list,
-            include_self,
-        )
-    if schedule.total_blocks >= _INT32_INDEX_LIMIT:
-        raise ValueError(
-            "the exhaustive CUDA path requires fewer than 2^31 thread blocks"
-        )
-    return _C_cuda.find_neighbors_cuda(
-        *cuda_arguments,
-        schedule.total_blocks,
-        cutoff,
-        half_list,
-        include_self,
-    )
-
-
-def _numpy_to_torch(array: np.ndarray) -> Tensor:
-    if (
-        not array.flags.writeable
-        or not array.flags.aligned
-        or any(stride < 0 for stride in array.strides)
-    ):
-        array = np.array(array, copy=True, order="C")
-    return torch.from_numpy(array)
-
-
-def _find_neighbors_numpy(
-    positions: np.ndarray,
-    cells: np.ndarray,
-    pbc: np.ndarray,
-    cutoff: float,
-    offsets: np.ndarray | None,
-    *,
-    half_list: bool,
-    include_self: bool,
-) -> tuple[np.ndarray, np.ndarray]:
-    torch_offsets = None if offsets is None else _numpy_to_torch(offsets)
-    pair_indices, cell_shifts = _find_neighbors_torch(
-        _numpy_to_torch(positions),
-        _numpy_to_torch(cells),
-        _numpy_to_torch(pbc),
-        cutoff,
-        torch_offsets,
-        half_list=half_list,
-        include_self=include_self,
-    )
-    return pair_indices.numpy(), cell_shifts.numpy()

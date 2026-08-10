@@ -7,8 +7,7 @@ import torch
 from torch import Tensor
 
 from ._pairs import canonical_half_mask
-from ._search import validate_torch_inputs
-from .neighbors import _normalize_torch_inputs
+from ._torch_frontend import normalize_torch_inputs, validate_torch_inputs
 
 _MAXIMUM_IMAGE_SHIFTS = 2**24
 
@@ -26,7 +25,7 @@ def find_neighbors_reference(
 ) -> tuple[Tensor, Tensor]:
     """Find neighbors exhaustively for development-time correctness checks."""
 
-    positions, cells, pbc, offsets = _normalize_torch_inputs(
+    positions, cells, pbc, offsets = normalize_torch_inputs(
         positions, cells, pbc, offsets
     )
     cutoff = float(cutoff)

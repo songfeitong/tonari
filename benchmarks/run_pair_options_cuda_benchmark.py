@@ -22,10 +22,13 @@ from benchmarks.matbench_data import MatbenchStructureDataset
 from benchmarks.pair_option_backends import PairOptions
 from benchmarks.run_cuda_benchmark import load_gpu_batches
 from benchmarks.structure_data import StructureBatch
-from tonari import _C_cuda, find_neighbors
+from tonari import find_neighbors
+from tonari._extensions import load_torch_cuda
+
+CUDA_EXTENSION = load_torch_cuda()
 
 
-def call_tonari(
+def call_production(
     batch: StructureBatch, cutoff: float, options: PairOptions
 ) -> tuple[torch.Tensor, torch.Tensor]:
     return find_neighbors(
@@ -52,7 +55,7 @@ def validate_modes(batches: list[StructureBatch], cutoff: float) -> dict[str, ob
     total_pairs = {option.name: 0 for option in PAIR_OPTIONS}
     for batch_index, batch in enumerate(batches):
         outputs = {
-            option.name: key_set(call_tonari(batch, cutoff, option))
+            option.name: key_set(call_production(batch, cutoff, option))
             for option in PAIR_OPTIONS
         }
         full = outputs["full_without_self"]
@@ -99,7 +102,7 @@ def measure_mode(
     repeats: int,
 ) -> dict[str, object]:
     for batch in batches[: min(3, len(batches))]:
-        call_tonari(batch, cutoff, options)
+        call_production(batch, cutoff, options)
     torch.cuda.synchronize()
 
     samples_ms = []
@@ -111,7 +114,7 @@ def measure_mode(
         current_pairs = 0
         current_bytes = 0
         for batch in batches:
-            pair_indices, cell_shifts = call_tonari(batch, cutoff, options)
+            pair_indices, cell_shifts = call_production(batch, cutoff, options)
             current_pairs += pair_indices.shape[1]
             current_bytes += pair_indices.numel() * pair_indices.element_size()
             current_bytes += cell_shifts.numel() * cell_shifts.element_size()
@@ -125,7 +128,7 @@ def measure_mode(
     torch.cuda.reset_peak_memory_stats()
     baseline_memory = torch.cuda.memory_allocated()
     for batch in batches:
-        output = call_tonari(batch, cutoff, options)
+        output = call_production(batch, cutoff, options)
     torch.cuda.synchronize()
     peak_memory = torch.cuda.max_memory_allocated() - baseline_memory
     del output
@@ -203,7 +206,7 @@ def main() -> None:
             "gpu": torch.cuda.get_device_name(),
             "repository_revision": git_revision(repository_root),
             "repository_worktree_clean": worktree_clean,
-            "cuda_extension_sha256": file_sha256(Path(_C_cuda.__file__)),
+            "cuda_extension_sha256": file_sha256(Path(CUDA_EXTENSION.__file__)),
             "vesin_version": __import__("vesin").__version__,
         },
         "method": {

@@ -6,11 +6,15 @@ readme = "README.md"
 requires-python = "==3.12.*"
 dependencies = [
   "numpy>=2.0",
-  "torch==2.12.1",
 ]
+
+[project.optional-dependencies]
+torch = ["torch==2.12.1"]
 
 [build-system]
 requires = [
+  "numpy>=2.0",
+  "pybind11>=3.0",
   "setuptools>=77",
   "torch==2.12.1",
 ]
@@ -24,6 +28,7 @@ dev = [
   "ase==3.29.0",
   "pytest==9.1.1",
   "ruff",
+  "torch==2.12.1",
   "vesin==0.6.1",
 ]
 

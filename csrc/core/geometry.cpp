@@ -1,11 +1,10 @@
 #include "geometry.h"
+#include "errors.h"
 
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
-#include <cstring>
 #include <limits>
-#include <vector>
 
 
 namespace {
@@ -101,7 +100,7 @@ void active_pseudoinverse(
     const long double tolerance =
         std::numeric_limits<double>::epsilon() * 3 *
         std::max(largest_singular, 1.0L);
-    TORCH_CHECK(
+    neighbor_search::require_input(
         smallest_singular > tolerance,
         "active periodic cell vectors must be linearly independent");
 
@@ -121,39 +120,38 @@ void active_pseudoinverse(
 }  // namespace
 
 
-std::vector<torch::Tensor> build_periodic_metadata_cpu(
-    const torch::Tensor& cells,
-    const torch::Tensor& pbc,
-    const torch::Tensor& atom_counts,
+neighbor_search::PeriodicMetadata neighbor_search::build_periodic_metadata(
+    std::span<const double> cells,
+    std::span<const uint8_t> pbc,
+    std::span<const int64_t> atom_counts,
     double cutoff) {
-    TORCH_CHECK(!cells.is_cuda() && !pbc.is_cuda() && !atom_counts.is_cuda());
-    TORCH_CHECK(cells.scalar_type() == torch::kFloat64);
-    TORCH_CHECK(pbc.scalar_type() == torch::kBool);
-    TORCH_CHECK(atom_counts.scalar_type() == torch::kInt64);
-    TORCH_CHECK(cells.is_contiguous() && pbc.is_contiguous() && atom_counts.is_contiguous());
-    const int64_t batch_size = cells.size(0);
-    const double* cell_data = cells.data_ptr<double>();
-    const bool* pbc_data = pbc.data_ptr<bool>();
-    const int64_t* count_data = atom_counts.data_ptr<int64_t>();
-    std::vector<double> duals(9 * batch_size, 0.0);
-    std::vector<int32_t> shifts;
-    std::vector<int64_t> image_offsets = {0};
+    const int64_t batch_size = static_cast<int64_t>(atom_counts.size());
+    require_input(
+        cells.size() == static_cast<size_t>(9 * batch_size),
+        "cells must have shape (B, 3, 3)");
+    require_input(
+        pbc.size() == static_cast<size_t>(3 * batch_size),
+        "pbc must have shape (B, 3)");
+    PeriodicMetadata metadata;
+    metadata.duals.resize(9 * batch_size, 0.0);
+    metadata.image_offsets = {0};
 
     for (int64_t batch = 0; batch < batch_size; ++batch) {
-        const double* cell = cell_data + 9 * batch;
+        const double* cell = cells.data() + 9 * batch;
         for (int index = 0; index < 9; ++index) {
-            TORCH_CHECK(
+            require_input(
                 std::isfinite(cell[index]),
                 "cells must contain only finite values");
         }
-        if (count_data[batch] == 0) {
-            image_offsets.push_back(static_cast<int64_t>(shifts.size() / 3));
+        if (atom_counts[batch] == 0) {
+            metadata.image_offsets.push_back(
+                static_cast<int64_t>(metadata.image_shifts.size() / 3));
             continue;
         }
         int active_axes[3];
         int active_count = 0;
         for (int axis = 0; axis < 3; ++axis) {
-            if (pbc_data[3 * batch + axis]) {
+            if (pbc[3 * batch + axis] != 0) {
                 active_axes[active_count++] = axis;
             }
         }
@@ -169,18 +167,19 @@ std::vector<torch::Tensor> build_periodic_metadata_cpu(
                 long double reciprocal_norm_squared = 0.0L;
                 for (int cartesian = 0; cartesian < 3; ++cartesian) {
                     const long double value = active_dual[cartesian][column];
-                    TORCH_CHECK(
+                    require_input(
                         std::isfinite(value) &&
                             std::abs(value) <=
                                 std::numeric_limits<double>::max(),
                         "active periodic cell dual is outside the float64 range");
-                    duals[9 * batch + 3 * cartesian + active_axes[column]] =
+                    metadata.duals[
+                        9 * batch + 3 * cartesian + active_axes[column]] =
                         static_cast<double>(value);
                     reciprocal_norm_squared += value * value;
                 }
                 const long double repeat =
                     std::ceil(cutoff * std::sqrt(reciprocal_norm_squared));
-                TORCH_CHECK(
+                require_input(
                     repeat <= std::numeric_limits<int32_t>::max(),
                     "periodic image range exceeds int32 cell shifts");
                 repeats[active_axes[column]] = static_cast<int64_t>(repeat);
@@ -192,51 +191,29 @@ std::vector<torch::Tensor> build_periodic_metadata_cpu(
         int64_t image_count = 1;
         for (const int64_t repeat : repeats) {
             const int64_t factor = 2 * repeat + 1;
-            TORCH_CHECK(
+            require_input(
                 image_count <= kMaximumImageShifts / factor,
                 "periodic image count exceeds the 2^24 resource limit");
             image_count *= factor;
         }
-        TORCH_CHECK(
-            static_cast<int64_t>(shifts.size() / 3) <=
+        require_input(
+            static_cast<int64_t>(metadata.image_shifts.size() / 3) <=
                 kMaximumImageShifts - image_count,
             "batched periodic image count exceeds the 2^24 resource limit");
         const int64_t total_image_count =
-            static_cast<int64_t>(shifts.size() / 3) + image_count;
-        shifts.reserve(static_cast<size_t>(3 * total_image_count));
+            static_cast<int64_t>(metadata.image_shifts.size() / 3) + image_count;
+        metadata.image_shifts.reserve(static_cast<size_t>(3 * total_image_count));
         for (int64_t x = -repeats[0]; x <= repeats[0]; ++x) {
             for (int64_t y = -repeats[1]; y <= repeats[1]; ++y) {
                 for (int64_t z = -repeats[2]; z <= repeats[2]; ++z) {
-                    shifts.push_back(static_cast<int32_t>(x));
-                    shifts.push_back(static_cast<int32_t>(y));
-                    shifts.push_back(static_cast<int32_t>(z));
+                    metadata.image_shifts.push_back(static_cast<int32_t>(x));
+                    metadata.image_shifts.push_back(static_cast<int32_t>(y));
+                    metadata.image_shifts.push_back(static_cast<int32_t>(z));
                 }
             }
         }
-        image_offsets.push_back(static_cast<int64_t>(shifts.size() / 3));
+        metadata.image_offsets.push_back(
+            static_cast<int64_t>(metadata.image_shifts.size() / 3));
     }
-
-    auto dual_tensor = torch::empty_like(cells);
-    auto shift_tensor = torch::empty(
-        {static_cast<int64_t>(shifts.size() / 3), 3},
-        cells.options().dtype(torch::kInt32));
-    auto image_offsets_tensor = torch::empty(
-        {batch_size + 1}, cells.options().dtype(torch::kInt64));
-    if (!duals.empty()) {
-        std::memcpy(
-            dual_tensor.data_ptr<double>(),
-            duals.data(),
-            duals.size() * sizeof(double));
-    }
-    if (!shifts.empty()) {
-        std::memcpy(
-            shift_tensor.data_ptr<int32_t>(),
-            shifts.data(),
-            shifts.size() * sizeof(int32_t));
-    }
-    std::memcpy(
-        image_offsets_tensor.data_ptr<int64_t>(),
-        image_offsets.data(),
-        image_offsets.size() * sizeof(int64_t));
-    return {dual_tensor, shift_tensor, image_offsets_tensor};
+    return metadata;
 }

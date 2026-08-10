@@ -1,15 +1,19 @@
 #include "neighbors_cpu.h"
-#include "pair_policy.h"
+#include "errors.h"
+#include "geometry.h"
 
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <limits>
+#include <span>
 #include <vector>
 
 
 namespace {
+
+using neighbor_search::PairBuffers;
 
 // The crossover was selected from a real-structure threshold sweep.
 constexpr int64_t kExhaustiveCandidateLimit = 16384;
@@ -17,13 +21,6 @@ constexpr int64_t kExhaustiveCandidateLimit = 16384;
 constexpr int64_t kMaximumDenseBins = int64_t{1} << 26;
 constexpr int64_t kMaximumBinsPerImage = 64;
 constexpr int kCellListRoundoffFactor = 64;
-
-
-struct PairBuffers {
-    std::vector<int64_t> sources;
-    std::vector<int64_t> targets;
-    std::vector<int32_t> shifts;
-};
 
 
 struct CellNode {
@@ -40,41 +37,6 @@ struct BinLayout {
     int64_t dimensions[3];
     int64_t count;
 };
-
-
-void validate_cpu_inputs(
-    const torch::Tensor& positions,
-    const torch::Tensor& offsets,
-    const torch::Tensor& cells,
-    const torch::Tensor& duals,
-    const torch::Tensor& image_shifts,
-    const torch::Tensor& image_offsets) {
-    TORCH_CHECK(!positions.is_cuda(), "positions must be a CPU tensor");
-    TORCH_CHECK(
-        !offsets.is_cuda() && !cells.is_cuda() && !duals.is_cuda(),
-        "all inputs must be CPU tensors");
-    TORCH_CHECK(
-        !image_shifts.is_cuda() && !image_offsets.is_cuda(),
-        "all metadata must be CPU tensors");
-    TORCH_CHECK(
-        positions.is_contiguous() && offsets.is_contiguous() && cells.is_contiguous(),
-        "inputs must be contiguous");
-    TORCH_CHECK(
-        duals.is_contiguous() && image_shifts.is_contiguous() &&
-            image_offsets.is_contiguous(),
-        "metadata must be contiguous");
-    TORCH_CHECK(
-        positions.scalar_type() == cells.scalar_type() &&
-            positions.scalar_type() == duals.scalar_type(),
-        "positions, cells, and duals must have the same dtype");
-    TORCH_CHECK(offsets.scalar_type() == torch::kInt64, "offsets must have dtype int64");
-    TORCH_CHECK(
-        image_shifts.scalar_type() == torch::kInt32,
-        "image_shifts must have dtype int32");
-    TORCH_CHECK(
-        image_offsets.scalar_type() == torch::kInt64,
-        "image_offsets must have dtype int64");
-}
 
 
 bool candidate_count_at_most(
@@ -101,7 +63,7 @@ void prepare_positions(
     for (int64_t atom = 0; atom < n_atoms; ++atom) {
         const scalar_t* position = positions + 3 * atom;
         for (int cartesian = 0; cartesian < 3; ++cartesian) {
-            TORCH_CHECK(
+            neighbor_search::require_search(
                 std::isfinite(position[cartesian]),
                 "positions must contain only finite values");
         }
@@ -111,7 +73,7 @@ void prepare_positions(
                 fractional += static_cast<long double>(position[cartesian]) *
                     static_cast<long double>(dual[3 * cartesian + axis]);
             }
-            TORCH_CHECK(
+            neighbor_search::require_search(
                 std::isfinite(fractional) &&
                     fractional >= -static_cast<long double>(wrap_upper_bound) &&
                     fractional < static_cast<long double>(wrap_upper_bound),
@@ -217,7 +179,7 @@ bool conservative_cell_list_cutoff(
 }
 
 
-template <typename scalar_t, tonari::PairMode Mode>
+template <typename scalar_t, neighbor_search::PairMode Mode>
 inline void append_candidate(
     int64_t source,
     int64_t target,
@@ -238,8 +200,8 @@ inline void append_candidate(
             static_cast<int64_t>(atom_wraps[3 * target + axis]);
     }
     const bool zero_shift_self =
-        tonari::is_zero_shift_self_pair(source, target, output_shift);
-    if (!tonari::keep_pair_identity<Mode>(source, target, output_shift)) {
+        neighbor_search::is_zero_shift_self_pair(source, target, output_shift);
+    if (!neighbor_search::keep_pair_identity<Mode>(source, target, output_shift)) {
         return;
     }
     if (!zero_shift_self && !distance_known_inside) {
@@ -258,7 +220,7 @@ inline void append_candidate(
         }
     }
     for (const int64_t value : output_shift) {
-        TORCH_CHECK(
+        neighbor_search::require_search(
             value >= std::numeric_limits<int32_t>::min() &&
                 value <= std::numeric_limits<int32_t>::max(),
             "a cell shift required by the cutoff pairs exceeds the int32 output range");
@@ -271,7 +233,7 @@ inline void append_candidate(
 }
 
 
-template <typename scalar_t, tonari::PairMode Mode>
+template <typename scalar_t, neighbor_search::PairMode Mode>
 inline void append_cell_candidate(
     int64_t source,
     int64_t target,
@@ -287,7 +249,7 @@ inline void append_cell_candidate(
     scalar_t inner_cutoff_squared,
     scalar_t cutoff_squared,
     PairBuffers& pairs) {
-    if constexpr (tonari::kHalfList<Mode>) {
+    if constexpr (neighbor_search::kHalfList<Mode>) {
         const int32_t* search_shift = image_shifts + 3 * shift;
         int64_t output_shift[3];
         for (int axis = 0; axis < 3; ++axis) {
@@ -295,7 +257,7 @@ inline void append_cell_candidate(
                 static_cast<int64_t>(atom_wraps[3 * source + axis]) +
                 static_cast<int64_t>(atom_wraps[3 * target + axis]);
         }
-        if (!tonari::keep_pair_identity<Mode>(
+        if (!neighbor_search::keep_pair_identity<Mode>(
                 source, target, output_shift)) {
             return;
         }
@@ -325,7 +287,7 @@ inline void append_cell_candidate(
 }
 
 
-template <typename scalar_t, tonari::PairMode Mode>
+template <typename scalar_t, neighbor_search::PairMode Mode>
 void search_exhaustive(
     int64_t atom_offset,
     int64_t n_atoms,
@@ -428,7 +390,7 @@ int64_t bin_index(
 }
 
 
-template <typename scalar_t, tonari::PairMode Mode>
+template <typename scalar_t, neighbor_search::PairMode Mode>
 bool search_cell_list(
     int64_t atom_offset,
     int64_t n_atoms,
@@ -443,7 +405,7 @@ bool search_cell_list(
     scalar_t inner_cutoff_squared,
     scalar_t cutoff_squared,
     PairBuffers& pairs) {
-    TORCH_CHECK(
+    neighbor_search::require_search(
         n_atoms < std::numeric_limits<int32_t>::max() &&
             n_shifts < std::numeric_limits<int32_t>::max(),
         "cell-list atoms and image shifts must fit int32 indexing");
@@ -482,7 +444,7 @@ bool search_cell_list(
                 continue;
             }
             const int64_t bin = bin_index(image_position, layout);
-            TORCH_CHECK(
+            neighbor_search::require_search(
                 nodes.size() < static_cast<size_t>(std::numeric_limits<int32_t>::max()),
                 "cell-list node count exceeds int32 indexing");
             const int32_t node = static_cast<int32_t>(nodes.size());
@@ -550,23 +512,23 @@ bool search_cell_list(
 }
 
 
-template <typename scalar_t, tonari::PairMode Mode>
+template <typename scalar_t, neighbor_search::PairMode Mode>
 PairBuffers build_neighbor_pairs(
-    const torch::Tensor& positions,
-    const torch::Tensor& offsets,
-    const torch::Tensor& cells,
-    const torch::Tensor& duals,
-    const torch::Tensor& image_shifts,
-    const torch::Tensor& image_offsets,
+    std::span<const scalar_t> positions,
+    std::span<const int64_t> offsets,
+    std::span<const scalar_t> cells,
+    std::span<const scalar_t> duals,
+    std::span<const int32_t> image_shifts,
+    std::span<const int64_t> image_offsets,
     double cutoff) {
-    const scalar_t* position_data = positions.data_ptr<scalar_t>();
-    const int64_t* offsets_data = offsets.data_ptr<int64_t>();
-    const scalar_t* cell_data = cells.data_ptr<scalar_t>();
-    const scalar_t* dual_data = duals.data_ptr<scalar_t>();
-    const int32_t* image_shift_data = image_shifts.data_ptr<int32_t>();
-    const int64_t* image_offsets_data = image_offsets.data_ptr<int64_t>();
-    const int64_t n_atoms_total = positions.size(0);
-    const int64_t batch_size = offsets.numel() - 1;
+    const scalar_t* position_data = positions.data();
+    const int64_t* offsets_data = offsets.data();
+    const scalar_t* cell_data = cells.data();
+    const scalar_t* dual_data = duals.data();
+    const int32_t* image_shift_data = image_shifts.data();
+    const int64_t* image_offsets_data = image_offsets.data();
+    const int64_t n_atoms_total = static_cast<int64_t>(positions.size() / 3);
+    const int64_t batch_size = static_cast<int64_t>(offsets.size() - 1);
     const scalar_t scalar_cutoff = static_cast<scalar_t>(cutoff);
     const scalar_t cutoff_squared = static_cast<scalar_t>(cutoff * cutoff);
 
@@ -658,16 +620,15 @@ PairBuffers build_neighbor_pairs(
 
 template <typename scalar_t>
 PairBuffers dispatch_neighbor_pairs(
-    const torch::Tensor& positions,
-    const torch::Tensor& offsets,
-    const torch::Tensor& cells,
-    const torch::Tensor& duals,
-    const torch::Tensor& image_shifts,
-    const torch::Tensor& image_offsets,
+    std::span<const scalar_t> positions,
+    std::span<const int64_t> offsets,
+    std::span<const scalar_t> cells,
+    std::span<const scalar_t> duals,
+    std::span<const int32_t> image_shifts,
+    std::span<const int64_t> image_offsets,
     double cutoff,
-    bool half_list,
-    bool include_self) {
-    auto build = [&]<tonari::PairMode Mode>() {
+    neighbor_search::PairMode mode) {
+    auto build = [&]<neighbor_search::PairMode Mode>() {
         return build_neighbor_pairs<scalar_t, Mode>(
             positions,
             offsets,
@@ -677,68 +638,87 @@ PairBuffers dispatch_neighbor_pairs(
             image_offsets,
             cutoff);
     };
-    switch (tonari::pair_mode(half_list, include_self)) {
-        case tonari::PairMode::Full:
-            return build.template operator()<tonari::PairMode::Full>();
-        case tonari::PairMode::FullWithSelf:
-            return build.template operator()<tonari::PairMode::FullWithSelf>();
-        case tonari::PairMode::Half:
-            return build.template operator()<tonari::PairMode::Half>();
-        case tonari::PairMode::HalfWithSelf:
-            return build.template operator()<tonari::PairMode::HalfWithSelf>();
+    switch (mode) {
+        case neighbor_search::PairMode::Full:
+            return build.template operator()<neighbor_search::PairMode::Full>();
+        case neighbor_search::PairMode::FullWithSelf:
+            return build.template operator()<neighbor_search::PairMode::FullWithSelf>();
+        case neighbor_search::PairMode::Half:
+            return build.template operator()<neighbor_search::PairMode::Half>();
+        case neighbor_search::PairMode::HalfWithSelf:
+            return build.template operator()<neighbor_search::PairMode::HalfWithSelf>();
     }
-    TORCH_CHECK(false, "invalid pair mode");
+    throw neighbor_search::SearchError("invalid pair mode");
 }
 
 }  // namespace
 
 
-std::vector<torch::Tensor> find_neighbors_cpu(
-    const torch::Tensor& positions,
-    const torch::Tensor& offsets,
-    const torch::Tensor& cells,
-    const torch::Tensor& duals,
-    const torch::Tensor& image_shifts,
-    const torch::Tensor& image_offsets,
+template <typename scalar_t>
+neighbor_search::PairBuffers neighbor_search::find_neighbors_cpu(
+    std::span<const scalar_t> positions,
+    std::span<const int64_t> offsets,
+    std::span<const scalar_t> cells,
+    std::span<const uint8_t> pbc,
     double cutoff,
-    bool half_list,
-    bool include_self) {
-    validate_cpu_inputs(
-        positions, offsets, cells, duals, image_shifts, image_offsets);
-    PairBuffers pairs;
-    AT_DISPATCH_FLOATING_TYPES(
-        positions.scalar_type(), "find_neighbors_cpu", [&] {
-            pairs = dispatch_neighbor_pairs<scalar_t>(
-                positions,
-                offsets,
-                cells,
-                duals,
-                image_shifts,
-                image_offsets,
-                cutoff,
-                half_list,
-                include_self);
-        });
+    PairMode mode) {
+    require_input(positions.size() % 3 == 0, "positions must have shape (N_total, 3)");
+    require_input(!offsets.empty(), "offsets must have shape (B + 1,)");
+    const int64_t n_atoms = static_cast<int64_t>(positions.size() / 3);
+    const int64_t batch_size = static_cast<int64_t>(offsets.size() - 1);
+    require_input(
+        cells.size() == static_cast<size_t>(9 * batch_size),
+        "cells must have shape (B, 3, 3)");
+    require_input(
+        pbc.size() == static_cast<size_t>(3 * batch_size),
+        "pbc must have shape (B, 3)");
+    require_input(
+        std::isfinite(cutoff) && cutoff > 0,
+        "cutoff must be finite and positive");
+    require_input(offsets.front() == 0, "offsets must start at zero");
+    require_input(offsets.back() == n_atoms, "offsets must end at N_total");
+    require_input(
+        n_atoms < std::numeric_limits<int32_t>::max(),
+        "the current implementation supports fewer than 2^31 atoms");
 
-    const int64_t n_pairs = static_cast<int64_t>(pairs.sources.size());
-    auto pair_indices =
-        torch::empty({2, n_pairs}, positions.options().dtype(torch::kInt64));
-    auto cell_shifts =
-        torch::empty({n_pairs, 3}, positions.options().dtype(torch::kInt32));
-    if (n_pairs > 0) {
-        int64_t* pair_data = pair_indices.data_ptr<int64_t>();
-        std::memcpy(
-            pair_data,
-            pairs.sources.data(),
-            static_cast<size_t>(n_pairs) * sizeof(int64_t));
-        std::memcpy(
-            pair_data + n_pairs,
-            pairs.targets.data(),
-            static_cast<size_t>(n_pairs) * sizeof(int64_t));
-        std::memcpy(
-            cell_shifts.data_ptr<int32_t>(),
-            pairs.shifts.data(),
-            static_cast<size_t>(3 * n_pairs) * sizeof(int32_t));
+    std::vector<int64_t> atom_counts;
+    atom_counts.reserve(static_cast<size_t>(batch_size));
+    for (int64_t batch = 0; batch < batch_size; ++batch) {
+        require_input(
+            offsets[batch + 1] >= offsets[batch],
+            "offsets must be nondecreasing");
+        atom_counts.push_back(offsets[batch + 1] - offsets[batch]);
     }
-    return {pair_indices, cell_shifts};
+    std::vector<double> cells_double(cells.begin(), cells.end());
+    const PeriodicMetadata metadata = build_periodic_metadata(
+        cells_double, pbc, atom_counts, cutoff);
+    std::vector<scalar_t> duals(
+        metadata.duals.begin(), metadata.duals.end());
+    return dispatch_neighbor_pairs<scalar_t>(
+        positions,
+        offsets,
+        cells,
+        duals,
+        metadata.image_shifts,
+        metadata.image_offsets,
+        cutoff,
+        mode);
 }
+
+
+template neighbor_search::PairBuffers neighbor_search::find_neighbors_cpu<float>(
+    std::span<const float>,
+    std::span<const int64_t>,
+    std::span<const float>,
+    std::span<const uint8_t>,
+    double,
+    PairMode);
+
+
+template neighbor_search::PairBuffers neighbor_search::find_neighbors_cpu<double>(
+    std::span<const double>,
+    std::span<const int64_t>,
+    std::span<const double>,
+    std::span<const uint8_t>,
+    double,
+    PairMode);

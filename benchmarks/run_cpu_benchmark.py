@@ -29,7 +29,10 @@ from benchmarks.matbench_data import (
     select_scaling_structure,
 )
 from benchmarks.structure_data import StructureBatch, collate_structures
-from tonari import _C_cpu, find_neighbors
+from tonari import find_neighbors
+from tonari._extensions import load_torch_cpu
+
+CPU_EXTENSION = load_torch_cpu()
 
 Backend = Callable[[StructureBatch, float], tuple[Tensor, Tensor]]
 
@@ -64,7 +67,7 @@ class VesinCpuBackend:
         return torch.stack((second.to(torch.int64), first.to(torch.int64))), shifts
 
 
-def tonari_cpu(batch: StructureBatch, cutoff: float) -> tuple[Tensor, Tensor]:
+def production_cpu(batch: StructureBatch, cutoff: float) -> tuple[Tensor, Tensor]:
     return find_neighbors(
         batch.positions,
         batch.cells,
@@ -94,7 +97,7 @@ def validate_external_reference(
     vesin = VesinCpuBackend(cutoff)
     total_pairs = 0
     for batch_index, batch in enumerate(batches):
-        actual = canonical_keys(tonari_cpu(batch, cutoff))
+        actual = canonical_keys(production_cpu(batch, cutoff))
         expected = canonical_keys(vesin(batch, cutoff))
         if not np.array_equal(actual, expected):
             missing = len(set(map(tuple, expected)) - set(map(tuple, actual)))
@@ -164,8 +167,8 @@ def benchmark_workload(
     vesin = VesinCpuBackend(cutoff)
     source_ids = [batch.source_ids[0] for batch in batches]
     production = measure_backend(
-        "tonari_cpu",
-        tonari_cpu,
+        "production_cpu",
+        production_cpu,
         batches,
         cutoff,
         repeats,
@@ -184,9 +187,9 @@ def benchmark_workload(
         "source_ids": source_ids if len(source_ids) <= 16 else None,
         "source_id_count": len(source_ids),
         "source_id_sha256": hashlib.sha256("\n".join(source_ids).encode()).hexdigest(),
-        "vesin_over_tonari": baseline["median_ms"] / production["median_ms"],
+        "vesin_over_production": baseline["median_ms"] / production["median_ms"],
         "backends": {
-            "tonari_cpu": production,
+            "production_cpu": production,
             "vesin_cpu_reused": baseline,
         },
     }
@@ -275,7 +278,7 @@ def main() -> None:
             "torch_num_threads": torch.get_num_threads(),
             "repository_revision": git_revision(repository_root),
             "repository_worktree_clean": worktree_clean,
-            "cpu_extension_sha256": file_sha256(Path(_C_cpu.__file__)),
+            "cpu_extension_sha256": file_sha256(Path(CPU_EXTENSION.__file__)),
             "vesin_version": __import__("vesin").__version__,
         },
         "method": {

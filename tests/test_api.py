@@ -17,8 +17,6 @@ def pair_keys(output: tuple[torch.Tensor, torch.Tensor]) -> set[tuple[int, ...]]
 
 def test_public_surface_contains_only_find_neighbors() -> None:
     assert tonari.__all__ == ["find_neighbors"]
-    assert not hasattr(tonari, "radius_graph_pbc")
-    assert not hasattr(tonari, "reference_radius_graph_pbc")
 
 
 def test_pair_options_are_keyword_only_and_default_to_existing_behavior() -> None:

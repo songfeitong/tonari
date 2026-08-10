@@ -23,7 +23,7 @@ pair_indices, cell_shifts = find_neighbors(
 
 Torch positions/cells 接受 float32 或 float64，所有 Torch arrays 必须同 device，pbc 为 bool，offsets 为 int64。CPU Tensor 走 native CPU backend，CUDA Tensor 走 native CUDA backend。NumPy 接受同样的 float/bool/int dtypes 与 single/batch shapes，只走 CPU backend并返回 NumPy arrays。所有 array 参数必须属于同一生态；frontend 在 native dispatch 前拒绝 NumPy/Torch 混用。
 
-NumPy frontend 不是第二套搜索实现。Writeable、aligned、nonnegative-stride arrays 尽量通过 `torch.from_numpy` 零复制进入共享 CPU path；不能安全建立 Tensor view 的 arrays 会在 frontend 复制，非 contiguous layout 会在 native boundary 做必要 packing。Native output Tensor 的 CPU storage 直接导出为 NumPy arrays。
+NumPy frontend 不是第二套搜索实现。它把 contiguous NumPy buffers 直接交给独立的 NumPy CPU binding；非 contiguous input只在frontend做必要packing，output由binding直接分配为NumPy arrays。Torch CPU binding读取Tensor storage并调用同一个framework-neutral C++ search core。NumPy运行路径不会import Torch，也不链接LibTorch。
 
 ## Pair 方向与几何约定
 
@@ -47,7 +47,7 @@ Pair `(source, target, S)` 的 reverse 是 `(target, source, -S)`。`half_list=T
 
 ## 公共 periodic geometry
 
-Python boundary 验证 ecosystem、shapes、dtypes、devices、cutoff 与 offsets，再把很小的 offsets/cells/pbc metadata 复制到 CPU。`_C_cpu.build_periodic_metadata_cpu` 在一次 native call 中完成 finite/rank check、active duals、image ranges 与拼接 image shifts；CPU 与 CUDA 复用同一结果。Empty structure 在 rank/repeat/image enumeration 前短路，其 image count 为零。
+Python boundary只验证ecosystem、shapes、dtypes、devices、cutoff与offsets，并把规范化后的公开输入一次交给对应provider。Periodic metadata、算法选择与backend schedule都属于native内部，不通过Python传递实现专用tensors。Framework-neutral geometry core完成finite/rank check、active duals、image ranges与拼接image shifts；CPU search直接消费该结果，CUDA extension在host侧调用同一geometry core后自行构造device schedule。Empty structure在rank/repeat/image enumeration前短路，其image count为零。
 
 设 active-row matrix 为 `A`。Metadata 直接在 `A` 上执行 long-double one-sided Jacobi SVD，并据此判秩与构造 pseudoinverse；它刻意不形成 `A Aᵀ`，因为 normal equations 会平方 condition number。Dual column norms 给出 reciprocal face-height factors，每个 active image range 为 `ceil(cutoff * norm(dual_axis))`，inactive range 为零。该算法不需要补齐或求逆完整 cell，因此统一支持 rank-1 wire、rank-2 slab 与 full periodic triclinic cell。
 
@@ -73,7 +73,7 @@ Dense bin grid 少于 `2^26` entries，并限制相对 possible source images �
 
 ## CUDA backend
 
-CUDA 接受整个 heterogeneous batch。`CudaSearchSchedule` 将每个 structure 的 atom/image tasks 编入全局 block/node offsets，kernels 通过 segment lookup 找到所属 structure；所有生成 pair 都留在相应 offsets 区间。
+CUDA 接受整个 heterogeneous batch。CUDA provider在一次native call内将每个structure的atom/image tasks编入全局block/node offsets，kernels通过segment lookup找到所属structure；所有生成pair都留在相应offsets区间。Python frontend既不构造schedule，也不选择exhaustive或cell-list path。
 
 Pair mode 同样在 launch boundary dispatch 到四个 compile-time kernel specialization。Fused exhaustive 的 count/write 共享同一 candidate predicate；cell-list 的 query count/write共享同一 policy。默认 full list仍是主要 CUDA path，half list正确地减少输出与显存，但不引入额外专用调度。
 

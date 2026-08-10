@@ -81,3 +81,13 @@ CPU/CUDA 在全部 8,192 个分子、15,144,842 个 keys 上与 Vesin exact matc
 性能只做了能回答架构问题的真实Matbench测量。256结构CPU benchmark中，tonari/Vesin/ASE四种mode全部exact；half/no-self把output从14.15 MB减至7.07 MB并把tonari从27.59降至24.25 ms。完整1,536结构CUDA benchmark中，四种mode不变量和默认Vesin exact均通过；half/no-self把output从77.84 MB减至38.92 MB、peak allocation从4.73 MB减至2.42 MB，epoch从11.26降至10.91 ms。一次同policy、同compiler重建的pre-feature/current CPU A/B为168.36/170.32 ms，约1.2%差异，不构成明显默认路径回归。`include_self`没有可辨认的不合理成本，默认CUDA hot path也没有显示回归；按任务要求没有围绕亚毫秒波动反复调优。
 
 独立reviewer聚焦核心实现后只确认一个reference blocker：极小正cutoff的平方可能在geometry dtype下溢为零，production仍按契约原生加入zero-shift self，但reference原先依赖`0 < cutoff_squared`而漏掉diagonal。修复让zero image diagonal按`include_self`显式置真或置假，并覆盖float32/float64 underflow及full/half；修复后119项GPU-visible tests通过。
+
+## 2026-08-10：Frontend、provider 与 neutral core 分层
+
+随着项目同时支持NumPy、PyTorch、CPU与CUDA，原先以Torch为中心的内部边界不再合适：NumPy虽然复用了CPU算法，却必须经过Tensor和LibTorch；CUDA所需的periodic metadata、algorithm choice与schedule tensors则由Python组装。公共API因此承担了超出输入适配的职责，framework和backend之间也形成了不必要的耦合。
+
+本轮删除了这条历史路径，未保留兼容wrapper。公共`api.py`现在只做ecosystem dispatch；NumPy与Torch frontends分别负责自己的shape、dtype、device和contiguity；独立的NumPy与Torch CPU bindings共同调用`csrc/core/`中的framework-neutral C++ geometry与search implementation。该core只依赖C++标准库，不包含Python、NumPy或Torch headers。NumPy production调用已用阻断Torch import的独立进程验证，并确认其native extension不链接LibTorch。
+
+CUDA一侧把metadata construction、host/device transfer、schedule construction与exhaustive/cell-list选择收回单个native provider。Python不再传递duals、image shifts、block offsets或node offsets等实现专用tensors，也不再暴露可被冻结为事实API的planning helpers。CPU与CUDA仍共享periodic geometry和pair policy，但保留各自适合硬件的search implementation。
+
+重构没有改变`find_neighbors`的public signature、pair方向、strict cutoff、half/self policy或integer/resource contract。最终完整GPU-visible test matrix为119 passed；CPU-only matrix、standalone C++20 core compilation和public docstring examples另行验证。全部1,536个Matbench结构继续在CPU/CUDA上与Vesin精确一致；短性能回归中CPU epoch与历史结果同一量级，CUDA epoch没有退化。这里不因几毫秒环境波动重写正式benchmark结论，验证目标只是不引入明显架构性性能回归。

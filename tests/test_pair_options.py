@@ -84,7 +84,7 @@ def vesin_keys(
         keys = canonicalize(keys)
     if include_self:
         # Vesin deliberately excludes zero-distance pairs, so the adapter adds
-        # tonari's public zero-shift self pairs after native neighbor search.
+        # Public zero-shift self pairs are added after native neighbor search.
         keys |= zero_shift_self_keys(len(positions))
     return keys
 

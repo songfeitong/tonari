@@ -14,7 +14,7 @@ import sys
 
 class BlockCudaExtension(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname, path, target=None):
-        if fullname == "tonari._C_cuda":
+        if fullname.endswith("._torch_cuda"):
             raise ModuleNotFoundError("CUDA extension deliberately unavailable")
         return None
 
