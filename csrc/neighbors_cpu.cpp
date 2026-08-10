@@ -1,4 +1,4 @@
-#include "radius_graph_cpu.h"
+#include "neighbors_cpu.h"
 
 #include <algorithm>
 #include <cmath>
@@ -18,7 +18,7 @@ constexpr int64_t kMaximumBinsPerImage = 64;
 constexpr int kCellListRoundoffFactor = 64;
 
 
-struct GraphBuffers {
+struct PairBuffers {
     std::vector<int64_t> sources;
     std::vector<int64_t> targets;
     std::vector<int32_t> shifts;
@@ -43,36 +43,36 @@ struct BinLayout {
 
 void validate_cpu_inputs(
     const torch::Tensor& positions,
-    const torch::Tensor& ptr,
+    const torch::Tensor& offsets,
     const torch::Tensor& cells,
     const torch::Tensor& duals,
     const torch::Tensor& image_shifts,
-    const torch::Tensor& image_ptr) {
+    const torch::Tensor& image_offsets) {
     TORCH_CHECK(!positions.is_cuda(), "positions must be a CPU tensor");
     TORCH_CHECK(
-        !ptr.is_cuda() && !cells.is_cuda() && !duals.is_cuda(),
+        !offsets.is_cuda() && !cells.is_cuda() && !duals.is_cuda(),
         "all inputs must be CPU tensors");
     TORCH_CHECK(
-        !image_shifts.is_cuda() && !image_ptr.is_cuda(),
+        !image_shifts.is_cuda() && !image_offsets.is_cuda(),
         "all metadata must be CPU tensors");
     TORCH_CHECK(
-        positions.is_contiguous() && ptr.is_contiguous() && cells.is_contiguous(),
+        positions.is_contiguous() && offsets.is_contiguous() && cells.is_contiguous(),
         "inputs must be contiguous");
     TORCH_CHECK(
         duals.is_contiguous() && image_shifts.is_contiguous() &&
-            image_ptr.is_contiguous(),
+            image_offsets.is_contiguous(),
         "metadata must be contiguous");
     TORCH_CHECK(
         positions.scalar_type() == cells.scalar_type() &&
             positions.scalar_type() == duals.scalar_type(),
         "positions, cells, and duals must have the same dtype");
-    TORCH_CHECK(ptr.scalar_type() == torch::kInt64, "ptr must have dtype int64");
+    TORCH_CHECK(offsets.scalar_type() == torch::kInt64, "offsets must have dtype int64");
     TORCH_CHECK(
         image_shifts.scalar_type() == torch::kInt32,
         "image_shifts must have dtype int32");
     TORCH_CHECK(
-        image_ptr.scalar_type() == torch::kInt64,
-        "image_ptr must have dtype int64");
+        image_offsets.scalar_type() == torch::kInt64,
+        "image_offsets must have dtype int64");
 }
 
 
@@ -228,7 +228,7 @@ inline void append_candidate(
     const int32_t* image_shifts,
     bool distance_known_inside,
     scalar_t cutoff_squared,
-    GraphBuffers& graph) {
+    PairBuffers& pairs) {
     const int32_t* search_shift = image_shifts + 3 * shift;
     if (source == target && search_shift[0] == 0 && search_shift[1] == 0 &&
         search_shift[2] == 0) {
@@ -259,12 +259,12 @@ inline void append_candidate(
         TORCH_CHECK(
             value >= std::numeric_limits<int32_t>::min() &&
                 value <= std::numeric_limits<int32_t>::max(),
-            "a cell shift required by the cutoff graph exceeds the int32 output range");
+            "a cell shift required by the cutoff pairs exceeds the int32 output range");
     }
-    graph.sources.push_back(atom_offset + source);
-    graph.targets.push_back(atom_offset + target);
+    pairs.sources.push_back(atom_offset + source);
+    pairs.targets.push_back(atom_offset + target);
     for (const int64_t value : output_shift) {
-        graph.shifts.push_back(static_cast<int32_t>(value));
+        pairs.shifts.push_back(static_cast<int32_t>(value));
     }
 }
 
@@ -284,7 +284,7 @@ inline void append_cell_candidate(
     scalar_t search_cutoff_squared,
     scalar_t inner_cutoff_squared,
     scalar_t cutoff_squared,
-    GraphBuffers& graph) {
+    PairBuffers& pairs) {
     scalar_t search_distance_squared = scalar_t(0);
     for (int cartesian = 0; cartesian < 3; ++cartesian) {
         const scalar_t component = wrapped_positions[3 * source + cartesian] -
@@ -306,7 +306,7 @@ inline void append_cell_candidate(
         image_shifts,
         search_distance_squared < inner_cutoff_squared,
         cutoff_squared,
-        graph);
+        pairs);
 }
 
 
@@ -320,7 +320,7 @@ void search_exhaustive(
     const std::vector<int32_t>& atom_wraps,
     const int32_t* image_shifts,
     scalar_t cutoff_squared,
-    GraphBuffers& graph) {
+    PairBuffers& pairs) {
     for (int64_t target = 0; target < n_atoms; ++target) {
         for (int64_t source = 0; source < n_atoms; ++source) {
             for (int64_t shift = 0; shift < n_shifts; ++shift) {
@@ -335,7 +335,7 @@ void search_exhaustive(
                     image_shifts,
                     false,
                     cutoff_squared,
-                    graph);
+                    pairs);
             }
         }
     }
@@ -427,7 +427,7 @@ bool search_cell_list(
     scalar_t search_cutoff,
     scalar_t inner_cutoff_squared,
     scalar_t cutoff_squared,
-    GraphBuffers& graph) {
+    PairBuffers& pairs) {
     TORCH_CHECK(
         n_atoms < std::numeric_limits<int32_t>::max() &&
             n_shifts < std::numeric_limits<int32_t>::max(),
@@ -525,7 +525,7 @@ bool search_cell_list(
                             search_cutoff_squared,
                             inner_cutoff_squared,
                             cutoff_squared,
-                            graph);
+                            pairs);
                     }
                 }
             }
@@ -536,37 +536,37 @@ bool search_cell_list(
 
 
 template <typename scalar_t>
-GraphBuffers build_radius_graph(
+PairBuffers build_neighbor_pairs(
     const torch::Tensor& positions,
-    const torch::Tensor& ptr,
+    const torch::Tensor& offsets,
     const torch::Tensor& cells,
     const torch::Tensor& duals,
     const torch::Tensor& image_shifts,
-    const torch::Tensor& image_ptr,
+    const torch::Tensor& image_offsets,
     double cutoff) {
     const scalar_t* position_data = positions.data_ptr<scalar_t>();
-    const int64_t* ptr_data = ptr.data_ptr<int64_t>();
+    const int64_t* offsets_data = offsets.data_ptr<int64_t>();
     const scalar_t* cell_data = cells.data_ptr<scalar_t>();
     const scalar_t* dual_data = duals.data_ptr<scalar_t>();
     const int32_t* image_shift_data = image_shifts.data_ptr<int32_t>();
-    const int64_t* image_ptr_data = image_ptr.data_ptr<int64_t>();
+    const int64_t* image_offsets_data = image_offsets.data_ptr<int64_t>();
     const int64_t n_atoms_total = positions.size(0);
-    const int64_t batch_size = ptr.numel() - 1;
+    const int64_t batch_size = offsets.numel() - 1;
     const scalar_t scalar_cutoff = static_cast<scalar_t>(cutoff);
     const scalar_t cutoff_squared = static_cast<scalar_t>(cutoff * cutoff);
 
-    GraphBuffers graph;
-    graph.sources.reserve(static_cast<size_t>(n_atoms_total) * 32);
-    graph.targets.reserve(static_cast<size_t>(n_atoms_total) * 32);
-    graph.shifts.reserve(static_cast<size_t>(n_atoms_total) * 96);
+    PairBuffers pairs;
+    pairs.sources.reserve(static_cast<size_t>(n_atoms_total) * 32);
+    pairs.targets.reserve(static_cast<size_t>(n_atoms_total) * 32);
+    pairs.shifts.reserve(static_cast<size_t>(n_atoms_total) * 96);
     for (int64_t batch = 0; batch < batch_size; ++batch) {
-        const int64_t atom_offset = ptr_data[batch];
-        const int64_t n_atoms = ptr_data[batch + 1] - atom_offset;
+        const int64_t atom_offset = offsets_data[batch];
+        const int64_t n_atoms = offsets_data[batch + 1] - atom_offset;
         if (n_atoms == 0) {
             continue;
         }
-        const int64_t shift_offset = image_ptr_data[batch];
-        const int64_t n_shifts = image_ptr_data[batch + 1] - shift_offset;
+        const int64_t shift_offset = image_offsets_data[batch];
+        const int64_t n_shifts = image_offsets_data[batch + 1] - shift_offset;
         const scalar_t* cell = cell_data + 9 * batch;
         std::vector<scalar_t> wrapped_positions;
         std::vector<int32_t> atom_wraps;
@@ -590,7 +590,7 @@ GraphBuffers build_radius_graph(
                 atom_wraps,
                 structure_shifts,
                 cutoff_squared,
-                graph);
+                pairs);
             continue;
         }
         const auto translations =
@@ -624,7 +624,7 @@ GraphBuffers build_radius_graph(
                 search_cutoff,
                 inner_cutoff * inner_cutoff,
                 cutoff_squared,
-                graph)) {
+                pairs)) {
             search_exhaustive(
                 atom_offset,
                 n_atoms,
@@ -634,57 +634,57 @@ GraphBuffers build_radius_graph(
                 atom_wraps,
                 structure_shifts,
                 cutoff_squared,
-                graph);
+                pairs);
         }
     }
-    return graph;
+    return pairs;
 }
 
 }  // namespace
 
 
-std::vector<torch::Tensor> radius_graph_pbc_cpu(
+std::vector<torch::Tensor> find_neighbors_cpu(
     const torch::Tensor& positions,
-    const torch::Tensor& ptr,
+    const torch::Tensor& offsets,
     const torch::Tensor& cells,
     const torch::Tensor& duals,
     const torch::Tensor& image_shifts,
-    const torch::Tensor& image_ptr,
+    const torch::Tensor& image_offsets,
     double cutoff) {
     validate_cpu_inputs(
-        positions, ptr, cells, duals, image_shifts, image_ptr);
-    GraphBuffers graph;
+        positions, offsets, cells, duals, image_shifts, image_offsets);
+    PairBuffers pairs;
     AT_DISPATCH_FLOATING_TYPES(
-        positions.scalar_type(), "radius_graph_pbc_cpu", [&] {
-            graph = build_radius_graph<scalar_t>(
+        positions.scalar_type(), "find_neighbors_cpu", [&] {
+            pairs = build_neighbor_pairs<scalar_t>(
                 positions,
-                ptr,
+                offsets,
                 cells,
                 duals,
                 image_shifts,
-                image_ptr,
+                image_offsets,
                 cutoff);
         });
 
-    const int64_t n_edges = static_cast<int64_t>(graph.sources.size());
-    auto edge_index =
-        torch::empty({2, n_edges}, positions.options().dtype(torch::kInt64));
-    auto output_shifts =
-        torch::empty({n_edges, 3}, positions.options().dtype(torch::kInt32));
-    if (n_edges > 0) {
-        int64_t* edge_data = edge_index.data_ptr<int64_t>();
+    const int64_t n_pairs = static_cast<int64_t>(pairs.sources.size());
+    auto pair_indices =
+        torch::empty({2, n_pairs}, positions.options().dtype(torch::kInt64));
+    auto cell_shifts =
+        torch::empty({n_pairs, 3}, positions.options().dtype(torch::kInt32));
+    if (n_pairs > 0) {
+        int64_t* pair_data = pair_indices.data_ptr<int64_t>();
         std::memcpy(
-            edge_data,
-            graph.sources.data(),
-            static_cast<size_t>(n_edges) * sizeof(int64_t));
+            pair_data,
+            pairs.sources.data(),
+            static_cast<size_t>(n_pairs) * sizeof(int64_t));
         std::memcpy(
-            edge_data + n_edges,
-            graph.targets.data(),
-            static_cast<size_t>(n_edges) * sizeof(int64_t));
+            pair_data + n_pairs,
+            pairs.targets.data(),
+            static_cast<size_t>(n_pairs) * sizeof(int64_t));
         std::memcpy(
-            output_shifts.data_ptr<int32_t>(),
-            graph.shifts.data(),
-            static_cast<size_t>(3 * n_edges) * sizeof(int32_t));
+            cell_shifts.data_ptr<int32_t>(),
+            pairs.shifts.data(),
+            static_cast<size_t>(3 * n_pairs) * sizeof(int32_t));
     }
-    return {edge_index, output_shifts};
+    return {pair_indices, cell_shifts};
 }

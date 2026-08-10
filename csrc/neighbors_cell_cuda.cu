@@ -2,7 +2,7 @@
 #include <c10/cuda/CUDAException.h>
 #include <c10/cuda/CUDAGuard.h>
 
-#include "radius_graph_cuda.h"
+#include "neighbors_cuda.h"
 
 #include <cstdint>
 #include <limits>
@@ -19,13 +19,13 @@ constexpr int64_t kMaximumBinsPerNode = 64;
 
 __device__ __forceinline__ int64_t segment_for_index(
     int64_t index,
-    const int64_t* segment_ptr,
+    const int64_t* segment_offsets,
     int64_t n_segments) {
     int64_t lower = 0;
     int64_t upper = n_segments;
     while (lower < upper) {
         const int64_t middle = lower + (upper - lower) / 2;
-        if (segment_ptr[middle + 1] <= index) {
+        if (segment_offsets[middle + 1] <= index) {
             lower = middle + 1;
         } else {
             upper = middle;
@@ -102,7 +102,7 @@ __device__ __forceinline__ void atomic_maximum<double>(double* address, double v
 template <typename scalar_t>
 __global__ void wrap_positions_kernel(
     const scalar_t* positions,
-    const int64_t* ptr,
+    const int64_t* offsets,
     const scalar_t* cells,
     const scalar_t* duals,
     int64_t n_atoms,
@@ -116,7 +116,7 @@ __global__ void wrap_positions_kernel(
     if (atom >= n_atoms) {
         return;
     }
-    const int64_t batch = segment_for_index(atom, ptr, batch_size);
+    const int64_t batch = segment_for_index(atom, offsets, batch_size);
     const scalar_t* position = positions + 3 * atom;
     const scalar_t* cell = cells + 9 * batch;
     const scalar_t* dual = duals + 9 * batch;
@@ -182,7 +182,7 @@ __global__ void wrap_positions_kernel(
 
 template <typename scalar_t>
 __global__ void define_bins_kernel(
-    const int64_t* ptr,
+    const int64_t* offsets,
     const scalar_t* bounds_minimum,
     const scalar_t* bounds_maximum,
     int64_t batch_size,
@@ -204,7 +204,7 @@ __global__ void define_bins_kernel(
     for (int cartesian = 0; cartesian < 3; ++cartesian) {
         int64_t dimension = 1;
         scalar_t origin = scalar_t(0);
-        if (ptr[batch + 1] > ptr[batch]) {
+        if (offsets[batch + 1] > offsets[batch]) {
             const scalar_t minimum = bounds_minimum[3 * batch + cartesian];
             const scalar_t maximum = bounds_maximum[3 * batch + cartesian];
             origin = minimum - cutoff;
@@ -233,17 +233,17 @@ __global__ void define_bins_kernel(
 
 template <typename scalar_t>
 __global__ void insert_images_kernel(
-    const int64_t* ptr,
+    const int64_t* offsets,
     const scalar_t* cells,
     const scalar_t* wrapped_positions,
     const int32_t* image_shifts,
-    const int64_t* image_ptr,
-    const int64_t* node_ptr,
+    const int64_t* image_offsets,
+    const int64_t* node_offsets,
     const scalar_t* bounds_minimum,
     const scalar_t* bounds_maximum,
     const scalar_t* bin_origins,
     const int64_t* bin_dimensions,
-    const int64_t* bin_ptr,
+    const int64_t* bin_offsets,
     int64_t total_nodes,
     int64_t batch_size,
     scalar_t cutoff,
@@ -253,14 +253,14 @@ __global__ void insert_images_kernel(
     if (node >= total_nodes) {
         return;
     }
-    const int64_t batch = segment_for_index(node, node_ptr, batch_size);
-    const int64_t local_node = node - node_ptr[batch];
-    const int64_t n_shifts = image_ptr[batch + 1] - image_ptr[batch];
+    const int64_t batch = segment_for_index(node, node_offsets, batch_size);
+    const int64_t local_node = node - node_offsets[batch];
+    const int64_t n_shifts = image_offsets[batch + 1] - image_offsets[batch];
     const int64_t local_source = local_node / n_shifts;
     const int64_t shift_index = local_node % n_shifts;
-    const int64_t source = ptr[batch] + local_source;
+    const int64_t source = offsets[batch] + local_source;
     const scalar_t* cell = cells + 9 * batch;
-    const int32_t* shift = image_shifts + 3 * (image_ptr[batch] + shift_index);
+    const int32_t* shift = image_shifts + 3 * (image_offsets[batch] + shift_index);
     int64_t coordinates[3];
 #pragma unroll
     for (int cartesian = 0; cartesian < 3; ++cartesian) {
@@ -285,34 +285,34 @@ __global__ void insert_images_kernel(
         (coordinates[0] * bin_dimensions[3 * batch + 1] + coordinates[1]) *
             bin_dimensions[3 * batch + 2] +
         coordinates[2];
-    const int64_t bin = bin_ptr[batch] + local_bin;
+    const int64_t bin = bin_offsets[batch] + local_bin;
     node_next[node] = atomicExch(bin_heads + bin, static_cast<int32_t>(node));
 }
 
 
-template <typename scalar_t, bool write_edges>
+template <typename scalar_t, bool write_pairs>
 __global__ void query_bins_kernel(
-    const int64_t* ptr,
+    const int64_t* offsets,
     const scalar_t* cells,
     const scalar_t* wrapped_positions,
     const int32_t* atom_wraps,
     const int32_t* image_shifts,
-    const int64_t* image_ptr,
-    const int64_t* node_ptr,
+    const int64_t* image_offsets,
+    const int64_t* node_offsets,
     const scalar_t* bin_origins,
     const int64_t* bin_dimensions,
-    const int64_t* bin_ptr,
+    const int64_t* bin_offsets,
     const int32_t* bin_heads,
     const int32_t* node_next,
     int64_t n_atoms,
     int64_t batch_size,
     scalar_t cutoff,
-    const int64_t* edge_ptr,
-    int64_t* target_counts,
+    const int64_t* pair_offsets,
+    int64_t* target_pair_counts,
     int64_t* shift_overflow,
-    int64_t n_edges,
-    int64_t* edge_index,
-    int32_t* output_shifts) {
+    int64_t n_pairs,
+    int64_t* pair_indices,
+    int32_t* cell_shifts) {
     const int lane = threadIdx.x % kWarpSize;
     const int warp = threadIdx.x / kWarpSize;
     const int64_t target =
@@ -320,7 +320,7 @@ __global__ void query_bins_kernel(
     if (target >= n_atoms) {
         return;
     }
-    const int64_t batch = segment_for_index(target, ptr, batch_size);
+    const int64_t batch = segment_for_index(target, offsets, batch_size);
     const scalar_t* cell = cells + 9 * batch;
     int64_t target_bin[3];
 #pragma unroll
@@ -337,7 +337,7 @@ __global__ void query_bins_kernel(
     }
 
     __shared__ int warp_output_cursors[kWarpsPerBlock];
-    if constexpr (write_edges) {
+    if constexpr (write_pairs) {
         if (lane == 0) {
             warp_output_cursors[warp] = 0;
         }
@@ -359,15 +359,15 @@ __global__ void query_bins_kernel(
                 (coordinate_x * bin_dimensions[3 * batch + 1] + coordinate_y) *
                     bin_dimensions[3 * batch + 2] +
                 coordinate_z;
-            int32_t node = bin_heads[bin_ptr[batch] + local_bin];
+            int32_t node = bin_heads[bin_offsets[batch] + local_bin];
             while (node >= 0) {
-                const int64_t local_node = node - node_ptr[batch];
-                const int64_t n_shifts = image_ptr[batch + 1] - image_ptr[batch];
+                const int64_t local_node = node - node_offsets[batch];
+                const int64_t n_shifts = image_offsets[batch + 1] - image_offsets[batch];
                 const int64_t local_source = local_node / n_shifts;
                 const int64_t shift_index = local_node % n_shifts;
-                const int64_t source = ptr[batch] + local_source;
+                const int64_t source = offsets[batch] + local_source;
                 const int32_t* wrapped_shift =
-                    image_shifts + 3 * (image_ptr[batch] + shift_index);
+                    image_shifts + 3 * (image_offsets[batch] + shift_index);
                 int64_t output_shift[3];
                 scalar_t distance_squared = scalar_t(0);
 #pragma unroll
@@ -408,14 +408,14 @@ __global__ void query_bins_kernel(
                         node = node_next[node];
                         continue;
                     }
-                    if constexpr (write_edges) {
+                    if constexpr (write_pairs) {
                         const int local_output = atomicAdd(warp_output_cursors + warp, 1);
-                        const int64_t output = edge_ptr[target] + local_output;
-                        edge_index[output] = source;
-                        edge_index[n_edges + output] = target;
+                        const int64_t output = pair_offsets[target] + local_output;
+                        pair_indices[output] = source;
+                        pair_indices[n_pairs + output] = target;
 #pragma unroll
                         for (int axis = 0; axis < 3; ++axis) {
-                            output_shifts[3 * output + axis] =
+                            cell_shifts[3 * output + axis] =
                                 static_cast<int32_t>(output_shift[axis]);
                         }
                     } else {
@@ -427,13 +427,13 @@ __global__ void query_bins_kernel(
         }
     }
 
-    if constexpr (!write_edges) {
+    if constexpr (!write_pairs) {
 #pragma unroll
         for (int delta = kWarpSize / 2; delta > 0; delta /= 2) {
             lane_count += __shfl_down_sync(0xffffffff, lane_count, delta);
         }
         if (lane == 0) {
-            target_counts[target] = lane_count;
+            target_pair_counts[target] = lane_count;
         }
     }
 }
@@ -441,21 +441,21 @@ __global__ void query_bins_kernel(
 
 void validate_cell_inputs(
     const torch::Tensor& positions,
-    const torch::Tensor& ptr,
+    const torch::Tensor& offsets,
     const torch::Tensor& cells,
     const torch::Tensor& duals,
     const torch::Tensor& image_shifts,
-    const torch::Tensor& image_ptr,
-    const torch::Tensor& block_ptr,
-    const torch::Tensor& node_ptr,
+    const torch::Tensor& image_offsets,
+    const torch::Tensor& block_offsets,
+    const torch::Tensor& node_offsets,
     int64_t total_nodes) {
     TORCH_CHECK(positions.is_cuda(), "positions must be a CUDA tensor");
-    TORCH_CHECK(ptr.is_cuda() && cells.is_cuda() && duals.is_cuda(), "all inputs must be CUDA tensors");
-    TORCH_CHECK(image_shifts.is_cuda() && image_ptr.is_cuda(), "all metadata must be CUDA tensors");
-    TORCH_CHECK(block_ptr.is_cuda() && node_ptr.is_cuda(), "all metadata must be CUDA tensors");
-    TORCH_CHECK(positions.is_contiguous() && ptr.is_contiguous() && cells.is_contiguous(), "inputs must be contiguous");
+    TORCH_CHECK(offsets.is_cuda() && cells.is_cuda() && duals.is_cuda(), "all inputs must be CUDA tensors");
+    TORCH_CHECK(image_shifts.is_cuda() && image_offsets.is_cuda(), "all metadata must be CUDA tensors");
+    TORCH_CHECK(block_offsets.is_cuda() && node_offsets.is_cuda(), "all metadata must be CUDA tensors");
+    TORCH_CHECK(positions.is_contiguous() && offsets.is_contiguous() && cells.is_contiguous(), "inputs must be contiguous");
     TORCH_CHECK(duals.is_contiguous() && image_shifts.is_contiguous(), "metadata must be contiguous");
-    TORCH_CHECK(image_ptr.is_contiguous() && block_ptr.is_contiguous() && node_ptr.is_contiguous(), "metadata must be contiguous");
+    TORCH_CHECK(image_offsets.is_contiguous() && block_offsets.is_contiguous() && node_offsets.is_contiguous(), "metadata must be contiguous");
     TORCH_CHECK(positions.scalar_type() == cells.scalar_type(), "positions and cells must have the same dtype");
     TORCH_CHECK(positions.scalar_type() == duals.scalar_type(), "positions and duals must have the same dtype");
     TORCH_CHECK(total_nodes >= 0 && total_nodes < (int64_t{1} << 31), "cell-list node count exceeds int32 indexing");
@@ -464,36 +464,36 @@ void validate_cell_inputs(
 }  // namespace
 
 
-std::vector<torch::Tensor> radius_graph_pbc_cell_cuda(
+std::vector<torch::Tensor> find_neighbors_cell_cuda(
     const torch::Tensor& positions,
-    const torch::Tensor& ptr,
+    const torch::Tensor& offsets,
     const torch::Tensor& cells,
     const torch::Tensor& duals,
     const torch::Tensor& image_shifts,
-    const torch::Tensor& image_ptr,
-    const torch::Tensor& block_ptr,
-    const torch::Tensor& node_ptr,
+    const torch::Tensor& image_offsets,
+    const torch::Tensor& block_offsets,
+    const torch::Tensor& node_offsets,
     int64_t total_blocks,
     int64_t total_nodes,
     double cutoff) {
     validate_cell_inputs(
         positions,
-        ptr,
+        offsets,
         cells,
         duals,
         image_shifts,
-        image_ptr,
-        block_ptr,
-        node_ptr,
+        image_offsets,
+        block_offsets,
+        node_offsets,
         total_nodes);
     const c10::cuda::CUDAGuard device_guard(positions.device());
     const auto stream = at::cuda::getCurrentCUDAStream(positions.get_device());
     const int64_t n_atoms = positions.size(0);
-    const int64_t batch_size = ptr.numel() - 1;
-    auto edge_index = torch::empty({2, 0}, positions.options().dtype(torch::kInt64));
-    auto output_shifts = torch::empty({0, 3}, positions.options().dtype(torch::kInt32));
+    const int64_t batch_size = offsets.numel() - 1;
+    auto pair_indices = torch::empty({2, 0}, positions.options().dtype(torch::kInt64));
+    auto cell_shifts = torch::empty({0, 3}, positions.options().dtype(torch::kInt32));
     if (n_atoms == 0) {
-        return {edge_index, output_shifts};
+        return {pair_indices, cell_shifts};
     }
 
     auto wrapped_positions = torch::empty_like(positions);
@@ -510,10 +510,10 @@ std::vector<torch::Tensor> radius_graph_pbc_cell_cuda(
         sizeof(int64_t),
         stream));
     const int64_t atom_blocks = (n_atoms + kThreads - 1) / kThreads;
-    AT_DISPATCH_FLOATING_TYPES(positions.scalar_type(), "wrap_radius_graph_positions", [&] {
+    AT_DISPATCH_FLOATING_TYPES(positions.scalar_type(), "wrap_neighbor_search_positions", [&] {
         wrap_positions_kernel<scalar_t><<<atom_blocks, kThreads, 0, stream>>>(
             positions.data_ptr<scalar_t>(),
-            ptr.data_ptr<int64_t>(),
+            offsets.data_ptr<int64_t>(),
             cells.data_ptr<scalar_t>(),
             duals.data_ptr<scalar_t>(),
             n_atoms,
@@ -530,9 +530,9 @@ std::vector<torch::Tensor> radius_graph_pbc_cell_cuda(
     auto bin_dimensions = torch::empty(
         {batch_size, 3}, positions.options().dtype(torch::kInt64));
     const int64_t batch_blocks = (batch_size + 1 + kThreads - 1) / kThreads;
-    AT_DISPATCH_FLOATING_TYPES(positions.scalar_type(), "define_radius_graph_bins", [&] {
+    AT_DISPATCH_FLOATING_TYPES(positions.scalar_type(), "define_neighbor_search_bins", [&] {
         define_bins_kernel<scalar_t><<<batch_blocks, kThreads, 0, stream>>>(
-            ptr.data_ptr<int64_t>(),
+            offsets.data_ptr<int64_t>(),
             bounds_minimum.data_ptr<scalar_t>(),
             bounds_maximum.data_ptr<scalar_t>(),
             batch_size,
@@ -542,14 +542,14 @@ std::vector<torch::Tensor> radius_graph_pbc_cell_cuda(
             bin_counts.data_ptr<int64_t>());
     });
     C10_CUDA_KERNEL_LAUNCH_CHECK();
-    auto bin_ptr = torch::empty(
+    auto bin_offsets = torch::empty(
         {batch_size + 2}, positions.options().dtype(torch::kInt64));
     C10_CUDA_CHECK(cudaMemsetAsync(
-        bin_ptr.data_ptr<int64_t>(), 0, sizeof(int64_t), stream));
-    bin_ptr.slice(0, 1, batch_size + 2)
+        bin_offsets.data_ptr<int64_t>(), 0, sizeof(int64_t), stream));
+    bin_offsets.slice(0, 1, batch_size + 2)
         .copy_(torch::cumsum(bin_counts, 0, torch::kInt64));
     const auto bin_result_cpu =
-        bin_ptr.slice(0, batch_size, batch_size + 2).cpu();
+        bin_offsets.slice(0, batch_size, batch_size + 2).cpu();
     const int64_t* bin_result = bin_result_cpu.data_ptr<int64_t>();
     const int64_t total_bins = bin_result[0];
     TORCH_CHECK(total_bins >= 0, "cell-list bin count exceeds the int64 range");
@@ -566,14 +566,14 @@ std::vector<torch::Tensor> radius_graph_pbc_cell_cuda(
             total_blocks < (int64_t{1} << 31),
             "unwrapped representatives require the exhaustive CUDA path with "
             "fewer than 2^31 thread blocks");
-        return radius_graph_pbc_cuda(
+        return find_neighbors_cuda(
             positions,
-            ptr,
+            offsets,
             cells,
             duals,
             image_shifts,
-            image_ptr,
-            block_ptr,
+            image_offsets,
+            block_offsets,
             total_blocks,
             cutoff);
     }
@@ -583,14 +583,14 @@ std::vector<torch::Tensor> radius_graph_pbc_cell_cuda(
             total_blocks < (int64_t{1} << 31),
             "the cell-list bin layout exceeds its safety limits and the exhaustive "
             "fallback requires fewer than 2^31 thread blocks");
-        return radius_graph_pbc_cuda(
+        return find_neighbors_cuda(
             positions,
-            ptr,
+            offsets,
             cells,
             duals,
             image_shifts,
-            image_ptr,
-            block_ptr,
+            image_offsets,
+            block_offsets,
             total_blocks,
             cutoff);
     }
@@ -600,19 +600,19 @@ std::vector<torch::Tensor> radius_graph_pbc_cell_cuda(
     auto node_next = torch::full(
         {total_nodes}, -1, positions.options().dtype(torch::kInt32));
     const int64_t node_blocks = (total_nodes + kThreads - 1) / kThreads;
-    AT_DISPATCH_FLOATING_TYPES(positions.scalar_type(), "insert_radius_graph_images", [&] {
+    AT_DISPATCH_FLOATING_TYPES(positions.scalar_type(), "insert_neighbor_search_images", [&] {
         insert_images_kernel<scalar_t><<<node_blocks, kThreads, 0, stream>>>(
-            ptr.data_ptr<int64_t>(),
+            offsets.data_ptr<int64_t>(),
             cells.data_ptr<scalar_t>(),
             wrapped_positions.data_ptr<scalar_t>(),
             image_shifts.data_ptr<int32_t>(),
-            image_ptr.data_ptr<int64_t>(),
-            node_ptr.data_ptr<int64_t>(),
+            image_offsets.data_ptr<int64_t>(),
+            node_offsets.data_ptr<int64_t>(),
             bounds_minimum.data_ptr<scalar_t>(),
             bounds_maximum.data_ptr<scalar_t>(),
             bin_origins.data_ptr<scalar_t>(),
             bin_dimensions.data_ptr<int64_t>(),
-            bin_ptr.data_ptr<int64_t>(),
+            bin_offsets.data_ptr<int64_t>(),
             total_nodes,
             batch_size,
             static_cast<scalar_t>(cutoff),
@@ -621,80 +621,80 @@ std::vector<torch::Tensor> radius_graph_pbc_cell_cuda(
     });
     C10_CUDA_KERNEL_LAUNCH_CHECK();
 
-    auto target_counts = torch::empty(
+    auto target_pair_counts = torch::empty(
         {n_atoms + 1}, positions.options().dtype(torch::kInt64));
     // The final slot is also a status word. The query kernel writes INT64_MIN
-    // on shift overflow, and the required edge-count cumsum returns it to the host.
+    // on shift overflow, and the required pair-count cumsum returns it to the host.
     C10_CUDA_CHECK(cudaMemsetAsync(
-        target_counts.data_ptr<int64_t>() + n_atoms,
+        target_pair_counts.data_ptr<int64_t>() + n_atoms,
         0,
         sizeof(int64_t),
         stream));
     const int64_t query_blocks = (n_atoms + kWarpsPerBlock - 1) / kWarpsPerBlock;
-    auto edge_ptr = torch::empty(
+    auto pair_offsets = torch::empty(
         {n_atoms + 2}, positions.options().dtype(torch::kInt64));
     C10_CUDA_CHECK(cudaMemsetAsync(
-        edge_ptr.data_ptr<int64_t>(), 0, sizeof(int64_t), stream));
-    AT_DISPATCH_FLOATING_TYPES(positions.scalar_type(), "count_radius_graph_cell_edges", [&] {
+        pair_offsets.data_ptr<int64_t>(), 0, sizeof(int64_t), stream));
+    AT_DISPATCH_FLOATING_TYPES(positions.scalar_type(), "count_neighbor_search_cell_pairs", [&] {
         query_bins_kernel<scalar_t, false><<<query_blocks, kThreads, 0, stream>>>(
-            ptr.data_ptr<int64_t>(),
+            offsets.data_ptr<int64_t>(),
             cells.data_ptr<scalar_t>(),
             wrapped_positions.data_ptr<scalar_t>(),
             atom_wraps.data_ptr<int32_t>(),
             image_shifts.data_ptr<int32_t>(),
-            image_ptr.data_ptr<int64_t>(),
-            node_ptr.data_ptr<int64_t>(),
+            image_offsets.data_ptr<int64_t>(),
+            node_offsets.data_ptr<int64_t>(),
             bin_origins.data_ptr<scalar_t>(),
             bin_dimensions.data_ptr<int64_t>(),
-            bin_ptr.data_ptr<int64_t>(),
+            bin_offsets.data_ptr<int64_t>(),
             bin_heads.data_ptr<int32_t>(),
             node_next.data_ptr<int32_t>(),
             n_atoms,
             batch_size,
             static_cast<scalar_t>(cutoff),
             nullptr,
-            target_counts.data_ptr<int64_t>(),
-            target_counts.data_ptr<int64_t>() + n_atoms,
+            target_pair_counts.data_ptr<int64_t>(),
+            target_pair_counts.data_ptr<int64_t>() + n_atoms,
             0,
             nullptr,
             nullptr);
     });
     C10_CUDA_KERNEL_LAUNCH_CHECK();
-    edge_ptr.slice(0, 1, n_atoms + 2)
-        .copy_(torch::cumsum(target_counts, 0, torch::kInt64));
-    const int64_t n_edges = edge_ptr[n_atoms + 1].item<int64_t>();
+    pair_offsets.slice(0, 1, n_atoms + 2)
+        .copy_(torch::cumsum(target_pair_counts, 0, torch::kInt64));
+    const int64_t n_pairs = pair_offsets[n_atoms + 1].item<int64_t>();
     TORCH_CHECK(
-        n_edges >= 0,
-        "a cell shift required by the cutoff graph exceeds the int32 output range");
-    edge_index = torch::empty({2, n_edges}, positions.options().dtype(torch::kInt64));
-    output_shifts = torch::empty({n_edges, 3}, positions.options().dtype(torch::kInt32));
-    if (n_edges == 0) {
-        return {edge_index, output_shifts};
+        n_pairs >= 0,
+        "a cell shift required by the neighbor list exceeds the int32 output range");
+    pair_indices = torch::empty({2, n_pairs}, positions.options().dtype(torch::kInt64));
+    cell_shifts = torch::empty({n_pairs, 3}, positions.options().dtype(torch::kInt32));
+    if (n_pairs == 0) {
+        return {pair_indices, cell_shifts};
     }
-    AT_DISPATCH_FLOATING_TYPES(positions.scalar_type(), "write_radius_graph_cell_edges", [&] {
+    AT_DISPATCH_FLOATING_TYPES(positions.scalar_type(), "write_neighbor_search_cell_pairs", [&] {
         query_bins_kernel<scalar_t, true><<<query_blocks, kThreads, 0, stream>>>(
-            ptr.data_ptr<int64_t>(),
+            offsets.data_ptr<int64_t>(),
             cells.data_ptr<scalar_t>(),
             wrapped_positions.data_ptr<scalar_t>(),
             atom_wraps.data_ptr<int32_t>(),
             image_shifts.data_ptr<int32_t>(),
-            image_ptr.data_ptr<int64_t>(),
-            node_ptr.data_ptr<int64_t>(),
+            image_offsets.data_ptr<int64_t>(),
+            node_offsets.data_ptr<int64_t>(),
             bin_origins.data_ptr<scalar_t>(),
             bin_dimensions.data_ptr<int64_t>(),
-            bin_ptr.data_ptr<int64_t>(),
+            bin_offsets.data_ptr<int64_t>(),
             bin_heads.data_ptr<int32_t>(),
             node_next.data_ptr<int32_t>(),
             n_atoms,
             batch_size,
             static_cast<scalar_t>(cutoff),
-            edge_ptr.data_ptr<int64_t>(),
+            pair_offsets.data_ptr<int64_t>(),
             nullptr,
             nullptr,
-            n_edges,
-            edge_index.data_ptr<int64_t>(),
-            output_shifts.data_ptr<int32_t>());
+            n_pairs,
+            pair_indices.data_ptr<int64_t>(),
+            cell_shifts.data_ptr<int32_t>());
     });
     C10_CUDA_KERNEL_LAUNCH_CHECK();
-    return {edge_index, output_shifts};
+    return {pair_indices, cell_shifts};
 }

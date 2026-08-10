@@ -6,53 +6,49 @@ from math import ceil
 import torch
 from torch import Tensor
 
-from ._geometry import validate_inputs
+from ._search import validate_torch_inputs
+from .neighbors import _normalize_torch_inputs
 
 _MAXIMUM_IMAGE_SHIFTS = 2**24
 
 
 @torch.no_grad()
-def reference_radius_graph_pbc(
+def find_neighbors_reference(
     positions: Tensor,
-    ptr: Tensor,
     cells: Tensor,
     pbc: Tensor,
     cutoff: float,
+    offsets: Tensor | None = None,
 ) -> tuple[Tensor, Tensor]:
-    """Construct the complete directed periodic cutoff graph exhaustively.
+    """Find neighbors exhaustively for development-time correctness checks."""
 
-    This implementation intentionally stays independent of the CUDA kernels and
-    serves as a correctness oracle for small inputs. Returned ``cell_shifts``
-    satisfy ``positions[source] - positions[target] + cell_shifts @ cell``. The
-    zero-displacement onsite edge is excluded, periodic self-images are retained,
-    and the cutoff comparison is strict.
-    """
-
+    positions, cells, pbc, offsets = _normalize_torch_inputs(
+        positions, cells, pbc, offsets
+    )
     cutoff = float(cutoff)
     cutoff_squared = cutoff * cutoff
     int32_range = torch.iinfo(torch.int32)
-    validate_inputs(positions, ptr, cells, pbc, cutoff)
-    ptr_cpu = ptr.detach().cpu()
-    pbc_cpu = pbc.detach().cpu()
-    if ptr_cpu[0].item() != 0 or ptr_cpu[-1].item() != len(positions):
-        raise ValueError("ptr must start at zero and end at n_atoms_total")
-    if torch.any(ptr_cpu[1:] < ptr_cpu[:-1]):
-        raise ValueError("ptr must be nondecreasing")
+    validate_torch_inputs(positions, cells, pbc, cutoff, offsets)
+    offsets_cpu = offsets.detach().cpu()
+    if offsets_cpu[0].item() != 0 or offsets_cpu[-1].item() != len(positions):
+        raise ValueError("offsets must start at zero and end at N_total")
+    if torch.any(offsets_cpu[1:] < offsets_cpu[:-1]):
+        raise ValueError("offsets must be nondecreasing")
     if not torch.all(torch.isfinite(positions)):
         raise ValueError("positions must contain only finite values")
     if not torch.all(torch.isfinite(cells)):
         raise ValueError("cells must contain only finite values")
 
-    edge_indices: list[Tensor] = []
-    edge_shifts: list[Tensor] = []
+    pair_indices: list[Tensor] = []
+    pair_shifts: list[Tensor] = []
     total_image_count = 0
-    for batch_index in range(ptr.numel() - 1):
-        start = int(ptr_cpu[batch_index])
-        stop = int(ptr_cpu[batch_index + 1])
+    for batch_index in range(offsets.numel() - 1):
+        start = int(offsets_cpu[batch_index])
+        stop = int(offsets_cpu[batch_index + 1])
         structure_positions = positions[start:stop]
         if stop == start:
             continue
-        active_axes = torch.nonzero(pbc_cpu[batch_index], as_tuple=False).flatten()
+        active_axes = torch.nonzero(pbc[batch_index], as_tuple=False).flatten()
         atom_wrap = torch.zeros(
             (stop - start, 3), dtype=torch.int64, device=positions.device
         )
@@ -97,17 +93,19 @@ def reference_radius_graph_pbc(
                 - atom_wrap[:, None, :]
                 + atom_wrap[None, :, :]
             )
-            vectors = structure_positions[:, None, :] - structure_positions[None, :, :]
+            displacements = (
+                structure_positions[:, None, :] - structure_positions[None, :, :]
+            )
             for axis in range(3):
-                vectors = (
-                    vectors
+                displacements = (
+                    displacements
                     + shifts[..., axis, None].to(positions.dtype)
                     * cells[batch_index, axis]
                 )
             distance_squared = (
-                vectors[..., 0] * vectors[..., 0]
-                + vectors[..., 1] * vectors[..., 1]
-                + vectors[..., 2] * vectors[..., 2]
+                displacements[..., 0] * displacements[..., 0]
+                + displacements[..., 1] * displacements[..., 1]
+                + displacements[..., 2] * displacements[..., 2]
             )
             within_cutoff = distance_squared < cutoff_squared
             if shift_values == (0, 0, 0):
@@ -121,14 +119,14 @@ def reference_radius_graph_pbc(
                 | (selected_shifts > int32_range.max)
             ):
                 raise ValueError(
-                    "a cell shift required by the cutoff graph exceeds the int32 output range"
+                    "a cell shift required by the neighbor list exceeds the int32 output range"
                 )
-            edge_indices.append(torch.stack((source + start, target + start)))
-            edge_shifts.append(selected_shifts.to(torch.int32))
+            pair_indices.append(torch.stack((source + start, target + start)))
+            pair_shifts.append(selected_shifts.to(torch.int32))
 
-    if not edge_indices:
+    if not pair_indices:
         return (
             torch.empty((2, 0), dtype=torch.int64, device=positions.device),
             torch.empty((0, 3), dtype=torch.int32, device=positions.device),
         )
-    return torch.cat(edge_indices, dim=1), torch.cat(edge_shifts, dim=0)
+    return torch.cat(pair_indices, dim=1), torch.cat(pair_shifts, dim=0)

@@ -5,11 +5,11 @@
 #include <vector>
 
 
-std::vector<torch::Tensor> radius_graph_pbc_cpu(
+std::vector<torch::Tensor> find_neighbors_cpu(
     const torch::Tensor& positions,
-    const torch::Tensor& ptr,
+    const torch::Tensor& offsets,
     const torch::Tensor& cells,
     const torch::Tensor& duals,
     const torch::Tensor& image_shifts,
-    const torch::Tensor& image_ptr,
+    const torch::Tensor& image_offsets,
     double cutoff);

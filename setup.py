@@ -9,13 +9,13 @@ from torch.utils.cpp_extension import (
 
 extensions = [
     CppExtension(
-        name="torch_radius_graph._C_cpu",
+        name="tonari._C_cpu",
         sources=[
             "csrc/bindings_cpu.cpp",
             "csrc/periodic_geometry.cpp",
-            "csrc/radius_graph_cpu.cpp",
+            "csrc/neighbors_cpu.cpp",
         ],
-        depends=["csrc/periodic_geometry.h", "csrc/radius_graph_cpu.h"],
+        depends=["csrc/periodic_geometry.h", "csrc/neighbors_cpu.h"],
         extra_compile_args=["-O3"],
     )
 ]
@@ -23,13 +23,13 @@ extensions = [
 if CUDA_HOME is not None and torch.version.cuda is not None:
     extensions.append(
         CUDAExtension(
-            name="torch_radius_graph._C_cuda",
+            name="tonari._C_cuda",
             sources=[
                 "csrc/bindings_cuda.cpp",
-                "csrc/radius_graph_cuda.cu",
-                "csrc/radius_graph_cell_cuda.cu",
+                "csrc/neighbors_cuda.cu",
+                "csrc/neighbors_cell_cuda.cu",
             ],
-            depends=["csrc/radius_graph_cuda.h"],
+            depends=["csrc/neighbors_cuda.h"],
             extra_compile_args={
                 "cxx": ["-O3"],
                 "nvcc": ["-O3", "-lineinfo"],

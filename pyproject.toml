@@ -1,10 +1,11 @@
 [project]
-name = "torch-radius-graph"
+name = "tonari"
 version = "0.1.0"
-description = "Experimental batched periodic radius graphs for PyTorch CPU and CUDA"
+description = "Neighbor search for NumPy and PyTorch on CPU and CUDA"
 readme = "README.md"
 requires-python = "==3.12.*"
 dependencies = [
+  "numpy>=2.0",
   "torch==2.12.1",
 ]
 

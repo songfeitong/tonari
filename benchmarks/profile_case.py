@@ -11,7 +11,7 @@ from benchmarks.matbench_data import (
     repeat_structure,
     select_scaling_structure,
 )
-from torch_radius_graph import radius_graph_pbc
+from tonari import find_neighbors
 
 
 def main() -> None:
@@ -37,14 +37,14 @@ def main() -> None:
     structure = repeat_structure(structure, (args.factor, args.factor, args.factor))
     batch = collate_structures([structure]).to(torch.device("cuda"))
     for _ in range(3):
-        radius_graph_pbc(
-            batch.positions, batch.ptr, batch.cells, batch.pbc, args.cutoff
+        find_neighbors(
+            batch.positions, batch.cells, batch.pbc, args.cutoff, batch.offsets
         )
     torch.cuda.synchronize()
-    torch.cuda.nvtx.range_push("profile_radius_graph")
+    torch.cuda.nvtx.range_push("profile_find_neighbors")
     for _ in range(args.iterations):
-        radius_graph_pbc(
-            batch.positions, batch.ptr, batch.cells, batch.pbc, args.cutoff
+        find_neighbors(
+            batch.positions, batch.cells, batch.pbc, args.cutoff, batch.offsets
         )
     torch.cuda.nvtx.range_pop()
     torch.cuda.synchronize()

@@ -24,8 +24,8 @@ from benchmarks.matbench_data import (
     repeat_structure,
     select_scaling_structure,
 )
-from benchmarks.run_benchmark import canonical_keys, file_sha256, git_revision
-from torch_radius_graph import _C_cpu, radius_graph_pbc
+from benchmarks.run_cuda_benchmark import canonical_keys, file_sha256, git_revision
+from tonari import _C_cpu, find_neighbors
 
 Backend = Callable[[StructureBatch, float], tuple[Tensor, Tensor]]
 
@@ -71,13 +71,13 @@ class VesinCpuBackend:
         return torch.stack((second.to(torch.int64), first.to(torch.int64))), shifts
 
 
-def torch_radius_graph(batch: StructureBatch, cutoff: float) -> tuple[Tensor, Tensor]:
-    return radius_graph_pbc(
+def tonari_cpu(batch: StructureBatch, cutoff: float) -> tuple[Tensor, Tensor]:
+    return find_neighbors(
         batch.positions,
-        batch.ptr,
         batch.cells,
         batch.pbc,
         cutoff,
+        batch.offsets,
     )
 
 
@@ -99,9 +99,9 @@ def validate_external_reference(
     batches: Sequence[StructureBatch], cutoff: float
 ) -> dict[str, int | bool]:
     vesin = VesinCpuBackend(cutoff)
-    total_edges = 0
+    total_pairs = 0
     for batch_index, batch in enumerate(batches):
-        actual = canonical_keys(torch_radius_graph(batch, cutoff))
+        actual = canonical_keys(tonari_cpu(batch, cutoff))
         expected = canonical_keys(vesin(batch, cutoff))
         if not np.array_equal(actual, expected):
             missing = len(set(map(tuple, expected)) - set(map(tuple, actual)))
@@ -109,11 +109,11 @@ def validate_external_reference(
             raise AssertionError(
                 f"Matbench structure {batch_index} differs from Vesin: {missing=} {extra=}"
             )
-        total_edges += len(actual)
+        total_pairs += len(actual)
     return {
         "exact_key_match": True,
         "structures": len(batches),
-        "edges": total_edges,
+        "pairs": total_pairs,
     }
 
 
@@ -133,15 +133,15 @@ def measure_backend(
         warmup_traversals += 1
 
     elapsed_ms = []
-    edge_count = 0
+    pair_count = 0
     for repeat in range(repeats):
         start = time.perf_counter()
-        current_edges = 0
+        current_pairs = 0
         for batch in batches:
-            current_edges += backend(batch, cutoff)[0].shape[1]
+            current_pairs += backend(batch, cutoff)[0].shape[1]
         elapsed_ms.append((time.perf_counter() - start) * 1000)
         if repeat == 0:
-            edge_count = current_edges
+            pair_count = current_pairs
     median_ms = statistics.median(elapsed_ms)
     total_atoms = sum(len(batch.positions) for batch in batches)
     return {
@@ -154,10 +154,10 @@ def measure_backend(
         "repeats": repeats,
         "structures": len(batches),
         "atoms": total_atoms,
-        "edges": edge_count,
+        "pairs": pair_count,
         "structures_per_second": 1000 * len(batches) / median_ms,
         "atoms_per_second": 1000 * total_atoms / median_ms,
-        "edges_per_second": 1000 * edge_count / median_ms,
+        "pairs_per_second": 1000 * pair_count / median_ms,
     }
 
 
@@ -171,8 +171,8 @@ def benchmark_workload(
     vesin = VesinCpuBackend(cutoff)
     source_ids = [batch.source_ids[0] for batch in batches]
     production = measure_backend(
-        "torch_radius_graph_cpu",
-        torch_radius_graph,
+        "tonari_cpu",
+        tonari_cpu,
         batches,
         cutoff,
         repeats,
@@ -191,11 +191,9 @@ def benchmark_workload(
         "source_ids": source_ids if len(source_ids) <= 16 else None,
         "source_id_count": len(source_ids),
         "source_id_sha256": hashlib.sha256("\n".join(source_ids).encode()).hexdigest(),
-        "vesin_over_torch_radius_graph": (
-            baseline["median_ms"] / production["median_ms"]
-        ),
+        "vesin_over_tonari": baseline["median_ms"] / production["median_ms"],
         "backends": {
-            "torch_radius_graph_cpu": production,
+            "tonari_cpu": production,
             "vesin_cpu_reused": baseline,
         },
     }
@@ -215,7 +213,7 @@ def scaling_batches(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Benchmark the single-structure CPU radius-graph path."
+        description="Benchmark the single-structure CPU neighbor-search path."
     )
     parser.add_argument(
         "--cache",

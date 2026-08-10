@@ -1,13 +1,13 @@
-#include "radius_graph_cuda.h"
+#include "neighbors_cuda.h"
 
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, module) {
     module.def(
-        "radius_graph_pbc_cuda",
-        &radius_graph_pbc_cuda,
-        "Batched periodic radius graph (CUDA)");
+        "find_neighbors_cuda",
+        &find_neighbors_cuda,
+        "Find batched neighbor pairs exhaustively on CUDA");
     module.def(
-        "radius_graph_pbc_cell_cuda",
-        &radius_graph_pbc_cell_cuda,
-        "Batched periodic radius graph with Cartesian cell lists (CUDA)");
+        "find_neighbors_cell_cuda",
+        &find_neighbors_cell_cuda,
+        "Find batched neighbor pairs with Cartesian cell lists on CUDA");
 }

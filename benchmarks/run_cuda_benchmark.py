@@ -28,11 +28,11 @@ from benchmarks.matbench_data import (
     repeat_structure,
     select_scaling_structure,
 )
-from torch_radius_graph import radius_graph_pbc
+from tonari import find_neighbors
 
-Backend = Callable[[Tensor, Tensor, Tensor, Tensor, float], tuple[Tensor, Tensor]]
+Backend = Callable[[Tensor, Tensor, Tensor, float, Tensor], tuple[Tensor, Tensor]]
 BACKENDS: dict[str, Backend] = {
-    "torch_radius_graph": radius_graph_pbc,
+    "tonari_cuda": find_neighbors,
     "vesin_gpu_per_structure": vesin_gpu_batch,
     "torch_dense_batch": torch_dense_batch,
 }
@@ -57,8 +57,8 @@ def git_revision(path: Path) -> str:
 
 
 def canonical_keys(output: tuple[Tensor, Tensor]) -> np.ndarray:
-    edge_index, shifts = output
-    keys = torch.cat((edge_index.T, shifts.to(torch.int64)), dim=1).cpu().numpy()
+    pair_indices, shifts = output
+    keys = torch.cat((pair_indices.T, shifts.to(torch.int64)), dim=1).cpu().numpy()
     if len(keys) == 0:
         return keys
     order = np.lexsort(tuple(keys[:, column] for column in range(4, -1, -1)))
@@ -68,15 +68,15 @@ def canonical_keys(output: tuple[Tensor, Tensor]) -> np.ndarray:
 def call_backend(
     backend: Backend, batch: StructureBatch, cutoff: float
 ) -> tuple[Tensor, Tensor]:
-    return backend(batch.positions, batch.ptr, batch.cells, batch.pbc, cutoff)
+    return backend(batch.positions, batch.cells, batch.pbc, cutoff, batch.offsets)
 
 
 def validate_external_reference(
     batches: Sequence[StructureBatch], cutoff: float
 ) -> dict[str, int | bool]:
-    total_edges = 0
+    total_pairs = 0
     for batch_index, batch in enumerate(batches):
-        actual = canonical_keys(call_backend(radius_graph_pbc, batch, cutoff))
+        actual = canonical_keys(call_backend(find_neighbors, batch, cutoff))
         expected = canonical_keys(call_backend(vesin_gpu_batch, batch, cutoff))
         if not np.array_equal(actual, expected):
             missing = len(set(map(tuple, expected)) - set(map(tuple, actual)))
@@ -84,25 +84,25 @@ def validate_external_reference(
             raise AssertionError(
                 f"Matbench batch {batch_index} differs from Vesin: {missing=} {extra=}"
             )
-        total_edges += len(actual)
+        total_pairs += len(actual)
     return {
         "exact_key_match": True,
         "batches": len(batches),
         "structures": sum(len(batch.source_ids) for batch in batches),
-        "edges": total_edges,
+        "pairs": total_pairs,
     }
 
 
 def validate_dense_baseline(
     batch: StructureBatch, cutoff: float
 ) -> dict[str, int | bool]:
-    actual = canonical_keys(call_backend(radius_graph_pbc, batch, cutoff))
+    actual = canonical_keys(call_backend(find_neighbors, batch, cutoff))
     expected = canonical_keys(call_backend(torch_dense_batch, batch, cutoff))
     if not np.array_equal(actual, expected):
         raise AssertionError(
             "CUDA production path differs from the dense batch baseline"
         )
-    return {"exact_key_match": True, "edges": len(actual)}
+    return {"exact_key_match": True, "pairs": len(actual)}
 
 
 def measure_backend(
@@ -118,18 +118,18 @@ def measure_backend(
     torch.cuda.synchronize()
 
     elapsed_ms = []
-    edge_count = 0
+    pair_count = 0
     for repeat in range(repeats):
         torch.cuda.synchronize()
         start = time.perf_counter()
-        current_edges = 0
+        current_pairs = 0
         for batch in batches:
             output = call_backend(backend, batch, cutoff)
-            current_edges += output[0].shape[1]
+            current_pairs += output[0].shape[1]
         torch.cuda.synchronize()
         elapsed_ms.append((time.perf_counter() - start) * 1000)
         if repeat == 0:
-            edge_count = current_edges
+            pair_count = current_pairs
 
     gc.collect()
     torch.cuda.empty_cache()
@@ -151,10 +151,10 @@ def measure_backend(
         "repeats": repeats,
         "structures": total_structures,
         "atoms": total_atoms,
-        "edges": edge_count,
+        "pairs": pair_count,
         "structures_per_second": 1000 * total_structures / median_ms,
         "atoms_per_second": 1000 * total_atoms / median_ms,
-        "edges_per_second": 1000 * edge_count / median_ms,
+        "pairs_per_second": 1000 * pair_count / median_ms,
         "torch_peak_bytes": peak_memory,
         "memory_note": (
             "Torch allocator only; Vesin native temporary allocations may not be visible"
@@ -172,7 +172,7 @@ def benchmark_workload(
     dense_candidate_limit: int,
 ) -> dict[str, object]:
     candidate_counts = [
-        dense_candidate_count(batch.ptr, batch.cells, cutoff) for batch in batches
+        dense_candidate_count(batch.offsets, batch.cells, cutoff) for batch in batches
     ]
     source_ids = [source_id for batch in batches for source_id in batch.source_ids]
     results: dict[str, object] = {
@@ -184,7 +184,7 @@ def benchmark_workload(
         "dense_candidate_count_max": max(candidate_counts),
         "backends": {},
     }
-    for backend_name in ("torch_radius_graph", "vesin_gpu_per_structure"):
+    for backend_name in ("tonari_cuda", "vesin_gpu_per_structure"):
         results["backends"][backend_name] = measure_backend(
             backend_name, batches, cutoff, repeats
         )
@@ -238,7 +238,7 @@ def scaling_batches(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Benchmark periodic CUDA batch graph construction."
+        description="Benchmark periodic CUDA batch neighbor search."
     )
     parser.add_argument(
         "--cache",
@@ -265,7 +265,7 @@ def main() -> None:
     batches = load_gpu_batches(dataset, args.batch_size, args.seed, device)
     candidate_counts = np.asarray(
         [
-            dense_candidate_count(batch.ptr, batch.cells, args.cutoff)
+            dense_candidate_count(batch.offsets, batch.cells, args.cutoff)
             for batch in batches
         ]
     )

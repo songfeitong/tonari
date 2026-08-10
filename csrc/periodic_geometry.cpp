@@ -137,7 +137,7 @@ std::vector<torch::Tensor> build_periodic_metadata_cpu(
     const int64_t* count_data = atom_counts.data_ptr<int64_t>();
     std::vector<double> duals(9 * batch_size, 0.0);
     std::vector<int32_t> shifts;
-    std::vector<int64_t> image_ptr = {0};
+    std::vector<int64_t> image_offsets = {0};
 
     for (int64_t batch = 0; batch < batch_size; ++batch) {
         const double* cell = cell_data + 9 * batch;
@@ -147,7 +147,7 @@ std::vector<torch::Tensor> build_periodic_metadata_cpu(
                 "cells must contain only finite values");
         }
         if (count_data[batch] == 0) {
-            image_ptr.push_back(static_cast<int64_t>(shifts.size() / 3));
+            image_offsets.push_back(static_cast<int64_t>(shifts.size() / 3));
             continue;
         }
         int active_axes[3];
@@ -213,14 +213,14 @@ std::vector<torch::Tensor> build_periodic_metadata_cpu(
                 }
             }
         }
-        image_ptr.push_back(static_cast<int64_t>(shifts.size() / 3));
+        image_offsets.push_back(static_cast<int64_t>(shifts.size() / 3));
     }
 
     auto dual_tensor = torch::empty_like(cells);
     auto shift_tensor = torch::empty(
         {static_cast<int64_t>(shifts.size() / 3), 3},
         cells.options().dtype(torch::kInt32));
-    auto ptr_tensor = torch::empty(
+    auto image_offsets_tensor = torch::empty(
         {batch_size + 1}, cells.options().dtype(torch::kInt64));
     if (!duals.empty()) {
         std::memcpy(
@@ -235,8 +235,8 @@ std::vector<torch::Tensor> build_periodic_metadata_cpu(
             shifts.size() * sizeof(int32_t));
     }
     std::memcpy(
-        ptr_tensor.data_ptr<int64_t>(),
-        image_ptr.data(),
-        image_ptr.size() * sizeof(int64_t));
-    return {dual_tensor, shift_tensor, ptr_tensor};
+        image_offsets_tensor.data_ptr<int64_t>(),
+        image_offsets.data(),
+        image_offsets.size() * sizeof(int64_t));
+    return {dual_tensor, shift_tensor, image_offsets_tensor};
 }
