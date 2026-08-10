@@ -1,6 +1,6 @@
 # tonari
 
-**tonari** (隣, “neighbor”) is a minimal Python package for fast neighbor-list construction in atomistic modelling. It supports batched inputs with CPU and CUDA backends and is particularly well suited to building radius graphs for atomistic GNNs.
+**tonari** (隣, “neighbor”) is a minimal Python package for fast neighbor-list construction. It supports batched structures and periodic boundary conditions on both CPU and CUDA.
 
 [![CI](https://github.com/songfeitong/tonari/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/songfeitong/tonari/actions/workflows/ci.yml)
 
@@ -21,7 +21,7 @@ pair_indices, cell_shifts = find_neighbors(
 )
 ```
 
-## Installation
+## Install from source
 
 The project currently builds compiled extensions from source and requires Python 3.11–3.14 and a C++20 compiler.
 
@@ -33,7 +33,7 @@ python -m pip install .
 python -m pip install ".[torch]"
 ```
 
-The CUDA extension is built when both a CUDA-enabled PyTorch installation and a CUDA toolkit are available. CPU use does not require CUDA.
+The CUDA extension is built when both a CUDA-enabled PyTorch installation and a CUDA toolkit are available.
 
 ## Examples
 
@@ -66,7 +66,7 @@ edge_vectors = (
 edge_lengths = torch.linalg.vector_norm(edge_vectors, dim=1)
 ```
 
-### NumPy alongside ASE
+### NumPy with ASE
 
 ```python
 import numpy as np
@@ -89,8 +89,6 @@ source, target, ase_cell_shifts = neighbor_list("ijS", atoms, cutoff)
 ase_pair_indices = np.stack((source, target))
 ```
 
-Pairs are included only when their distance is strictly smaller than `cutoff`. Output order is unspecified.
-
 ## Batches
 
 For a batch, concatenate all atomic positions and use `batch_ptr` to mark structure boundaries. `cells` and `pbc` then contain one entry per structure.
@@ -109,8 +107,8 @@ Here, `B` is the number of structures and `N_total` is the total number of atoms
 ## Options
 
 - `half_list=True` returns only one direction for each neighbor pair. The default returns both directions.
-- `include_self=True` adds one self pair for each atom. By default, self pairs within the same cell are omitted; periodic copies in neighboring cells are still treated as neighbors.
+- `include_self=True` adds one self pair for each atom. By default, self pairs within the same cell are omitted.
 
 ## License
 
-This project is available under the [MIT License](LICENSE).
+[MIT License](LICENSE).
