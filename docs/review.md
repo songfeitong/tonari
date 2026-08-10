@@ -30,6 +30,16 @@ CPU 也在 reviewer 停止同核性能调用后，以 clean revision `052f207403
 
 Reviewer 再次验证 CPU/CUDA 对全部 1,536 个 Matbench structures、2,780,158 个 Vesin keys 的 exact match，逐项重算 CPU/CUDA JSON 的 samples、medians、throughput、revision、clean flag 与 data/extension SHA，并确认 Nsight CSV 与 summary 的 0.135588 ms kernels、0.006111 ms memory operations一致。Public surface、docstring、旧 alias/package清理、英文源码、中文 Markdown、Ruff、Prettier、lock、Git status/diff/fsck 和磁盘级 legacy artifact 扫描均通过。
 
+## QMugs finite-molecule 增量终审
+
+QMugs benchmark 加入后，同一独立 reviewer 对官方来源、抽样、cache、CPU/CUDA/Vesin correctness、性能口径、文档与 provenance 做了新的只读终审。Reviewer 不使用项目 selection helper，流式重算完整 2.03 GB `summary.csv`：确认 665,911 个分子、1,992,984 个 conformers、每个 ChEMBL ID 的最低能量 conformer、4,096 个 population samples、互不重叠的八档各 512 个 size-balanced samples，以及 manifest/CSV/cache offsets 全部一致。它随后流式扫描官方 7.18 GB `structures.tar.gz`，独立解析 8,192 个 V2000 atom blocks，逐原子确认 float64 positions 与 int32 atomic numbers 和派生 cache 完全相等且没有 missing structure。
+
+本轮审查推动闭合了四类工程问题：提前 EOF 时残缺下载曾在 size/SHA 验证前替换正式文件，现在 `.part` 只有通过双重校验后才原子替换并有 Range-resume 回归；数据出处补齐 QMugs 四位作者、ETH DOI、CC BY-SA 3.0 URL 与 ChEMBL 27 attribution；纯 benchmark helpers 移入不依赖 backend extension 的 `benchmarks/common.py`，CPU-only build 不再因可选 `_C_cuda` 缺失而无法导入；正式 CPU/CUDA records 重新绑定实际 Python、clean revision 与当前 extension SHA。CPU runner 还记录 governor、EPP、boost 与 frequency bounds，撤回无法在未记录 power policy 下复现的旧 1.16× headline。
+
+最终 correctness 证据为全部 8,192 个 QMugs structures、15,144,842 个 CPU/CUDA/Vesin keys exact，以及九个 CUDA representative batches、1,322,646 个 finite dense keys exact。CPU 正式结果在明确的 `performance/performance` policy 下给出 population 169.700 ms 对 Vesin 169.554 ms；reviewer 独立复跑得到 166.717 对 169.943 ms，均支持“基本打平”而不是旧 headline。CUDA 正式 `batch_size=64` population epoch 为 6.396 ms 对逐结构 Vesin 905.611 ms，当前 source-tree binary SHA、正式 JSON 与 81 项 GPU-visible tests 使用同一 extension。
+
+独立 reviewer 最终在 clean HEAD `50623cdab8229b4f9bb1c4ba8e5bd91e79b1bdb5` 给出 PASS，无 confirmed blocker。它确认 81 项 GPU-visible tests、57 passed/24 skipped 的 CPU-only matrix、Ruff、权威 `--prose-wrap never` Prettier、offline lock、Git status/diff/fsck、正式 JSON 的 revision/clean flag/hash/statistics 与中文文档全部通过。
+
 ## 已知限制
 
-One-shot API 每次重建 metadata 并按真实 pair 数精确分配输出；prepared metadata 需要单独设计 ownership 与 invalidation contract。极小非空 periodic cell 的物理 neighbor set 本身可能包含大量 images，因此 metadata/output memory 仍会随真实结果增长。CUDA 对 large unwrapped representatives 使用 whole-call exhaustive fallback，保证统一语义但不保证大体系仍维持 cell-list complexity。CPU 大体系的 Vesin 实现当前更成熟；tonari CPU 的主要优势区间是材料数据中常见的小体系高频调用。Raw Nsight trace 保持 Git ignored，仓库提交可复现脚本、summary 和完整 CSV aggregates。
+One-shot API 每次重建 metadata 并按真实 pair 数精确分配输出；prepared metadata 需要单独设计 ownership 与 invalidation contract。极小非空 periodic cell 的物理 neighbor set 本身可能包含大量 images，因此 metadata/output memory 仍会随真实结果增长。CUDA 对 large unwrapped representatives 使用 whole-call exhaustive fallback，保证统一语义但不保证大体系仍维持 cell-list complexity。CPU 大体系的 Vesin 实现当前更成熟；QMugs 自然分布上两者基本打平，`tonari` 的 CPU 优势集中在更小分子。CPU timing 对 power policy 敏感，正式 JSON 已记录；CUDA JSON 保存 minimum/median/maximum 而不保存全部原始 samples。超过 9 GB 的 QMugs raw/cache 全量审计不适合常规 CI，因此依赖固定 URL、size、SHA 与本次正式审计。Benchmark 排除 data loading/H2D，Vesin GPU 受其逐 structure API 约束；本轮遵循真实工作流，没有人为构造超大单分子 scaling。Raw Nsight trace 保持 Git ignored，仓库提交可复现脚本、summary 和完整 CSV aggregates。
