@@ -1,140 +1,140 @@
-# 算法总览：一个接口，两套为硬件而生的搜索路径
+# 算法总览：为什么 tonari 快
 
-本文面向希望快速判断方案价值、技术路线和适用边界的读者。实现细节见[当前设计](design.md)，完整测量方法见[真实材料 benchmark](benchmark.md)，问题修复与独立验证见[终审记录](review.md)。
+本文面向希望快速判断方案价值、技术路线和适用边界的读者。精确 API 与数值约定见[设计文档](design.md)，完整测量方法见[真实材料 benchmark](benchmark.md)，correctness 修复与独立验证见[终审记录](review.md)。
 
 ## 一句话结论
 
-这个实现没有发明新的 neighbor-search 数学，而是把成熟的 exhaustive search 与 cell-list 思想重新组织成一套 PyTorch-native 系统：公共层只定义一次 periodic geometry 和 graph semantics，CPU 与 CUDA 各自选择符合硬件成本模型的执行方式。CPU 重点压低单 structure、尤其小晶体的一次性调用成本；CUDA 重点让整个 heterogeneous batch 共同占满 GPU，并避免任何 `N² × images` 中间 tensor。
+`tonari` 没有发明新的 neighbor-search 数学，而是把 exhaustive search 与 Cartesian cell list 按 CPU、CUDA 和真实调用方式重新组织：小体系不为索引付费，大体系不为 `N²` 付费，CUDA batch 不为逐体系 launch 付费，CPU 不为 Python 小算子付费，NumPy 与 PyTorch 共享同一个 native CPU implementation。
 
-在 AMD Ryzen Threadripper PRO 9975WX 的单个固定 core 上，CPU backend 对 1,536 个 `matbench_mp_e_form` 真实晶体组成的 `batch_size=1` DataLoader epoch 用时 143.55 ms，而复用同一个 Vesin `NeighborList` 的公平 baseline 为 248.19 ms，前者快 1.73×。单个 64-atom structure 快 1.11×，512-atom real-derived supercell 已基本到达交叉点；从 1,728 atoms 起 Vesin 的成熟 cell list 明显领先，说明我们的优势是常见小体系与低 boundary overhead，而不是所有尺度上的无条件胜利。
+在固定单核的 1,536-structure `matbench_mp_e_form` epoch 中，CPU 为 143.80 ms，公平复用的单线程 Vesin 为 248.08 ms，`tonari` 快 1.73×。在 RTX PRO 6000 Blackwell 的 `batch_size=32` epoch 中，CUDA 为 12.02 ms，逐 structure Vesin GPU 为 493.94 ms；代表性 32-structure batch 相对独立 Equiformer/FairChem-style dense baseline 快约 192×。这些是固定硬件、软件与 workload 的工程证据，不是跨平台保证。
 
-既有 CUDA 结果同样保持：NVIDIA RTX PRO 6000 Blackwell 上，1,536-structure epoch 相对逐 structure Vesin GPU 快 14.74×，代表性 32-structure batch 相对 Equiformer/FairChem-style dense 构图快 47.07×。这些数字是固定硬件、软件与 workload 的工程证据，不是跨平台保证。
+## 问题本质
 
-## 它解决的问题
+输入是一组 finite 或 periodic structures。对于每个 target，必须找到 cutoff 内所有 source images，并返回 source、target 与施加在 source 上的整数 cell shift。正确实现还必须处理 triclinic cell、partial PBC、rank-deficient inactive rows、periodic self-images、multiple images、strict cutoff boundary、未 wrap representatives、heterogeneous batch 和整数溢出。
 
-等变原子图模型需要在 cutoff 内构造完整的有向 periodic atom-image graph。每条 edge 除了 source 和 target atom index，还必须返回整数 cell shift；图不能跨越 batch member，必须保留 periodic self-images 和 small cell 中的 multiple images，并正确处理 triclinic cell、partial PBC、rank-deficient active lattice、cutoff boundary、unwrapped representatives 与 autograd 边界。
-
-最直接的 dense 算法会枚举 `N² × periodic images`。它在小体系上往往胜在简单，却会随原子数二次增长。Cell list 把空间分桶，在固定 density、cutoff 和邻居数时接近 `O(N + E)`，但建表本身也有固定成本。真正的工程问题因此不是“哪一种算法永远更好”，而是如何可靠地判断何时切换，以及如何让几何准备、内存分配、Python/C++ boundary 和 batch execution 不吞掉理论收益。
+最直接的 exhaustive search 枚举 `N² × periodic images`。它在小体系上极其高效，因为控制流简单且无需建索引，但原子数增长后会二次放大。Cell list 把空间分桶，在固定 density、cutoff 和平均邻居数时接近 `O(N + P)`，其中 `P` 是必须写出的 pair 数；代价是建表、内存初始化和间接访问。工程问题不是选一个“永远最好”的算法，而是在正确语义下选择交叉点，并把 Python/C++ boundary、metadata、allocation、synchronization 和 batch execution 一起纳入成本模型。
 
 ## 整体数据流
 
 ```mermaid
 flowchart LR
-    A["PyTorch tensors<br/>positions / ptr / cells / pbc"] --> B["公共 native periodic metadata<br/>active duals / image shifts"]
-    B --> C{"positions.device"}
-    C -- "CPU" --> D{"每个 structure 的<br/>N² × images ≤ 16,384？"}
-    D -- "是" --> E["CPU exhaustive<br/>直接枚举，不建索引"]
-    D -- "否" --> F["CPU Cartesian cell list<br/>linked nodes + 27-bin stencil"]
-    C -- "CUDA" --> G{"batch 内最大 structure<br/>少于 256 atoms？"}
-    G -- "是" --> H["CUDA fused exhaustive"]
-    G -- "否" --> I["CUDA batched cell list"]
-    E --> J["edge_index + cell_shifts"]
-    F --> J
-    H --> J
-    I --> J
-    J --> K["模型从原始浮点 tensors<br/>重建 vectors 并求导"]
+    A["NumPy 或 PyTorch<br/>positions / cells / pbc / offsets"] --> B["统一 frontend<br/>shape / dtype / ecosystem"]
+    B --> C["公共 native geometry<br/>active duals / image shifts"]
+    C --> D{"输入生态与 device"}
+    D -- "NumPy 或 Torch CPU" --> E{"每个 structure 的<br/>candidate count"}
+    E -- "小" --> F["CPU exhaustive"]
+    E -- "大" --> G["CPU Cartesian cell list"]
+    D -- "Torch CUDA" --> H{"batch 内最大 structure"}
+    H -- "小" --> I["CUDA fused exhaustive"]
+    H -- "大" --> J["CUDA batched cell list"]
+    F --> K["pair_indices + cell_shifts"]
+    G --> K
+    I --> K
+    J --> K
 ```
 
-公共 API 不根据 device 改变 shapes、dtype 或物理含义。不同的只是内部调度：CPU 按 structure 顺序执行，CUDA 把整个 batch 编入一次 pipeline。这样上层模型不需要维护“CPU 语义”和“GPU 语义”两套代码。
+公共语义不随生态或 device 改变。NumPy frontend 只负责安全的 array-to-Tensor view/copy 决策并复用 CPU native path；Torch CPU 与 CUDA 共享 periodic metadata 和返回约定，但各自使用符合硬件成本模型的搜索实现。
 
 ## 主要优化技巧
 
-### 1. 把公共几何从 device algorithm 中拆出来
+### 1. 小体系直接穷举，不迷信渐近复杂度
 
-CPU 和 CUDA 都需要 active-cell rank 检查、dual lattice、image ranges 与 image shifts。它们现在由始终可构建的 native C++ CPU extension 计算一次，再交给 device-specific search；CUDA-only block/node schedule 则单独生成。这个拆分避免 CPU backend 被迫理解 CUDA grid，也避免两边各写一套容易漂移的 periodic convention。
+CPU exhaustive 的实际工作量是 `N² × image_count`，因此 CPU 按每个 structure 的候选数切换，而不是只看 atom count。在真实 Matbench epoch 上扫描候选阈值后，16,384 附近最好；它能让常见小晶体走短而连续的循环，又避免 64-atom、many-image structure 被粗糙 atom threshold 误判。
 
-这项重构本身就是 CPU 最重要的性能优化。早期版本通过多次 Python/Torch 小算子构造 metadata，真实 epoch 为约 285.7 ms；把 1–3 维线性代数和 image enumeration 收进一次 native call 后，边界加固前的正式版本降到约 123.1 ms。最终版本进一步为病态 cell、严格 cutoff 和远端 representatives 补齐稳定数值路径后为 143.6 ms，仍显著快于 Vesin 的 248.2 ms。这里没有神奇 SIMD，主要收益来自消除 1,536 次调用上重复的 Python dispatcher 与小 tensor overhead。
+CUDA 的成本模型不同。小体系需要的是足够并行度而不是避免每个 pair 的算术，因此当前以 batch 内最大 256 atoms 作为 fused exhaustive 与 cell-list pipeline 的 crossover。这个选择经过真实结构与 supercell 的开发期 sweep；它是当前硬件上的性能参数，不进入 public API，也不影响 pair identity。
 
-### 2. CPU crossover 看候选数，不只看 atom 数
+### 2. 公共周期几何只做一次，而且在 native 边界完成
 
-CPU exhaustive 的真实工作量是 `N² × image_count`，同样 32 个 atoms 在 finite 与 tiny periodic cell 中成本完全不同。因此 CPU 不使用一个粗糙的 atom threshold，而是对每个 structure 计算候选数；不超过 16,384 时直接穷举，超过时建立 cell list。
+Active-row rank、dual vectors、image ranges 和 image shifts 对 CPU/CUDA 都相同。早期 Python/Torch metadata 把许多微小 tensor operations 重复 1,536 次，CPU epoch 一度约 286 ms；将最多 `3×3` 的线性代数与 image enumeration 合并进一次 C++ call 后，最终降到约 144 ms。性能收益主要来自消除 dispatcher、allocation 和 Python boundary，而不是某条神奇 SIMD 指令。
 
-16,384 来自同一 Matbench epoch 上的 threshold sweep：2,048、8,192、16,384、32,768、131,072 对应约 138.8、115.4、115.0、117.0、162.2 ms。它是当前 workstation evidence 下的 provisional choice，不是数学常数，也不进入 correctness tests。
+数值上，active rows 直接使用 long-double one-sided Jacobi SVD，不形成会平方条件数的 Gram matrix。Empty structure 在 rank/repeat/image enumeration 前短路。这样同一 metadata path 同时覆盖 finite、wire、slab、triclinic 与 full periodic structures。
 
-### 3. CPU cell list 只保存真正相关的 periodic images
+### 3. CPU cell list 只插入真正相关的 source images
 
-大体系把 wrapped source images 插入边长接近 cutoff 的 Cartesian bins，但只有落在 target representatives bounding box 外扩搜索 cutoff 范围内的 images 才成为 linked nodes。每个 target 访问相邻 `3×3×3` bins，再按距离筛选 nodes；它不枚举全部 atom pairs，也不为很远的 periodic images 建节点。开发期曾加入 target-to-bin corner pruning，但独立审查在严格 cutoff 边界发现单向漏边，而真实 benchmark 收益只有噪声量级，因此最终删除，换取更简单可靠的固定 stencil。
+大体系先把 representatives wrap 到 active unit-cell directions，再建立 target Cartesian bounding box。只有落在 bounding box 外扩 cutoff 范围内的 periodic source images 才进入 linked nodes；每个 target 固定扫描相邻 `3×3×3` bins。它既不枚举全部 atom pairs，也不为离 target 区域很远的 images 建节点。
 
-未 wrap representatives 会让“wrapped 搜索位移”和 public vector formula 在浮点消去上略有差异。CPU cell list 因此只把 wrapped distance 当作 broad phase：根据输入数量级建立保守误差带，边界壳中的 candidate 必须用原始 positions 与最终 output shift 重新判断严格 cutoff；误差带过大时直接回退 exhaustive。CUDA 则采用更简单的硬边界：只要 cell-list prepare 发现任一 nonzero representative wrap，整个调用便复用已有 exhaustive CUDA canonical predicate。两种处理都不把近边界物理语义交给搜索近似；CUDA 的取舍是大规模未 wrap batch 可能失去线性 cell-list 复杂度。
+Dense bin heads 与紧凑 int32 linked nodes 减少内存和 pointer chasing。极端稀疏 finite coordinates 若会产生巨大的空 bin grid，则明确回退 exhaustive，优先保证内存安全。开发期曾加入 target-to-bin corner pruning，但独立 reviewer 在 `nextafter(cutoff, 0)` 附近复现了只保留一个方向的错误，而真实 workload 收益只有噪声量级，因此直接删除。
 
-实现使用 dense bin-head array 和紧凑 int32 linked nodes。对于极端稀疏 finite coordinates，若 dense grid 相对真实 image 数过大，就回退 exhaustive，避免为一片空空间分配病态内存。这是显式工程安全边界，不是物理 tolerance。
+### 4. Broad phase 可以保守，最终 strict predicate 只能有一个
 
-### 4. CPU native call 释放 GIL，但不偷偷抢线程
+未 wrap representatives 会让 wrapped arithmetic 与 public displacement formula 在有限精度下出现不同消去。CPU cell list 因此按输入数量级构造保守搜索带，明显位于内侧的 candidate 可直接接受，边界壳必须以原始 `positions` 与最终 `cell_shifts` 重算 strict predicate；误差带过大时回退 exhaustive。
 
-CPU search 在 C++ 中完成并通过 pybind call guard 释放 Python GIL，因此其他 Python threads 不会被这次 native calculation 无谓阻塞。Backend 本身保持单线程：这使一次调用的资源成本可预测，也适合 DDP 或 DataLoader workers 已经进行进程级并行的训练环境，避免 `workers × backend threads` oversubscription。Benchmark 中 Vesin 同样明确设置 `n_threads=1`。
+CUDA 选择更简单的正确性边界：cell-list prepare 一旦发现 nonzero representative wrap，整个调用复用已有的 exhaustive canonical predicate。它会让大规模未 wrap input 退化为 `O(N² × images)`，但避免维护第三套容易漂移的 cutoff 判断。正确性优先于一条只对病态输入更快、却难以证明一致的新路径。
 
-### 5. CUDA batch-first，而不是逐体系循环
+### 5. CUDA 把 batch 当作执行单位
 
-`ptr` 直接描述每个 structure 的 atom segment，不同 atom counts、cells 和 PBC patterns 可以进入同一次 CUDA launch sequence。GPU 不再为几十个小体系反复启动、同步和拼接；算法只在每个 segment 内产生 pairs，因此不会把整个 batch 的总 atom 数一起平方，更不会产生跨体系 edges。
+`offsets` 把拼接的 positions 划分为独立 segments。CUDA metadata、bin layout、image insertion、count 和 write 都面向整个 heterogeneous batch 调度；不同 atom counts、cells 与 PBC patterns 可以共同占满 GPU，同时任何 pair 都只在自身 segment 内产生。
 
-### 6. CUDA 小体系使用融合穷举，大体系使用 warp cell list
+这正是相对 Vesin GPU 的主要差异。Vesin 一次处理一个 structure，真实 PyTorch batch 需要 Python loop、多个 launches 与拼接；`tonari` 把这些固定成本摊到一个 batch。相对 dense PyTorch baseline 的优势则来自不 materialize `N² × padded images` tensors。
 
-小于 256 atoms 时，CUDA 把 `(source, target, image)` candidates 直接映射到 threads，以 block reduction 计数、block scan 写出，不 materialize dense candidate tensors。大体系先建立 batched Cartesian cell list，每个 warp 负责一个 target，由前 27 个 lanes 扫描相邻 bins。固定 density 时工作量接近 `O(N + E)`，而物理输出若本身达到 `O(N²)`，任何正确算法都无法绕过该下界。
+### 6. Count 后精确分配，并把错误状态塞进必要同步
 
-### 7. 精确分配与错误报告复用必要同步
+CUDA 事先不知道 `num_pairs`，因此先 count、prefix sum、精确分配，再 write。NaN/Inf、representative wrap 越界和 output shift 越界被编码进本来就需要读回的状态槽，避免为 validation 额外增加 device-to-host synchronization。CPU 使用 native vectors 收集，再一次性复制到精确大小的 outputs。
 
-CUDA edge 数事先未知，因此先 count、再精确分配、最后 write。NaN/Inf、representative wrap 越界和 int32 shift 越界被编码进已有状态位置，通过本来就需要的 host read 一并报告，避免额外同步。CPU 则直接用 native vectors 收集结果并一次复制到精确大小的 PyTorch tensors；两边都没有先制造巨大候选 tensor 再过滤。
+### 7. NumPy 不是第二套算法
 
-### 8. 用真实材料和失败实验约束优化欲望
+NumPy input 在安全时通过 `torch.from_numpy` 与 native CPU backend 共享内存；frontend 只对 non-writeable、unaligned 或 negative-stride arrays 预先复制，native boundary 只在 layout 非 contiguous 时做必要 packing。Native code 与 correctness tests 完全复用，不存在“NumPy 版”和“PyTorch 版”长期漂移的问题。Output Tensor 的 CPU storage 直接导出为 NumPy arrays。
 
-CPU 曾尝试更细的 `cutoff/2` bins：访问候选从约 222 万降到 114 万，32,768-atom query 却因需要遍历更多 bins 从约 19 ms 退到 36 ms；也尝试只计算一半反向对称 pairs 后成对写出，端到端从约 18.5 ms 退到 20.9 ms。两项都已撤回。CUDA 也曾把融合 atomic bounds 改成独立 CUB reductions，kernel 名称更“高级”，wall time 却更差。这个仓库把失败结果写进日志，因为性能工程最重要的能力不是产生优化点子，而是果断否决没有端到端收益的点子。
+### 8. 连构建产物布局都必须用 wall time 验证
 
-## 与 Equiformer 和 Vesin 的关系
+API 重命名后，CPU 算法对应 object file 的 `.text` bytes 与旧版逐字节相同，但文件名改变了 Ninja 的 link order，使热点 native code 地址整体移动，真实 epoch 从约 144 ms 回退到 165 ms；Vesin 同次测量保持约 248 ms，排除了系统噪声。同进程直接调用旧/新 extension 又把差异定位到 native search 的 117 vs 138 ms。
 
-| 方案 | 主要执行单位 | 小体系 | 大体系 | 定位 |
+最终把共享 `periodic_geometry` 文件重命名为更自然的 `geometry`，让链接顺序成为 `bindings → geometry → neighbors`，热点函数地址恢复后正式 epoch 回到 143.80 ms。这个案例很有代表性：高频微调用中，instruction-cache 与 branch-predictor aliasing 足以放大纯布局变化；“源码算法没变”不等于二进制性能没变。
+
+## 与 Vesin 和 Equiformer-style dense baseline 的关系
+
+| 方案 | 执行单位 | 小体系策略 | 大体系策略 | 主要定位 |
 | --- | --- | --- | --- | --- |
-| Equiformer/FairChem periodic dense pattern | PyTorch batch | `N² × images` tensor 展开 | 仍然展开 | 模型内通用张量实现 |
-| Vesin CPU/GPU | 单个 structure | Auto 选择 | 成熟 cell list | 通用 neighbor-list library |
-| 本实现 CPU | 单个或 batched Torch input，内部逐 structure | candidate-aware exhaustive | 单线程 Cartesian cell list | 低 PyTorch boundary overhead、统一 API |
-| 本实现 CUDA | 整个 PyTorch batch | Fused exhaustive | Batched warp cell list | 模型入口的高吞吐 builder |
+| Equiformer/FairChem-style dense | PyTorch batch | `N² × images` tensor 展开 | 仍然 dense 展开 | 容易组合的模型内张量实现 |
+| Vesin CPU/GPU | 单 structure | Auto 选择 | 成熟 cell list | 通用 neighbor-list library |
+| tonari CPU | 单 structure 或 batch，内部逐 structure | Candidate-aware exhaustive | 单线程 Cartesian cell list | 低 boundary overhead；NumPy/Torch 共用 |
+| tonari CUDA | 整个 Torch batch | Fused exhaustive | Batched warp cell list | 模型入口的高吞吐 neighbor search |
 
-本实现没有复制或移植 Vesin 源码。CPU 大体系与 Vesin 都属于 cell-list 家族，小体系也都承认建索引未必值得；差异在 periodic image 表示、data layout、crossover、PyTorch boundary 和具体实现成熟度。CUDA 的根本差异则是 batch-first execution。类似两个数据库都使用 B-tree，算法家族相同并不意味着执行成本相同。
+`tonari` 没有复制或移植 Vesin 源码。两者的大体系 CPU 路径都属于 cell-list 家族，小体系也都承认建索引未必值得；差异来自 periodic image 表示、data layout、crossover、Python boundary、batching 和实现成熟度。算法家族相同并不意味着执行成本相同。
 
 ## 真实性能证据
 
-### CPU：单 structure DataLoader workflow
+### CPU：真实单结构 DataLoader workflow
 
-| Workload | 本实现 CPU | Vesin CPU reused | Vesin / 本实现 |
+| Workload | tonari CPU | Vesin CPU reused | Vesin / tonari |
 | --- | --: | --: | --: |
-| 1,536-structure epoch | 143.554 ms | 248.190 ms | 1.73× |
-| 真实结构，64 atoms | 0.0411 ms | 0.0457 ms | 1.11× |
-| 派生 supercell，512 atoms | 0.2391 ms | 0.2286 ms | 0.96× |
-| 派生 supercell，1,728 atoms | 1.0997 ms | 0.7141 ms | 0.65× |
-| 派生 supercell，32,768 atoms | 24.0409 ms | 13.1367 ms | 0.55× |
+| 1,536-structure epoch | 143.802 ms | 248.076 ms | 1.73× |
+| 真实结构，64 atoms | 0.0417 ms | 0.0453 ms | 1.09× |
+| 派生 supercell，512 atoms | 0.2354 ms | 0.2286 ms | 0.97× |
+| 派生 supercell，1,728 atoms | 1.1048 ms | 0.7150 ms | 0.65× |
+| 派生 supercell，32,768 atoms | 24.0613 ms | 13.1372 ms | 0.55× |
 
-CPU benchmark 使用 float64、5 Å cutoff、固定 core 31、双方单线程、每个 backend/workload 2 秒 warmup，并保存全部 samples。Epoch 的胜利来自 1,536 次常见小晶体调用的低固定成本；512 atoms 附近已经交叉，大 supercell 的落后则说明进一步优化 CPU cell list 仍有空间。
+CPU 的优势集中在真实数据中占多数的小结构与低固定成本；约 512 atoms 已接近当前单核交叉区，大体系 Vesin 更快。结论不是“我们在所有尺度击败 Vesin”，而是“统一 native frontend 在常见高频小体系 workflow 中值得拥有”。
 
-### CUDA：heterogeneous batch workflow
+### CUDA：真实 heterogeneous batch workflow
 
-| Workload | 本实现 CUDA | Vesin GPU/structure | Equiformer-style dense |
+| Workload | tonari CUDA | Vesin GPU/structure | Dense baseline |
 | --- | --: | --: | --: |
-| 1,536-structure DataLoader epoch | 36.584 ms | 539.100 ms | skipped |
-| 32-structure 代表 batch | 0.918 ms | 9.970 ms | 43.215 ms |
-| 单个真实 64-atom 晶体 | 0.241 ms | 0.386 ms | 0.701 ms |
-| 32,768-atom 派生 supercell | 0.414 ms | 1.607 ms | 候选约 290 亿，跳过 |
+| 1,536-structure epoch | 12.024 ms | 493.940 ms | skipped |
+| 32-structure 代表 batch | 0.2227 ms | 9.3111 ms | 42.7788 ms |
+| 单个真实 64-atom 晶体 | 0.1001 ms | 0.3838 ms | 0.6983 ms |
+| 32,768-atom 派生 supercell | 0.2338 ms | 1.4992 ms | 候选约 290 亿，跳过 |
 
-CUDA 的主要优势来自把 batch 作为执行单位；CPU 结果与 CUDA 结果回答不同问题，不能用同一倍数互相替代。
+Nsight 中 32,768-atom case 的所有 kernels 平均总计约 0.140 ms/call，20 次公开调用的 NVTX range 为 6.275 ms。相对旧二进制的提升主要位于 host/binding 路径；主要 GPU kernels 用时保持同一量级，因此不能把提升解释成遗漏了搜索工作。
 
-## 为什么适合在模型入口动态构图
+## 为什么适合在模型入口动态搜索
 
-推荐 Dataset 只保存 atomic numbers、positions、cell、PBC 和 labels；batch 到达模型后，由模型拥有的 graph builder 根据自身 cutoff 构图。这样 cutoff、self-edge policy 和 receptive field 不会污染 Dataset schema，数据增强、结构扰动、MD 和不同模型配置也不会读到 stale graph。
+对于未来 PyG/GNN adapter，推荐 Dataset 只保存 atomic numbers、positions、cell、PBC 与 labels；batch 到达模型后，由模型拥有的 builder 根据自身 cutoff 调用 `find_neighbors`，再把 `pair_indices` 映射为 `edge_index`、把重建的 `displacements` 映射为 `edge_vectors`。这样 Dataset 不携带 ad hoc cutoff，数据增强、结构扰动、MD 和不同模型配置也不会读取 stale connectivity。
 
-在 CPU 数据管线中，如果训练最终在 GPU 上执行，通常仍应先把 graph-free batch 一次 transfer 到 CUDA，再调用 CUDA backend；CPU backend 更适合 CPU inference、预处理/诊断、无 GPU 环境，以及 ELFES 当前 NumPy/CPU two-center workflow 的未来 adapter。固定结构反复推理时 prepared metadata 仍可能有价值，但它应成为明确的可选 API，而不是 Dataset 隐式携带 cutoff-specific graph。
+在 GPU 训练中，通常应先把 graph-free batch 一次传到 CUDA，再调用 CUDA backend。CPU backend 更适合 CPU inference、预处理/诊断、无 GPU 环境与 NumPy workflow。固定结构反复消费时 prepared metadata 可能有价值，但它需要明确 ownership、mutation invalidation 与 workspace lifetime，不应偷偷缓存 Tensor identity。
 
 ## 为什么可以信任结果
 
-Production output 不依赖 edge order，而是按完整 `(source, target, Sx, Sy, Sz)` key set 验证。独立 exhaustive PyTorch reference、ASE triclinic partial-PBC case、Vesin 0.6.1 external reference、53 项 CPU/CUDA tests、290 组额外 CPU/reference/CUDA differential cases、autograd backward、non-default CUDA stream 和 CUDA memcheck 共同覆盖两套路径。全部 1,536 个真实结构、2,780,158 条 edge keys 在 CPU 上与 Vesin 精确一致；CUDA 正式记录与最终修复后的全样本 spot validation 也通过同一 corpus。
+68 项 tests 覆盖 NumPy、Torch CPU、Torch CUDA、single/batch shapes、ecosystem mixing、长度单位一致缩放、finite/partial/full PBC、rank-deficient 与近共线 active rows、multiple images、periodic self-images、strict boundary、unwrapped representatives、int32/resource errors、autograd、non-default stream 和独立 PyTorch reference。ASE 提供 triclinic partial-PBC reference。
+
+正式 benchmark 在全部 1,536 个真实结构、2,780,158 个完整 `(source, target, Sx, Sy, Sz)` keys 上让 CPU/CUDA 与 Vesin 精确一致；代表 CUDA batch 又与 dense baseline 的 43,842 keys 精确一致。测试比较 key sets，不冻结 backend output order。
 
 ## 已知边界
 
-- CPU search 当前为单线程，batch 内 structures 顺序处理；它有意不隐式创建 thread pool。
-- CPU 在常见小结构上有优势，但其 large-system cell list 仍慢于 Vesin；不要把 epoch 1.73× 外推到 512+ atom single structures。
-- Public `cell_shifts`、representative periodic wraps 和 cell-list nodes 使用 int32 可表达范围；越界直接报错，不进行静默截断。
-- One-shot API 每次重建少量 metadata；静态 topology 可能从 prepared metadata API 获益，但 ownership 与 mutation invalidation 尚需设计。
-- 非空 structure 的 batched periodic image shifts 当前设有 `2^24` resource limit，极小 cell 会在枚举前明确报错；即便放宽该限制，真实 graph 和输出仍会随物理 image/edge 数增长。
-- CPU 16,384-candidate 与 CUDA 256-atom crossovers 都是当前 workstation evidence，不是 correctness contract 或普适阈值。
-- CUDA cell list 对 nonzero representative wraps 回退 whole-call exhaustive；256/512/1,024/2,048-atom synthetic spot 中相对 well-wrapped cell list 分别慢约 1.03×/1.41×/2.88×/8.48×，这是正确性优先的已知性能边界。
+- CPU search 当前单线程，batch 内 structures 顺序执行；调用方可在 DataLoader workers、进程池或 DDP 层并行。
+- 大规模未 wrap CUDA input 可能回退 exhaustive；这是统一浮点语义的明确取舍。
+- 极小非空 periodic cell 的真实 image/pair 数本身可能爆炸；resource guard 会提前拒绝不可控 metadata enumeration，但不能消除物理输出规模。
+- One-shot API 每次重建 metadata 并为精确 output size 同步；prepared API 尚未设计。
+- 当前只接受 scalar cutoff，不提供 species-dependent cutoff、neighbor cap、sorting、Verlet skin 或 GNN adapter。
 
-## 最终判断
-
-这个方案真正的“独门技巧”不是某一个奇特 kernel，而是把成本放在正确层次上思考：公共几何只做一次，小体系不为索引付费，大体系不为 `N²` 付费，CUDA batch 不为逐体系 launch 付费，CPU 不为 Python 小算子付费，安全检查不制造额外同步，所有优化都必须同时通过真实材料 correctness 与 wall-time 证据。最终得到的不是一个 CUDA prototype 外挂 CPU 补丁，而是一套从公开语义到 build layout 都把 CPU 与 CUDA 当作一等公民的 radius-graph system。
+真正的“独门技巧”不是某个神秘 kernel，而是始终把成本放在正确层次：候选规模决定算法，batch 决定 CUDA 调度，公共几何只实现一次，NumPy 复用 native CPU，错误检查复用必要同步，所有优化都必须同时通过真实材料 exact correctness 与 wall-time 证据。

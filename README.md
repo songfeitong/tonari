@@ -1,73 +1,89 @@
-# torch-radius-graph
+# tonari
 
-这是一个私有实验仓库，为 PyTorch CPU 和 CUDA tensors 构造完整的有向周期 cutoff graph。CPU 与 CUDA 共用一个公开 API、几何约定和 periodic metadata；CPU 对每个 structure 在 exhaustive 与 Cartesian cell list 之间切换，CUDA 则保留面向整个 heterogeneous batch 的 fused exhaustive 与 batched cell-list pipeline。Production implementation 不依赖 Vesin，Vesin 只作为开发期外部正确性参考和性能 baseline。
+`tonari` 是一个同时面向 NumPy 与 PyTorch、CPU 与 CUDA 的周期性 neighbor-search 实验项目。它用一个公共函数返回 strict cutoff 内全部有向 atom-image pairs；periodicity 只由 `pbc` 表达，核心接口不依赖 GNN/PyG 术语。Production implementation 不依赖 Vesin；Vesin 只用于外部 correctness reference 与公平性能 baseline。
 
-第一次阅读建议从[算法总览：一个接口，两套为硬件而生的搜索路径](docs/algorithm-overview.md)开始；具体实现见[当前设计](docs/design.md)，真实材料测量见[性能方法与结果](docs/benchmark.md)，完整实验过程见[工作记录](notes/work-log.md)。
+第一次阅读建议从[算法总览](docs/algorithm-overview.md)开始；精确契约与内部结构见[设计文档](docs/design.md)，真实材料测量见[性能方法与结果](docs/benchmark.md)，开发取舍见[工作记录](notes/work-log.md)，独立审查见[终审记录](docs/review.md)。
 
-## API
+## 公共 API
+
+```python
+pair_indices, cell_shifts = find_neighbors(
+    positions,
+    cells,
+    pbc,
+    cutoff,
+    offsets=None,
+)
+```
+
+单结构输入使用 `positions: (N, 3)`、`cells: (3, 3)`、`pbc: (3,)`，无需构造 `offsets`。Batch 输入把原子坐标拼接成 `positions: (N_total, 3)`，并传入 `cells: (B, 3, 3)`、`pbc: (B, 3)` 与 `offsets: (B + 1,)`；`offsets` 从零开始、非递减，最后一个元素等于 `N_total`。
+
+Torch 输入返回 Torch tensors，可位于 CPU 或 CUDA；NumPy 输入返回 NumPy arrays，并复用同一 native CPU backend。所有 array 参数必须属于同一生态，NumPy/Torch 混用会被明确拒绝。`positions` 与 `cells` 使用相同的 `float32` 或 `float64` dtype，Torch arrays 还必须位于同一 device；`pbc` 为 bool，`offsets` 为 int64。函数与具体长度单位无关，但 `positions`、`cells` 和 `cutoff` 必须使用同一单位。
 
 ```python
 import torch
-from torch_radius_graph import radius_graph_pbc
 
-edge_index, cell_shifts = radius_graph_pbc(
-    positions=positions,  # float32/float64 [n_atoms_total, 3]，CPU 或 CUDA
-    ptr=ptr,              # int64 [batch_size + 1]，与 positions 同 device
-    cells=cells,          # 同浮点 dtype [batch_size, 3, 3]，同 device
-    pbc=pbc,              # bool [batch_size, 3]，同 device
-    cutoff=5.0,
-)
+from tonari import find_neighbors
 
-source, target = edge_index
-atom_batch = torch.repeat_interleave(
-    torch.arange(len(ptr) - 1, device=positions.device), ptr[1:] - ptr[:-1]
+positions = torch.tensor([[0.0, 0.0, 0.0], [0.8, 0.0, 0.0]])
+cells = torch.eye(3) * 4.0
+pbc = torch.tensor([False, False, False])
+
+pair_indices, cell_shifts = find_neighbors(positions, cells, pbc, cutoff=1.0)
+source, target = pair_indices
+displacements = (
+    positions[source] - positions[target] + cell_shifts.to(positions.dtype) @ cells
 )
-edge_batch = atom_batch[target]
-edge_vectors = positions[source] - positions[target] + torch.einsum(
-    "ei,eij->ej", cell_shifts.to(positions.dtype), cells[edge_batch]
-)
+distances = torch.linalg.vector_norm(displacements, dim=1)
 ```
 
-Cell vectors 按行保存。返回的 `edge_index` 为 int64，`cell_shifts` 为 int32；`cell_shifts[e]` 平移 edge `e` 的 source image，因此连续向量为 `positions[source] - positions[target] + cell_shifts @ cell`。Graph 包含平方距离严格小于 `cutoff**2` 的全部有向 atom-image edges；它只排除 `(i, i, [0, 0, 0])`，保留 periodic self-images 和 multiple images，不产生跨 batch member 的 edge，并保证 inactive PBC axes 上的 shift 为零。输出顺序没有接口保证。
+`pair_indices` 为 int64、形状 `[2, num_pairs]`；`cell_shifts` 为 int32、形状 `[num_pairs, 3]`。Cell vectors 按行保存，shift 施加在 source image，因此 displacement 是 `positions[source] - positions[target] + cell_shifts @ cell`。结果包含距离严格小于 `cutoff` 的全部有向 pairs，只排除 `(i, i, [0, 0, 0])`，保留 periodic self-images 与 multiple images，不产生跨 structure pairs，并保证 inactive PBC axes 上的 shift 为零。输出顺序没有接口保证。
 
-`positions` 和 `cells` 可以设置 `requires_grad=True`。Connectivity 和 shifts 是离散整数输出，不提供 backward；按上例从原始浮点 tensors 重算 vectors，便可在 topology 固定时对连续几何正常求导。
+NumPy 调用使用完全相同的函数与形状规则：
 
-## 构建与测试
+```python
+import numpy as np
 
-CPU build 需要 Python 3.12、PyTorch 2.12.1、C++20 compiler 和 Ninja；如果 PyTorch 与本机 CUDA toolkit 都可用，`setup.py` 会同时构建可选 `_C_cuda` extension，否则只构建始终可用的 `_C_cpu`。CPU-only 安装不需要 CUDA toolkit。
+from tonari import find_neighbors
 
-本机执行复用了 ELFES 已有的 Python/PyTorch 环境，没有重复下载 wheel：
+positions = np.array([[0.0, 0.0, 0.0], [0.8, 0.0, 0.0]])
+cells = np.eye(3) * 4.0
+pbc = np.array([False, False, False])
+pair_indices, cell_shifts = find_neighbors(positions, cells, pbc, 1.0)
+```
+
+Pair identity 是离散结果，不参与 autograd。Torch `positions` 与 `cells` 可以设置 `requires_grad=True`；按上例从原始浮点 tensors 重算 `displacements`，即可在 neighbor identity 固定时对连续几何求导。完整的 Torch-style `Args:`、`Returns:`、`Raises:`、`Note:` 与 `Example:` 文档位于 `find_neighbors.__doc__`。
+
+## 构建与验证
+
+CPU build 需要 Python 3.12、PyTorch 2.12.1、C++20 compiler 和 Ninja。如果 PyTorch 与本机 CUDA toolkit 都可用，`setup.py` 同时构建 `_C_cpu` 与 `_C_cuda`；否则只构建始终可用的 CPU extension。NumPy 是明确的运行时依赖。
+
+本机执行复用 ELFES 已有环境，没有重新下载 Python、PyTorch 或 PyG：
 
 ```bash
-cd /home/ftsong/projects/elfes-workspace/torch-radius-graph
+cd /home/ftsong/projects/elfes-workspace/tonari
 /home/ftsong/projects/elfes-workspace/elfes/.venv/bin/python setup.py build_ext --inplace
 
-CUDA_VISIBLE_DEVICES=1 \
-/home/ftsong/projects/elfes-workspace/elfes/.venv/bin/python -m pytest -q
+PYTHONPATH=src CUDA_VISIBLE_DEVICES=1 \
+  /home/ftsong/projects/elfes-workspace/elfes/.venv/bin/python -m pytest -q
 ```
 
-系统 CUDA toolkit 为 13.2，而 PyTorch wheel 使用 CUDA 13.0 构建，因此 CUDA extension build 会给出 minor-version warning；当前机器上的编译、导入、测试、sanitizer 与 benchmark 均成功。Production toolchain 仍应优先让 toolkit minor version 与 PyTorch wheel 对齐。
+系统 CUDA toolkit 为 13.2，而 PyTorch wheel 使用 CUDA 13.0 构建，因此 extension build 会出现 minor-version warning；当前机器上的编译、导入、68 项测试与 benchmark 均成功。正式发布工具链仍应优先让 toolkit minor version 与 PyTorch wheel 对齐。
 
-## 真实材料 benchmark
+## 真实材料证据
 
-主要 workload 是从 `matbench_mp_e_form` 确定性抽取的 1,536 个多样化真实晶体；完整原始数据和派生 tensor cache 均被 Git 忽略。CPU benchmark 使用真实 PyTorch `DataLoader(batch_size=1)` 的确定性顺序，固定到一个物理 core，双方均为单线程，并特意复用 Vesin `NeighborList`，从而不给本实现一次性调用上的不公平优势：
+主要 workload 是从 `matbench_mp_e_form` 确定性抽取的 1,536 个真实晶体，覆盖 1–444 atoms、1,343 个不同化学式及多样 cell shapes。原始 Parquet 与派生 cache 位于 Git ignored `cache/`；仓库只保存固定数据 revision、SHA-256、可重复脚本和 sample manifest。没有下载 OMat24，也没有保留本任务不需要的 energy/force labels。
 
-```bash
-PYTHONPATH=. CUDA_VISIBLE_DEVICES='' \
-/home/ftsong/projects/elfes-workspace/elfes/.venv/bin/python \
-benchmarks/run_cpu_benchmark.py --cpu 31 --repeats 11 \
-  --warmup-seconds 2 --require-clean \
-  --output runs/reproduced-cpu-benchmark.json
-```
+在 AMD Ryzen Threadripper PRO 9975WX 的单个固定 core 上，`DataLoader(batch_size=1)` 的完整 epoch 中，`tonari` 为 143.80 ms，复用同一个单线程 Vesin `NeighborList` 为 248.08 ms，前者快 1.73×。单个 64-atom 真实结构为 0.0417 ms 对 0.0453 ms；512-atom real-derived supercell 已接近交叉点，之后 Vesin 的成熟 CPU cell list 更快。
 
-AMD Ryzen Threadripper PRO 9975WX 上，完整 1,536-structure epoch 为 143.55 ms，Vesin 为 248.19 ms，本实现快 1.73×；64-atom real structure 为 0.0411 ms，对 Vesin 的 0.0457 ms，快 1.11×。512-atom real-derived supercell 已接近交叉点，本实现慢约 4.6%；到 1,728 atoms 后 Vesin 明显领先，32,768 atoms 时本实现为 24.04 ms、Vesin 为 13.14 ms。换言之，CPU backend 已在真实数据中占多数的常见小体系调用上形成优势，但当前 single-thread cell list 没有超过 Vesin 的大体系成熟度。
+在 NVIDIA RTX PRO 6000 Blackwell 上，`DataLoader(batch_size=32)` 的完整 epoch 中，`tonari` 为 12.02 ms，逐 structure Vesin GPU 为 493.94 ms。代表性 32-structure batch 中，`tonari` 为 0.223 ms、Vesin 为 9.31 ms、独立 Equiformer/FairChem-style dense baseline 为 42.78 ms，三者得到完全相同的 43,842 个 pair keys。32,768-atom real-derived supercell 中，`tonari` 为 0.234 ms、Vesin 为 1.499 ms。
 
-CUDA 的既有正式结果保持不变：RTX PRO 6000 Blackwell 上，32-structure DataLoader workload 相对逐 structure Vesin GPU 的最大价值来自 batch-first execution。CPU 与 CUDA 的完整方法、全部 samples、版本和结果分别见[性能文档](docs/benchmark.md)、`benchmarks/results/threadripper-pro-9975wx-cpu.json` 与 `benchmarks/results/rtx-pro-6000-blackwell.json`。
+CPU 与 CUDA 都在全部 1,536 个结构、2,780,158 个 `(source, target, Sx, Sy, Sz)` keys 上与 Vesin 精确一致。正式 JSON 记录 clean implementation revision、data/cache/extension SHA 与全部 timing samples；Nsight summary 与 CSV 保存 kernel、memory、API 和 NVTX 证据。
 
-## 支持范围与限制
+## 支持范围与边界
 
-当前统一 API 支持 CPU/CUDA、float32/float64、同一 batch 内 mixed finite/partial/full PBC、不同 cell、active rows 线性独立的 rank-deficient cell、empty structures、有限 positions/cells、未 wrap atom representatives，以及 CUDA current stream。CPU extension 始终构建，CUDA extension 可选；CPU native search 会释放 Python GIL，但当前每个调用内部是单线程的，batched CPU 输入按 structure 顺序处理。
+当前支持 finite、partial/full PBC、triclinic 与 rank-deficient inactive cell rows、empty structures、未 wrap representatives、mixed-structure batches、CUDA current stream，以及 float32/float64。Active periodic rows 必须线性独立；positions/cells 必须有限。Representative periodic wraps、返回 cell shifts、atom indexing 与内部离散索引必须落在已文档化的整数范围内，越界会报错而不是截断。
 
-对每个 atom 和 active axis，由 representative 计算出的整数 periodic wrap 必须能由 int32 表示；返回 cell shift、cell-list node 和总 atom indexing 也受明确的 int32 bounds 约束，超出时直接报错，不静默截断。CUDA cell-list 遇到任一 nonzero representative wrap 时会让整个公开调用回退到 canonical exhaustive CUDA predicate，以保证大坐标消去下与 CPU/public vector formula 完全一致；因此大规模未 wrap CUDA batch 可能退化为 `O(N² × images)`，并受 exhaustive `< 2^31` blocks 限制。暂不提供 edge sorting、neighbor cap、per-edge/species cutoff、Verlet skin、prepared metadata cache、CUDA Graph capture、`torch.compile`/export 或跨 device dispatch。
+CPU backend 当前单线程并在 batch 内顺序处理 structures；CUDA 对正常 well-wrapped batch 使用 fused exhaustive 或 batched cell list。大规模未 wrap CUDA input 为保持 public displacement formula 的浮点语义，可能回退 exhaustive 并失去 cell-list 复杂度。One-shot API 每次重建 metadata；当前不提供排序、neighbor cap、species-dependent cutoff、Verlet skin、prepared metadata cache、CUDA Graph capture 或 `torch.compile`/export contract。
 
-ELFES 当前 two-center 路径以一个 scalar broad cutoff 调 Vesin half-list，再做 species cutoff 过滤并显式加入 onsite。新 CPU backend 已满足其 geometry、uniform cutoff、periodic images 和 strict-boundary 需求，但公开 API 返回 Torch full directed graph 且排除 onsite，因此还需要一个明确的 adapter/canonicalization design；本任务刻意没有修改或接入 ELFES。
+ELFES 仍保持只读。现有 two-center 路径需要单结构 NumPy、统一 broad cutoff、partial/full PBC、multiple images 和 strict filtering，`tonari` 已覆盖这些基础能力；未来接入仍需明确把 full directed pairs 转成 half list、做 species cutoff post-filter 并补 onsite，本任务没有提前冻结或实现该 adapter。

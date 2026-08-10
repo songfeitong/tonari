@@ -1,71 +1,97 @@
-# 当前设计
+# tonari 当前设计
 
-## 设计目标
+## 公共边界
 
-Public surface 只有一个 `radius_graph_pbc(positions, ptr, cells, pbc, cutoff)`。CPU 与 CUDA 接受相同 batched tensor shapes、返回相同 dtypes，并共享完整 graph identity；device 只决定 execution backend，不改变物理语义。CPU backend 是一等实现而非 CUDA fallback，CUDA backend 也不需要迁就 CPU 的逐 structure 执行方式。
+项目与 Python package 名为 `tonari`。Public surface 只有：
 
-Native build 分成始终构建的 `_C_cpu` 与可选的 `_C_cuda`。`_C_cpu` 同时包含公共 periodic metadata 与 CPU search；只有 PyTorch 本身支持 CUDA 且检测到 CUDA toolkit 时才构建 `_C_cuda`。这允许 CPU-only environment 完整安装和运行，又避免把本质上 host-side 的 1–3 维几何准备复制到两个 extensions。
+```python
+pair_indices, cell_shifts = find_neighbors(
+    positions,
+    cells,
+    pbc,
+    cutoff,
+    offsets=None,
+)
+```
 
-## 几何约定
+不保留旧 API alias。函数名不强调 radius 或 PBC：它执行通用 scalar-cutoff neighbor search，periodicity 完全由 `pbc` 参数决定。
 
-对于 edge key `(source, target, S)`，返回的 Cartesian vector 是 `r_source - r_target + S @ cell`，三个 cell vectors 按行保存。只有 `pbc[batch, axis]` 决定某个 cell row 是否具有周期性。Active rows 必须线性独立；inactive rows 可以为零或非零，完整 `3 x 3` cell 也可以 rank deficient。Graph 是完整有向图，使用严格 cutoff，只排除 zero-shift onsite edge，并保留其他 periodic self-images 和 multiple images。
+单结构输入为 `positions: (N, 3)`、`cells: (3, 3)`、`pbc: (3,)`，`offsets=None` 等价于 `[0, N]`。Batch 输入为拼接的 `positions: (N_total, 3)`、逐结构 `cells: (B, 3, 3)`、`pbc: (B, 3)` 和 `offsets: (B + 1,)`。`offsets` 使用 int64、从零开始、非递减且最后一个值等于 `N_total`；empty structures 由相邻相等 boundaries 表达。
 
-搜索时只沿 active periodic axes wrap representatives。若 source 和 target representatives 的整数 wraps 分别为 `q_source` 和 `q_target`，search-image shift `T` 会按 `S = T - q_source + q_target` 返回。这保证使用原始输入 representatives 重建的 vector 完全一致，使 representative translation 只 relabel shifts，而不改变物理 edges。每个 `q` 和最终 `S` 都必须落在 int32 范围内；任一条件不满足都会显式报错。
+Torch positions/cells 接受 float32 或 float64，所有 Torch arrays 必须同 device，pbc 为 bool，offsets 为 int64。CPU Tensor 走 native CPU backend，CUDA Tensor 走 native CUDA backend。NumPy 接受同样的 float/bool/int dtypes 与 single/batch shapes，只走 CPU backend并返回 NumPy arrays。所有 array 参数必须属于同一生态；frontend 在 native dispatch 前拒绝 NumPy/Torch 混用。
 
-对于 active-row matrix `A`，metadata 使用其 pseudoinverse transpose 作为 dual；满行秩时与 `A.T @ inv(A @ A.T)` 等价。Dual column norms 是 reciprocal face-height factors，每个 active image range 为 `ceil(cutoff * norm(dual_axis))`，inactive range 为零。Native implementation 直接在 active rows 上执行 long-double one-sided Jacobi SVD，同时完成 rank check 与 pseudoinverse；它刻意不先形成 Gram matrix，因为正规方程会把条件数平方并把合法的近共线 active rows误判为退化。该处理无需补齐或求逆完整 cell，统一支持 finite Geometry、rank-1 wire、rank-2 slab、triclinic cell 和 full periodic cell。
+NumPy frontend 不是第二套搜索实现。Writeable、aligned、nonnegative-stride arrays 尽量通过 `torch.from_numpy` 零复制进入共享 CPU path；不能安全建立 Tensor view 的 arrays 会在 frontend 复制，非 contiguous layout 会在 native boundary 做必要 packing。Native output Tensor 的 CPU storage 直接导出为 NumPy arrays。
 
-## 公共 metadata 与 device schedule
+## Pair 方向与几何约定
 
-Python boundary 先验证 shapes、dtypes、devices 和 cutoff，再把很小的 `ptr/cells/pbc` 复制到 CPU。`_C_cpu.build_periodic_metadata_cpu` 一次返回 duals、拼接的 int32 image shifts 和 image pointers；empty structure 的 image count 直接为零，因此 tiny periodic cell 不会为零 atoms 枚举 images。Cells 的 finite 与 active-rank 验证也在这个负责边界完成。
+`pair_indices` 为 int64 `[2, P]`，并固定 `source, target = pair_indices`。`cell_shifts` 为 int32 `[P, 3]`，每个 row 是施加在 source image 上的整数晶胞平移。Cell vectors 按行保存，因此 structure `b` 中 pair `k` 的 Cartesian displacement 是：
 
-公共 `SearchMetadata` 只包含 CPU/CUDA 都需要的信息：duals、image shifts、image pointers、atom counts、image counts 与 maximum atoms。非空 batch 的累计 periodic image shifts 设有 `2^24` resource limit，并在 Cartesian product 分配和枚举前以 checked multiplication 验证；这把极小 cell 的不可控 host OOM 变成确定错误。CUDA-only block pointers、node pointers、total blocks 和 total nodes 位于独立 `CudaSearchSchedule`。这个拆分消除了旧设计中“搜索 metadata 天生等于 CUDA launch metadata”的偶然耦合。
+```python
+positions[source[k]] - positions[target[k]] + cell_shifts[k] @ cells[b]
+```
 
-## Hybrid CPU 搜索
+结果包含 squared distance 严格小于 `cutoff**2` 的全部有向 atom-image pairs。只排除 zero-shift onsite `(i, i, [0, 0, 0])`；保留 periodic self-images、同一 atom pair 的 multiple images 与 reverse pair。Inactive PBC axes 的 shift 必须为零。Batch members 之间绝不产生 pair。Output order 没有接口保证，correctness 使用完整五元 key set 比较。
 
-CPU public batch 在一个释放 GIL 的 native C++ call 中按 structure 顺序处理。每个非空 structure 先用 dual 把 representatives wrap 到 active periodic fundamental directions，验证 finite positions 和 int32 wraps，并预计算每个 image shift 的 Cartesian translation。浮点计算保留输入的 float32/float64 dtype；metadata geometry 在 float64 中建立后转换为输入 dtype。
+函数不绑定 Å、Bohr 或其他长度单位。`positions`、`cells` 与 `cutoff` 必须使用同一单位；`pair_indices` 和 `cell_shifts` 无量纲。一致缩放三种长度输入不改变 pair identity。
+
+## Representative wrapping
+
+搜索只沿 active periodic axes wrap representatives。若 source 与 target 的整数 wraps 分别为 `q_source` 和 `q_target`，search image shift 为 `T`，则返回 `S = T - q_source + q_target`。这保证用原始输入 positions 与 output shifts 重建的 displacement 完全一致；把某个 representative 平移整数 cell 只会 relabel shifts，不改变物理 displacement multiset。
+
+每个 representative wrap 和最终 output shift 都必须落在 int32 range。实现先验证 wraps，再以 int64 intermediate 计算差并检查 output；不接受静默截断。总 atom indexing 也限制在 int32-compatible implementation range。Positions/cells 必须 finite；active cell rows 必须线性独立，inactive rows 可为零或非零，完整 `3×3` cell 可以 rank deficient。
+
+## 公共 periodic geometry
+
+Python boundary 验证 ecosystem、shapes、dtypes、devices、cutoff 与 offsets，再把很小的 offsets/cells/pbc metadata 复制到 CPU。`_C_cpu.build_periodic_metadata_cpu` 在一次 native call 中完成 finite/rank check、active duals、image ranges 与拼接 image shifts；CPU 与 CUDA 复用同一结果。Empty structure 在 rank/repeat/image enumeration 前短路，其 image count 为零。
+
+设 active-row matrix 为 `A`。Metadata 直接在 `A` 上执行 long-double one-sided Jacobi SVD，并据此判秩与构造 pseudoinverse；它刻意不形成 `A Aᵀ`，因为 normal equations 会平方 condition number。Dual column norms 给出 reciprocal face-height factors，每个 active image range 为 `ceil(cutoff * norm(dual_axis))`，inactive range 为零。该算法不需要补齐或求逆完整 cell，因此统一支持 rank-1 wire、rank-2 slab 与 full periodic triclinic cell。
+
+非空 structures 的 batched image shifts 总数有 checked `2^24` resource guard，防止极小合法 cell 在 host Cartesian product 中不可控 OOM。这个 guard 是 implementation resource limit，不改变其范围内的物理 predicate。
+
+## CPU backend
+
+CPU 对 batch members 顺序处理，每个 structure 独立选择 exhaustive 或 Cartesian cell list。Native call 使用 `py::gil_scoped_release`，但内部不启动 thread pool；调用方可以在 DataLoader workers、进程池或 DDP 层决定并行度，避免 workers 与 backend threads 乘法 oversubscription。
 
 ### Exhaustive path
 
-若 `N² × image_count <= 16,384`，直接遍历 target、source 和 search image。每个 candidate 只构造三维 displacement、比较严格 `distance² < cutoff²`，命中后转换为原始 representative 对应的 output shift。该路径没有 bins、hash table 或 candidate tensors，适合小 structure 与 finite molecules。
-
-16,384 是真实 Matbench threshold sweep 的 provisional performance constant。它按实际候选数而非单纯 atom count 决策，因此 small-cell multiple-image structure 会比相同 `N` 的 finite structure 更早转入 cell list。该值只影响性能，不影响输出，不写进 correctness tests。
+候选工作量为 `N² × image_count`。不超过 16,384 时，直接遍历 target、source 与 search image，只构造三维 displacement 并执行 strict `distance² < cutoff²`。它不建立 bins、hash table或 candidate tensors，适合常见小结构。16,384 来自固定 Matbench workload 的 crossover sweep，是性能参数而非 public contract。
 
 ### Cell-list path
 
-大候选空间先以 wrapped target representatives 的 Cartesian AABB 建立 dense bins。对每个 source atom 与 periodic image，只把落在 AABB 外扩 search cutoff 范围内的 image 插入；node 保存 int32 source、image index 和 linked-list next。每个 target 固定检查自身 bin 周围 `3 x 3 x 3` stencil，再对 nodes 做距离筛选。曾实现的 target-to-bin corner pruning 在严格 cutoff 边界会受 bin-coordinate 舍入影响而破坏双向语义，收益又很小，因此 production 明确不使用它。
+大候选空间先 wrap representatives，以 target positions 的 Cartesian AABB 建立 cutoff-sized dense bins。只有落在 AABB 外扩 search cutoff 范围内的 periodic source images 才插入 linked nodes；每个 target 扫描相邻 27 bins 并筛选 candidate。Node 保存 int32 source、image index 与 next。
 
-Search cutoff 不是物理 tolerance，而是只用于 broad phase 的保守上界。Wrapped search formula 与使用原始 representatives/output shifts 的 public formula 在实数上等价，但对很大的未 wrap coordinates 具有不同浮点消去；实现根据 position、wrap、image shift 与 cell 的最大操作尺度扩大 broad-phase cutoff。明显处于误差带内侧的 candidate 可直接接受 wrapped distance，边界壳必须用 public formula 重算严格 `distance² < cutoff²`；若所需 padding 超过 cutoff，则不冒险使用 cell list，回退 exhaustive。最终 graph 始终由 public formula 定义。
+Search cutoff 只用于 conservative broad phase。实现根据 positions、wraps、image shifts 与 cells 的最大操作尺度构造浮点误差带；明显位于带内侧的 candidate 可使用 wrapped distance，边界壳按原始 positions 与 output shift 重算 public predicate。若保守 padding 不再小于 cutoff，则回退 exhaustive。最终 pair identity 始终由 public displacement formula 定义。
 
-固定 density、cutoff 和邻居数时，该路径接近 `O(N + E)`；但它仍必须写出全部 `E` 条有向 edges。Dense bin grid 限制为少于 `2^26` entries，并要求平均每个 possible source image 不超过 64 bins，否则回退 exhaustive，避免极端稀疏 finite coordinates 分配巨大空 grid。回退可能在人工超稀疏大体系上退化为 `O(N²)`，这是明确记录的安全取舍。
+Dense bin grid 少于 `2^26` entries，并限制相对 possible source images 的空网格膨胀；超限时回退 exhaustive，避免极端稀疏 finite coordinates 分配巨大空 grid。固定 density、cutoff 与平均 pair 数时，该路径接近 `O(N + P)`，但仍必须写出全部 `P` 个 outputs。
 
-CPU backend 当前内部单线程。pybind binding 使用 `gil_scoped_release`，允许 Python runtime 继续调度其他 threads，但不隐式启动 OpenMP/thread pool。对 DDP、multiprocessing DataLoader 或多个 independent structures，推荐由上层选择进程级并行度，避免 backend nested parallelism。
+## CUDA backend
 
-## Hybrid CUDA 搜索
+CUDA 接受整个 heterogeneous batch。`CudaSearchSchedule` 将每个 structure 的 atom/image tasks 编入全局 block/node offsets，kernels 通过 segment lookup 找到所属 structure；所有生成 pair 都留在相应 offsets 区间。
 
-CUDA 小结构路径先用 O(N) kernel 验证 finite positions 并预计算 int32 representative wraps，再把完整 `(source, target, image)` candidate space 直接映射到 CUDA blocks，不 materialize candidate tensors。Count pass 每个 block 只执行一次 global atomic；host 精确分配输出后，write pass 使用 block scan，并由每个 block 一次性预留输出区间。当 batch 内所有 structure 都少于 256 atoms 时启用。
+Batch 内最大 structure 少于 256 atoms 时使用 fused exhaustive：`(source, target, image)` candidates 直接映射到 threads，block reduction 计数、block scan 写出，不 materialize dense candidates。达到 crossover 后使用 batched Cartesian cell list：prepare kernel 融合 representative wrapping 与 per-structure bounds；source images 插入 bins；每个 warp 负责一个 target，由前 27 lanes 遍历相邻 bins；count/prefix-sum 后精确分配并 write。
 
-大结构路径先 wrap representatives，并在同一 kernel 中融合 per-structure Cartesian bounds；随后把相关 periodic source images 插入 cutoff-sized Cartesian bins。每个 warp 负责一个 target，由前 27 个 lanes 遍历相邻 bins；两次 query pass 先统计 per-target edges，再写入 device prefix sum 生成的 offsets。每个 structure 的 bin count 一旦超过 `2^28` allocation limit 就在 device 上饱和为 `limit + 1`，因此 batched cumsum 不会先被无用的巨大精确计数溢出；host 看到超过 limit 后回退 fused exhaustive，并在此时检查 exhaustive block-grid bound。
+CUDA bin count 对每个 structure 在超过 `2^28` allocation limit 时饱和为 `limit + 1`，避免多个仍在 int64 内的巨大 sparse counts 先在 batched cumsum 中相加溢出。Host 观察到超限后回退 exhaustive，并只在此时检查 exhaustive block-grid bound。Cell-list nodes 与 shifts 受 int32 range 保护。
 
-CUDA cell-list 的 wrapped predicate 只在所有 representative wraps 都为零时与 public original-position formula 具有相同浮点运算。Prepare kernel 因此把“发现任一 nonzero wrap”编码进原有 bin-count status word，已有 cumsum host read 同时返回 bins 与 status；命中后 whole call 直接复用 `radius_graph_pbc_cuda` 的 original-position/output-shift predicate，不维护第三份容易漂移的 strict-cutoff 实现。该设计不增加正常 well-wrapped cell-list 的 host synchronization，但 unwrapped 大体系会退化为 exhaustive，并受 `< 2^31` thread blocks 限制。
+CUDA cell-list 的 wrapped predicate 只在 representative wraps 全为零时与 public original-position formula 具有相同浮点运算。Prepare kernel 把 nonzero wrap 编码进已有 bin-count status；已有 host read 同时返回 bins 与 status，命中后 whole call 复用 fused exhaustive canonical predicate。正常 well-wrapped path 不增加同步；unwrapped 大体系可能退化为 `O(N² × images)` 并受 exhaustive `< 2^31` blocks 限制。
 
-256-atom crossover 是目标 Blackwell GPU 上的 provisional heuristic。它与 CPU 的 16,384-candidate threshold 相互独立：CUDA 的固定成本、parallel occupancy 与 batch composition 不适合套用 CPU 的决策规则。
+Exact-size allocation 需要 count/prefix-sum 后的 device-to-host synchronization。Nonfinite input、wrap overflow 与 output-shift overflow 被编码进已有状态位置，与必要 read 一次返回，不为 validation 新增同步。所有 launches 使用 PyTorch current CUDA stream，并在目标 device guard 下运行。
 
-## PyTorch、autograd 与错误边界
+## Autograd
 
-浮点输入只在离散 topology 构造中 detach。Extension 返回 `int64 [2, E]` edges 与 `int32 [E, 3]` shifts；连续 vectors 必须由调用方使用原始 `positions/cells` 重建，因此无需 custom autograd function，且 topology 固定时 gradients 正常流向两者。
+Neighbor identity 是离散 topology，production 在搜索边界 detach 浮点 tensors，返回整数 arrays，无 custom backward。调用方必须使用原始 `positions`、`cells` 与返回的 `cell_shifts` 重建 `displacements`；identity 固定时，PyTorch gradients 正常流向连续几何。NumPy 路径自然不涉及 autograd。
 
-CPU positions 的 finite/range validation 在 native per-atom preparation 中执行。CUDA 对应 flags 融合进已有 prepare/count synchronization，避免额外 D2H sync。Cells finite 和 active-rank validation 位于共享 host metadata 边界。总 atoms、representative wraps、returned shifts 和 cell-list nodes 均受明确 int32 indexing contract 约束；不提供“内部算成 int64、最后悄悄截断”的伪支持。
+## Reference 与测试
 
-CUDA exact-size output allocation 需要 count/prefix-sum 后的 device-to-host synchronization；CPU 使用 native vectors 收集后一次精确分配和 memcpy。One-shot API 每次重建 metadata，当前没有 identity-based implicit cache，因为原地修改 cells/PBC 会产生 stale graph，而 hash/copy 可能吃掉收益。未来 prepared API 必须先定义 ownership、mutation invalidation 与 workspace lifetime。
+内部 `_reference.find_neighbors_reference` 与 public Torch shapes/signature 一致，独立执行 exhaustive PyTorch enumeration，不调用 production native search。它按原始 positions/output shifts 重建 displacement，并共享 int32/image-resource contract；只用于开发期 correctness，不属于 public surface。
 
-## ELFES 需求适配评估
+68 项 tests 覆盖 public surface、NumPy/Torch ecosystem、single/batch shapes、单位一致缩放、finite/partial/full PBC、rank-deficient 与近共线 active rows、mixed batch、ordinary/large unwrapped representatives、int32 rejection、nonfinite rejection、multiple images、periodic self-images、empty tiny cell、image/bin resource limits、exact 与 nextafter cutoff、float32/float64、randomized differential、rotation/reflection covariance、CUDA current stream 与 continuous-geometry backward。Tests 比较完整 `(source, target, Sx, Sy, Sz)` sets，不冻结 output order。
 
-ELFES 当前 `group_atom_image_pairs` 接受一个 NumPy `Geometry`，构造 Vesin `NeighborList(cutoff=2 * max(atom_cutoffs), full_list=False, n_threads=1)`，然后按 species-dependent pair cutoff 二次过滤，并显式加入 onsite。它与本 backend 的共同需求是：单 structure、scalar broad cutoff、partial/full PBC、strict cutoff、multiple images、int32 shifts 和 unwrapped representative gauge。
+## ELFES 只读需求核对
 
-因此 native CPU search 足以承担 ELFES broad-phase neighbor enumeration，并可用 `torch.from_numpy` 零拷贝包装 positions/cell；但它不是当前函数的 drop-in replacement。差异包括 Torch API、full directed output、zero onsite exclusion，以及 ELFES 需要 deterministic Hermitian half-list 和 explicit onsite。未来优雅接入应在清晰 adapter 或更底层 native search policy 中表达这些差异，而不是在 ELFES 内随手拼接一串临时转换。本任务只确认可行性，没有修改 ELFES 或删除其 Vesin dependency。
+ELFES 当前 `group_atom_image_pairs` 接受单个 NumPy `Geometry`，用统一 `2 * max(atom_cutoffs)` broad cutoff 调 Vesin half list，再按 species-dependent cutoff 严格过滤并显式加入 onsite。它与 `tonari` 的共同需求是 NumPy CPU、单结构、scalar broad cutoff、partial/full PBC、strict boundary、multiple images、int32 shifts 与 unwrapped representative gauge。
 
-## 正确性策略
+`tonari` 返回 full directed pairs 并排除 onsite，因此未来 adapter 仍需定义 half-list canonicalization、species post-filter 与 onsite insertion。当前任务只确认能力覆盖，不修改 ELFES，也不把该 adapter 反向污染核心 API。
 
-`reference_radius_graph_pbc` 是独立 exhaustive PyTorch implementation，不调用 CPU/CUDA native search，并按原始 positions 与 output shifts 逐轴执行 public vector formula。53 项 unit tests 比较完整 `(source, target, Sx, Sy, Sz)` key sets，不冻结 edge order；覆盖 finite/partial/full PBC、rank-deficient 与近共线但满秩 active rows、mixed batch、普通和约一亿 cell translation 的 unwrapped representatives、int32 range rejection、nonfinite rejection、multiple images、periodic self-images、tiny-cell empty structure、production/reference image-count resource limit、sparse batched bin-count saturation、exact 与 nextafter cutoff boundary、float32/float64、CPU randomized differential、rotation/reflection covariance、CUDA non-default stream，以及 continuous-geometry backward。
+## 暂不支持
 
-ASE 提供 triclinic partial-PBC external case。正式 CPU benchmark 还对全部 1,536 个 Matbench structures、2,780,158 个 keys 使用 Vesin 0.6.1 做 exact comparison；CUDA 既有正式记录使用同一 corpus，并另外与独立 Equiformer/FairChem-style dense semantics baseline 对比。
+当前没有 pair sorting、neighbor cap、per-species cutoff、Verlet skin、prepared metadata/workspace cache、CUDA Graph capture、`torch.compile`/export contract 或 GNN/PyG adapter。未来 adapter 只在边界把 `pair_indices` 映射为 `edge_index`、把 `displacements` 映射为 `edge_vectors`；核心 neighbor-search API 不引入图专属术语。

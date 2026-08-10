@@ -63,12 +63,13 @@ def find_neighbors(
 
     Returns:
         A tuple ``(pair_indices, cell_shifts)`` in the same array ecosystem as
-        the inputs. ``pair_indices`` has dtype ``int64`` and shape
-        ``(2, num_pairs)``; ``source, target = pair_indices``. ``cell_shifts``
-        has dtype ``int32`` and shape ``(num_pairs, 3)``. Each shift translates
-        the source image, so for pair ``k`` in structure ``b`` its Cartesian
-        displacement is ``positions[source[k]] - positions[target[k]] +
-        cell_shifts[k] @ cells[b]``. Both outputs are dimensionless.
+        the inputs and, for Torch, on the same device. ``pair_indices`` has
+        dtype ``int64`` and shape ``(2, num_pairs)``;
+        ``source, target = pair_indices``. ``cell_shifts`` has dtype ``int32``
+        and shape ``(num_pairs, 3)``. Each shift translates the source image,
+        so for pair ``k`` in structure ``b`` its Cartesian displacement is
+        ``positions[source[k]] - positions[target[k]] + cell_shifts[k] @
+        cells[b]``. Both outputs are dimensionless.
 
     Raises:
         TypeError: If array arguments mix PyTorch and NumPy, or use an

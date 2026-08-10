@@ -2,24 +2,28 @@
 
 ## 数据集与抽样
 
-主要数据源是 ColabFit `matbench_mp_e_form`，dataset ID 为 `DS_5drebe4tktiu_0`。Source page 当前报告 132,741 个 configurations，而任务早期描述写的是 132,752；本仓库记录实际观察到的源数据值，不静默修正这一差异。固定 Parquet object 是 `colabfit/Matbench_mp_e_form` revision `9880d5b9b62877ec5aa14d1a4c2a9ff4ee870b8d`、path `co/co_0.parquet`、128,655,162 bytes，SHA-256 为 `4b815791cc31862895b23cda7339d96217c37815c8f183949dc59b3035ee2afd`。
+主要数据源是 ColabFit `matbench_mp_e_form`，dataset ID 为 `DS_5drebe4tktiu_0`。Source page 当前报告 132,741 个 configurations，而任务早期描述写的是 132,752；本仓库记录实际观察值，不静默修正这一差异。固定输入是 `colabfit/Matbench_mp_e_form` revision `9880d5b9b62877ec5aa14d1a4c2a9ff4ee870b8d` 的 `co/co_0.parquet`，大小 128,655,162 bytes，SHA-256 为 `4b815791cc31862895b23cda7339d96217c37815c8f183949dc59b3035ee2afd`。
 
-`scripts/prepare_matbench.py` 使用 seed `20260809` 确定性选择 1,536 个 structures。脚本对 atom count、cell-vector length anisotropy、最大 absolute inter-vector cosine 和 element count 使用固定 strata，以 `sha256(f"{seed}:{configuration_id}")` 为每个 stratum 内的稳定顺序，并在排序后的 strata 间 round-robin。样本覆盖 948 个 occupied strata 和 1,343 个 unique reduced formulas。Atom-count 在 0/10/25/50/75/90/95/99/100% quantiles 分别为 1、4、9、24、58、134、176、322.6、444；cell anisotropy 范围为 1.0–52.27，cell skew 范围为 0.0–0.9966。所有源晶体都是 full PBC。
+`scripts/prepare_matbench.py` 使用 seed `20260809` 确定性选择 1,536 个 structures。脚本按 atom count、cell-vector length anisotropy、最大 absolute inter-vector cosine 和 element count 使用固定 strata，并用 `sha256(f"{seed}:{configuration_id}")` 决定每个 stratum 内的稳定顺序，再在 strata 间 round-robin。样本覆盖 948 个 occupied strata 和 1,343 个 unique reduced formulas，原子数范围为 1–444。所有源晶体都是 full PBC。
 
-已提交的约 992 KiB manifest 包含 source configuration IDs、可用时的 Matbench names、compositions、atom counts、cell metrics、strata、source revision 和 selection method；约 123 MiB raw Parquet 与 1.5 MiB tensor cache 位于 Git-ignored `cache/`。没有下载 OMat24，也没有保留 energy/force labels。Scaling workload 只对样本中的真实 64-atom configuration `CO_8661596785617876616983344` 做整数 supercell repetition，因此属于真实结构派生 workload，不是随机点云。
+已提交 manifest 保存 source IDs、compositions、atom counts、cell metrics、strata、source revision 和 selection method；raw Parquet 与 tensor cache 位于 Git-ignored `cache/`。当前 manifest SHA-256 为 `3475c391b8def6bf599a57a7f1c938113eabcbfb0f2b89f7d31da648c6f7b413`，cache SHA-256 为 `25644bf26a8c305c91d3e52f3ea8fb12c3c58dede830bf5625b341527179b58c`。没有下载 OMat24，也没有保存 energy/force labels。Scaling workload 只对样本中的 64-atom structure `CO_8661596785617876616983344` 做整数 supercell repetition，因此仍是真实结构派生 workload。
 
-## CPU benchmark 方法
+## 正确性口径
 
-CPU workload 使用标准 map-style PyTorch `Dataset` 和 `DataLoader(batch_size=1, shuffle=True, num_workers=0)`，shuffle generator seed 与抽样 seed 相同。DataLoader 先 materialize 为按真实顺序排列的 `StructureBatch` list，计时明确排除数据读取，只包含公开 one-shot `radius_graph_pbc` 调用；每次调用都包含 metadata、native search、output allocation 与 Python/C++ boundary。
+每个 backend 的输出都转换为完整的 `(source, target, Sx, Sy, Sz)` key set，并在排序后比较；输出顺序不属于契约。Vesin shift 施加在它的 second atom 上，所以对照映射为 `source=vesin_second`、`target=vesin_first`、`cell_shifts=vesin_shift`。CPU 和 CUDA 都在计时前对全部 1,536 个 structures、2,780,158 个 pairs 与 Vesin 做 exact differential validation，结果全部一致；CUDA 的 median batch 另与独立 dense PyTorch baseline 精确比较了 43,842 个 pairs。
 
-本实现与 Vesin 都固定在 CPU 31 上运行。Backend 均为单线程：本实现内部不启 thread pool，Vesin 明确使用 `n_threads=1`。Vesin baseline 对每个 workload 构造一个 `NeighborList(cutoff=5.0, full_list=True, sorted=False)` 并在所有重复之间复用，因此它不承担 object reconstruction，属于对 Vesin有利的公平 baseline。Geometry 使用 float64；每个 backend/workload 先持续 warmup 至少 2 秒，再计时 11 次，scaling cases 至少 12 次；JSON 保存每个 sample、minimum、median 和 maximum。
+这里比较的是 neighbor identity，不比较浮点 `displacements` 的 backend 舍入顺序。Production tests 另外固定 strict cutoff、onsite exclusion、periodic self-images、multiple images、partial PBC、未 wrap representatives、rank-deficient cells、CPU/CUDA/NumPy/Torch 一致性和一致单位缩放不变性。
 
-正确性计时前，1,536 个 structures 的 production keys 与 Vesin 全量逐 structure exact comparison。方向统一为 `(source=vesin_second, target=vesin_first, S=vesin_shift)`，然后 lexicographically sort 完整 `(source, target, Sx, Sy, Sz)`，不比较 backend output order。最终 2,780,158 条 keys 全部一致。
+## CPU 方法
 
-CPU 正式复现命令为：
+CPU workload 使用标准 map-style PyTorch `Dataset` 与 `DataLoader(batch_size=1, shuffle=True, num_workers=0)`；shuffle generator seed 与抽样 seed 相同。DataLoader 先 materialize 为确定顺序的 structure list，计时排除数据读取，只包含公开 one-shot `find_neighbors` 的输入处理、periodic metadata、native search、精确输出分配和 Python/C++ boundary。
+
+tonari 与 Vesin 均固定在 CPU 31，且均为单线程。Vesin 使用一个跨所有重复复用的 `NeighborList(cutoff=5.0, full_list=True, sorted=False, n_threads=1)`，不承担 object reconstruction。Geometry 使用 float64；每个 backend/workload 至少 warmup 2 秒，epoch 计时 11 次，scaling cases 计时 12 次；JSON 保存全部 samples、minimum、median 和 maximum。
+
+正式复现命令为：
 
 ```bash
-PYTHONPATH=. CUDA_VISIBLE_DEVICES='' \
+PYTHONPATH=src:. CUDA_VISIBLE_DEVICES='' \
 /home/ftsong/projects/elfes-workspace/elfes/.venv/bin/python \
 benchmarks/run_cpu_benchmark.py --cpu 31 --repeats 11 \
   --warmup-seconds 2 --require-clean \
@@ -28,55 +32,72 @@ benchmarks/run_cpu_benchmark.py --cpu 31 --repeats 11 \
 
 ## CPU 结果
 
-硬件为 AMD Ryzen Threadripper PRO 9975WX 32-Cores，32 个 physical cores、每 core 一个 hardware thread；正式进程 affinity 为 `[31]`。软件为 Python 3.12.3、PyTorch 2.12.1+cu130、Vesin 0.6.1。Machine-readable record 为 `benchmarks/results/threadripper-pro-9975wx-cpu.json`，implementation/method revision 为 `bd30fa1e50b785aea9cb9242d3889f171dd201db`。脚本以 `--require-clean` 拒绝 dirty worktree，并在 record 中保存 `repository_worktree_clean=true`、sample cache SHA-256 `3ed2ab145d8ef2751352917c0b48dd8577d6fffd98a6b33a5bc3e1be5ac60545` 和实际 CPU extension SHA-256 `67d5da0dd03b1f8cff80130ac6f6b0b4e59e1b1cf432ea73bbddee3e12911727`，避免结果只绑定 Git HEAD 却没有绑定输入 cache 与被加载 binary。
+硬件为 AMD Ryzen Threadripper PRO 9975WX 32-Cores，软件为 Python 3.12.3、PyTorch 2.12.1+cu130、Vesin 0.6.1。正式 record 是 `benchmarks/results/threadripper-pro-9975wx-cpu.json`；implementation revision 为 `0dcfbb6ba11f3a46a6f4a2721f626daabb73cbf6`，CPU extension SHA-256 为 `f6a193c29c97a2f86faf2e8901d6b97178f3ef26fa52b7288c57a64126764e95`。
 
-| Workload | Atoms | Edges | 本实现 CPU | Vesin CPU reused | Vesin / 本实现 |
+| Workload | Atoms | Pairs | tonari CPU | Vesin CPU reused | Vesin / tonari |
 | --- | --: | --: | --: | --: | --: |
-| 1,536-structure DataLoader epoch | 75,238 | 2,780,158 | 143.554 ms | 248.190 ms | 1.73× |
-| 真实结构，1×1×1 | 64 | 744 | 0.0411 ms | 0.0457 ms | 1.11× |
-| 派生 supercell，2×2×2 | 512 | 5,952 | 0.2391 ms | 0.2286 ms | 0.96× |
-| 派生 supercell，3×3×3 | 1,728 | 20,088 | 1.0997 ms | 0.7141 ms | 0.65× |
-| 派生 supercell，4×4×4 | 4,096 | 47,616 | 2.9385 ms | 1.6488 ms | 0.56× |
-| 派生 supercell，6×6×6 | 13,824 | 160,704 | 10.1501 ms | 5.4798 ms | 0.54× |
-| 派生 supercell，8×8×8 | 32,768 | 380,928 | 24.0409 ms | 13.1367 ms | 0.55× |
+| 1,536-structure DataLoader epoch | 75,238 | 2,780,158 | 143.802 ms | 248.076 ms | 1.73× |
+| 真实结构，1×1×1 | 64 | 744 | 0.0417 ms | 0.0453 ms | 1.09× |
+| 派生 supercell，2×2×2 | 512 | 5,952 | 0.2354 ms | 0.2286 ms | 0.97× |
+| 派生 supercell，3×3×3 | 1,728 | 20,088 | 1.1048 ms | 0.7150 ms | 0.65× |
+| 派生 supercell，4×4×4 | 4,096 | 47,616 | 2.9450 ms | 1.6539 ms | 0.56× |
+| 派生 supercell，6×6×6 | 13,824 | 160,704 | 10.1643 ms | 5.4800 ms | 0.54× |
+| 派生 supercell，8×8×8 | 32,768 | 380,928 | 24.0613 ms | 13.1372 ms | 0.55× |
 
-完整 epoch 的 11 个本实现 samples 位于 143.491–143.677 ms，Vesin samples 位于 247.934–248.449 ms；精确值以 JSON 为准。固定 core 与 2 秒 warmup 是必要的方法细节：较短 0.5 秒 warmup 时，Threadripper 在累计约 1.2 秒后出现明显 frequency plateau change，若只报告最小值或短序列中位数会把 governor 行为混入算法结论。
+真实样本中大量 structure 很小，固定调用成本占主导，所以完整 epoch 上 tonari 领先 1.73×。单独放大后，约 512 atoms 已到本机交叉区，Vesin 在更大单体系上明显更快。正确结论是“tonari CPU 对常见小材料体系和许多高频 one-shot calls 有优势”，而不是“tonari CPU 的 cell list 全面超过 Vesin”。
 
-结果的正确解释是“真实样本分布上的小体系调用吞吐优势”，不是“大体系 cell list 全面超过 Vesin”。样本最多 444 atoms，epoch 中大量 structure 落在 native metadata 和低固定开销占主导的区间，因此总体快 1.73×；64 atoms 单独领先，512 atoms 已接近交叉。到 1,728 atoms，Vesin 快约 1.54×；32,768 atoms 时快约 1.83×。Production 可以在 ELFES 常见小体系中提供价值，同时保留对大体系继续优化或继续使用 Vesin 的诚实空间。
+CPU exhaustive/cell-list crossover 按 `N² × image_count` 判断。开发期在完整 epoch 上扫描 candidate limits 2,048、8,192、16,384、32,768、131,072，对应 quick-run medians 约 138.8、115.4、115.0、117.0、162.2 ms，因此选择 16,384。这个 threshold 属于内部策略，不是公共 API 契约；开发 quick runs 也不与正式固定-core表格混用。
 
-## CPU crossover 与低成本优化证据
+## CUDA 方法
 
-CPU exhaustive/cell-list crossover 按 `N² × image_count` 判断。开发期在同一 1,536-structure epoch 上扫描 candidate limits 2,048、8,192、16,384、32,768、131,072，对应约 138.8、115.4、115.0、117.0、162.2 ms，因此选择 16,384。该 quick sweep 发生在正式 pinning/warmup protocol 完成前，只用于相对选择，不与正式表格混用；所有阈值的 correctness 相同。
+CUDA 使用同一 1,536-structure sample 和真实 `DataLoader(batch_size=32)`；完整 batch 先一次 transfer 到 GPU。计时排除数据读取和 H2D，包含公开 one-shot `find_neighbors`、metadata、同步、分配与 CUDA work。Geometry 使用 float32，cutoff 为 5 Å。
 
-最初 CPU prototype 在 Python/Torch 中逐项构造 duals 和 image shifts，epoch 约 285.7 ms，慢于 Vesin 的约 232.7 ms。将公共 1–3 维 periodic metadata 移入一次 native CPU call 后，短 protocol 降至约 136.7 ms；删除每 structure 都会调用、但只在环境变量开启时才打印的临时 high-resolution profiler 后进一步降至约 117 ms。边界审查随后要求用直接 SVD 避免 Gram 条件数平方、用原始 representatives 复核 cell-list cutoff shell，并删除有严格边界缺陷的 corner-bin pruning；最终固定-core steady-state 数字为 143.6 ms。不同 protocol 的开发值不能与正式表格直接比较，但同阶段 A/B runs 和最终结果都支持核心优化方向，且正确性优先于保留旧数字。
+Vesin 0.6.1 baseline 接收 CUDA tensors，但必须逐 structure 调用后再拼接；它的 `NeighborList` 在重复之间复用。Dense baseline 独立复现 Equiformer/FairChem-style `N² × padded periodic images` tensor expansion，并校正为 tonari 的 strict cutoff 与 onsite policy；它只用于方法对照，不复制上游源码。所有 backend 都显式同步，报告 median，并保留 Torch allocator peak。超过 150 million estimated candidates 的 dense scaling case 跳过，以避免无信息的 OOM。
 
-两项直觉优化被真实 workload 否决。将 bins 从 cutoff 改为 cutoff/2 把 32,768-atom candidate visits 从约 222 万降到 114 万，却因 neighbor-bin loops 增多把 query 从约 19 ms 推到 36 ms；利用反向边对称性只做一半距离判断再成对写出，也从约 18.5 ms 退到 20.9 ms。两者均已撤回，工作记录保留原因。
+正式复现命令为：
 
-## CUDA benchmark 方法与既有结果
+```bash
+PYTHONPATH=src:. CUDA_VISIBLE_DEVICES=1 \
+/home/ftsong/projects/elfes-workspace/elfes/.venv/bin/python \
+benchmarks/run_cuda_benchmark.py --require-clean \
+  --output benchmarks/results/rtx-pro-6000-blackwell.json
+```
 
-CUDA workload 使用同一 1,536-structure sample，但 DataLoader `batch_size=32`、pinned CPU memory，并将每个完整 batch 一次 transfer 到 GPU。计时排除 DataLoader 与 H2D，包含公开 one-shot API metadata、同步、分配和 CUDA work。Vesin 0.6.1 在 CUDA tensors 上逐 structure 调用并拼接；Equiformer/FairChem-style baseline 独立实现 dense periodic pair/image materialization，并调整为本 API 的 strict cutoff 和 onsite semantics。
+## CUDA 结果
 
-硬件是一张 NVIDIA RTX PRO 6000 Blackwell Workstation Edition，compute capability 12.0；software 为 PyTorch 2.12.1+cu130、Python 3.12.3，geometry float32、cutoff 5 Å。正式 record `benchmarks/results/rtx-pro-6000-blackwell.json` 的 implementation revision 为 `a20ee8960c27161a568e3f54a026d0f9a43779de`。
+硬件是一张 NVIDIA RTX PRO 6000 Blackwell Workstation Edition，compute capability 12.0；软件为 Python 3.12.3、PyTorch 2.12.1+cu130 和 Vesin 0.6.1。正式 record 是 `benchmarks/results/rtx-pro-6000-blackwell.json`；implementation revision 为 `613966b3c9246282792b2b7cbbbf160a0bdf7e30`，CUDA extension SHA-256 为 `e730fcd14e7168a8eb555ddc57ea49e1ebc2977c98b6fe061bfc4efd17a66c78`。
 
-| Workload | Atoms | 本实现 batch CUDA | Vesin GPU/structure | Vesin / 本实现 | Dense PyTorch | Dense / 本实现 |
+| Workload | Atoms | tonari CUDA | Vesin GPU/structure | Vesin / tonari | Dense PyTorch | Dense / tonari |
 | --- | --: | --: | --: | --: | --: | --: |
-| 1,536-structure DataLoader epoch | 75,238 | 36.584 ms | 539.100 ms | 14.74× | skipped | — |
-| Median 32-structure batch | 1,126 | 0.918 ms | 9.970 ms | 10.86× | 43.215 ms | 47.07× |
-| 真实结构，1×1×1 | 64 | 0.241 ms | 0.386 ms | 1.60× | 0.701 ms | 2.91× |
-| 派生 supercell，2×2×2 | 512 | 0.305 ms | 0.641 ms | 2.10× | 6.675 ms | 21.86× |
-| 派生 supercell，3×3×3 | 1,728 | 0.315 ms | 0.872 ms | 2.77× | 73.519 ms | 233.60× |
-| 派生 supercell，4×4×4 | 4,096 | 0.310 ms | 0.848 ms | 2.73× | skipped | — |
-| 派生 supercell，6×6×6 | 13,824 | 0.340 ms | 1.038 ms | 3.05× | skipped | — |
-| 派生 supercell，8×8×8 | 32,768 | 0.414 ms | 1.607 ms | 3.88× | skipped | — |
+| 1,536-structure DataLoader epoch | 75,238 | 12.024 ms | 493.940 ms | 41.08× | skipped | — |
+| Median 32-structure batch | 1,126 | 0.2227 ms | 9.3111 ms | 41.81× | 42.7788 ms | 192.08× |
+| 真实结构，1×1×1 | 64 | 0.1001 ms | 0.3838 ms | 3.83× | 0.6983 ms | 6.98× |
+| 派生 supercell，2×2×2 | 512 | 0.1433 ms | 0.6300 ms | 4.40× | 6.5976 ms | 46.05× |
+| 派生 supercell，3×3×3 | 1,728 | 0.1448 ms | 0.8219 ms | 5.67× | 73.1677 ms | 505.16× |
+| 派生 supercell，4×4×4 | 4,096 | 0.1491 ms | 0.8223 ms | 5.52× | skipped | — |
+| 派生 supercell，6×6×6 | 13,824 | 0.1802 ms | 1.0022 ms | 5.56× | skipped | — |
+| 派生 supercell，8×8×8 | 32,768 | 0.2338 ms | 1.4992 ms | 6.41× | skipped | — |
 
-Dense candidate estimate 从 1×1×1 的 110,592 增至 8×8×8 的 28,991,029,248，因此超过 150 million-candidate safety limit 的 runs 被跳过，避免无意义 OOM。Median batch 中 dense baseline 的 PyTorch allocator additional memory 为约 6.9 GB，本实现约 1.5 MB。CUDA 收益主要来自 batch-first execution 和不 materialize candidates，不能拿来预测 CPU 单 structure 倍数。
+CUDA 的核心优势不是单个距离公式更神奇，而是整个 batch 一次进入 native pipeline、候选不 materialize、cell list 的中间状态保持在 device、输出精确分配。Median batch 中 dense baseline 额外占用约 6.9 GB Torch allocator memory，tonari 约 1.3 MB；这解释了为什么“进入模型前动态构邻居”在常见训练工作流中可以成为很小的 overhead，而不是显存和 latency 瓶颈。
+
+CUDA 正式数字相对早期原型显著改善，但不能仅凭 source-level diff 把全部收益归因于某一个 kernel。当前证据能确定的是：同一真实 workload、同一语义和同一验证口径下，最终 package/native boundary 与 batched pipeline 的端到端耗时如表所示。
 
 ## CUDA profiling
 
-最终 CUDA revision 的 Nsight Systems trace 在 32,768-atom workload 上测得每次调用约 0.136 ms 的全部 CUDA kernels，另有约 0.0065 ms CUDA memory operations；20 次 NVTX range 为 9.476 ms，即每次约 0.474 ms。最大的 kernels 是 fused representative wrapping/bounds 的约 48.5 µs、cell-list writing 的约 37.3 µs 和 counting 的约 36.4 µs。较早实验把 fused atomic bounds 换成独立 CUB reductions，bounds work 合计增至约 106.4 µs，NVTX wall range 也变差，因此撤销。
+最终 32,768-atom workload 使用 Nsight Systems 记录 3 次 warmup 和 20 次 profile calls。23 组全部 CUDA kernels 合计 3.221 ms，即每次约 0.1400 ms；memory operations 每次约 0.0061 ms；20-call NVTX range 合计 6.275 ms，即每次约 0.3138 ms。主要 kernels 的平均耗时为 wrapping/AABB 53.10 µs、pair counting 36.30 µs、pair writing 37.04 µs、periodic image insertion 6.38 µs。
 
-Machine-readable summary 与完整 kernel、memory operation、CUDA API、NVTX CSV 位于 `benchmarks/results/`；raw `.nsys-rep` 保持 ignored。CPU 没有使用 privileged `perf`，因为本机 `perf_event_paranoid=4`，本任务遵循不以 sudo 修改 host policy 的约束；CPU optimization 依据 wall time、显式临时 counters 和全量 correctness A/B。
+复现命令为：
+
+```bash
+CUDA_VISIBLE_DEVICES=1 PYTHONPATH=src:. \
+nsys profile --trace=cuda,nvtx --force-overwrite=true \
+  --output=runs/nsys-matbench-32768-final \
+  /home/ftsong/projects/elfes-workspace/elfes/.venv/bin/python \
+  benchmarks/profile_case.py --factor 8 --iterations 20
+```
+
+Machine-readable summary 和完整 kernel、memory operation、CUDA API、NVTX CSV 位于 `benchmarks/results/`；体积较大的 raw `.nsys-rep` 保持 Git ignored。较早实验把 fused atomic bounds 拆成独立 reductions，GPU work 与 NVTX range 都回退，因此已经撤销；summary 保留该反例，避免只记录成功尝试。
 
 ## 结论边界
 
-所有数字都只代表当前 workstation、固定 software revision、5 Å cutoff 和指定 workload。CPU 结果对 affinity、frequency warmup、dtype、structure distribution 与 Vesin reuse policy 敏感；CUDA 结果对 batch composition、GPU、CUDA/PyTorch version 和 memory pressure 敏感。Benchmark 数字不写成 unit-test 阈值，也不把一次历史快照当作可移植性能承诺。
+所有数字只代表当前 workstation、固定 software revision、5 Å cutoff 和上述 workload。CPU 对 affinity、frequency warmup、dtype 与 structure distribution 敏感；CUDA 对 batch composition、GPU、PyTorch/CUDA version 和 memory pressure 敏感。静态缓存与动态 one-shot search 也不是同一种成本口径。Benchmark 数字不会写成 unit-test 阈值，也不构成跨机器性能承诺。
