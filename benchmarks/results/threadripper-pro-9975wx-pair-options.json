@@ -1,0 +1,353 @@
+{
+  "dataset": {
+    "cache_sha256": "25644bf26a8c305c91d3e52f3ea8fb12c3c58dede830bf5625b341527179b58c",
+    "manifest_sha256": "3475c391b8def6bf599a57a7f1c938113eabcbfb0f2b89f7d31da648c6f7b413",
+    "name": "matbench_mp_e_form",
+    "sample_size": 256,
+    "selection": "first structures from the existing deterministic shuffled sample",
+    "source_id_sha256": "7f74a6d5244896248f197a28bbcd70a45abf4b5775edff83de69589d8003b73b"
+  },
+  "environment": {
+    "ase_version": "3.29.0",
+    "cpu": "AMD Ryzen Threadripper PRO 9975WX 32-Cores",
+    "cpu_affinity": [
+      31
+    ],
+    "cpu_extension_sha256": "093c202bead1c63ef793cb6d3b07c6b261a05091339ba1d1918929f0d4783f6c",
+    "cpu_frequency_policy": {
+      "boost": "1",
+      "driver": "amd-pstate-epp",
+      "energy_performance_preference": "balance_performance",
+      "governor": "powersave",
+      "scaling_max_khz": "5487604",
+      "scaling_min_khz": "1223141"
+    },
+    "platform": "Linux-7.0.0-28-generic-x86_64-with-glibc2.39",
+    "python": "3.12.13",
+    "repository_revision": "60dfe2d62d712c3467c1ad359084b6f69715a6f1",
+    "repository_worktree_clean": true,
+    "torch": "2.12.1+cu130",
+    "torch_num_threads": 1,
+    "vesin_version": "0.6.1"
+  },
+  "method": {
+    "ase": "PrimitiveNeighborList with skin=0, sorted=False, native self_interaction/bothways; configuration reused by atom count, build called for every structure",
+    "batch_size": 1,
+    "cutoff_angstrom": 5.0,
+    "data_loading_timed": false,
+    "dtype": "float64",
+    "half_list_normalization": "external one-way pairs are reoriented by tonari's public lexicographic canonical rule inside the timed adapters",
+    "statistic": "median wall time; all samples retained",
+    "tonari": "public one-shot find_neighbors output",
+    "vesin": "one NeighborList reused per mode; full_list matches the requested mode; sorted=False; n_threads=1; zero-shift self pairs are added by the timed adapter",
+    "warmup_seconds_per_backend_and_mode": 1.0
+  },
+  "validation": {
+    "full_with_self": {
+      "exact_key_match": true,
+      "external_references": [
+        "ase_primitive_rebuilt",
+        "vesin_cpu_reused"
+      ],
+      "pairs": 518668,
+      "structures": 256
+    },
+    "full_without_self": {
+      "exact_key_match": true,
+      "external_references": [
+        "ase_primitive_rebuilt",
+        "vesin_cpu_reused"
+      ],
+      "pairs": 505336,
+      "structures": 256
+    },
+    "half_with_self": {
+      "exact_key_match": true,
+      "external_references": [
+        "ase_primitive_rebuilt",
+        "vesin_cpu_reused"
+      ],
+      "pairs": 266000,
+      "structures": 256
+    },
+    "half_without_self": {
+      "exact_key_match": true,
+      "external_references": [
+        "ase_primitive_rebuilt",
+        "vesin_cpu_reused"
+      ],
+      "pairs": 252668,
+      "structures": 256
+    }
+  },
+  "workloads": [
+    {
+      "backends": {
+        "ase_primitive_rebuilt": {
+          "backend": "ase_primitive_rebuilt",
+          "maximum_ms": 755.3963731043041,
+          "median_ms": 697.1827859524637,
+          "minimum_ms": 695.3941888641566,
+          "output_bytes": 14149408,
+          "pairs": 505336,
+          "repeats": 7,
+          "samples_ms": [
+            695.3941888641566,
+            696.3523430749774,
+            697.1827859524637,
+            755.3963731043041,
+            697.0108770765364,
+            697.7753201499581,
+            697.603871813044
+          ],
+          "structures_per_second": 367.19208385253353,
+          "warmup_traversals": 2
+        },
+        "tonari_cpu": {
+          "backend": "tonari_cpu",
+          "maximum_ms": 27.63173496350646,
+          "median_ms": 27.590803103521466,
+          "minimum_ms": 27.56860014051199,
+          "output_bytes": 14149408,
+          "pairs": 505336,
+          "repeats": 7,
+          "samples_ms": [
+            27.56860014051199,
+            27.590803103521466,
+            27.63173496350646,
+            27.619867119938135,
+            27.589691104367375,
+            27.588278986513615,
+            27.61909505352378
+          ],
+          "structures_per_second": 9278.454093542723,
+          "warmup_traversals": 37
+        },
+        "vesin_cpu_reused": {
+          "backend": "vesin_cpu_reused",
+          "maximum_ms": 44.200692092999816,
+          "median_ms": 44.126339023932815,
+          "minimum_ms": 44.07403105869889,
+          "output_bytes": 14149408,
+          "pairs": 505336,
+          "repeats": 7,
+          "samples_ms": [
+            44.200692092999816,
+            44.103085063397884,
+            44.126339023932815,
+            44.15032593533397,
+            44.07403105869889,
+            44.10238401032984,
+            44.1855089738965
+          ],
+          "structures_per_second": 5801.523662798158,
+          "warmup_traversals": 23
+        }
+      },
+      "half_list": false,
+      "include_self": false,
+      "name": "full_without_self"
+    },
+    {
+      "backends": {
+        "ase_primitive_rebuilt": {
+          "backend": "ase_primitive_rebuilt",
+          "maximum_ms": 768.5848900582641,
+          "median_ms": 711.293192114681,
+          "minimum_ms": 710.8253370970488,
+          "output_bytes": 14522704,
+          "pairs": 518668,
+          "repeats": 7,
+          "samples_ms": [
+            711.6691169794649,
+            711.293192114681,
+            710.8253370970488,
+            711.4580399356782,
+            711.1368561163545,
+            768.5848900582641,
+            710.8284519053996
+          ],
+          "structures_per_second": 359.9078450883379,
+          "warmup_traversals": 2
+        },
+        "tonari_cpu": {
+          "backend": "tonari_cpu",
+          "maximum_ms": 27.092572068795562,
+          "median_ms": 27.059672866016626,
+          "minimum_ms": 26.993952924385667,
+          "output_bytes": 14522704,
+          "pairs": 518668,
+          "repeats": 7,
+          "samples_ms": [
+            27.03520515933633,
+            26.993952924385667,
+            27.081064181402326,
+            27.059672866016626,
+            27.092572068795562,
+            27.054443955421448,
+            27.06511993892491
+          ],
+          "structures_per_second": 9460.572611781356,
+          "warmup_traversals": 38
+        },
+        "vesin_cpu_reused": {
+          "backend": "vesin_cpu_reused",
+          "maximum_ms": 46.732980059459805,
+          "median_ms": 46.65872803889215,
+          "minimum_ms": 46.592338010668755,
+          "output_bytes": 14522704,
+          "pairs": 518668,
+          "repeats": 7,
+          "samples_ms": [
+            46.644596848636866,
+            46.65843700058758,
+            46.672738855704665,
+            46.592338010668755,
+            46.70682013966143,
+            46.732980059459805,
+            46.65872803889215
+          ],
+          "structures_per_second": 5486.647638285649,
+          "warmup_traversals": 22
+        }
+      },
+      "half_list": false,
+      "include_self": true,
+      "name": "full_with_self"
+    },
+    {
+      "backends": {
+        "ase_primitive_rebuilt": {
+          "backend": "ase_primitive_rebuilt",
+          "maximum_ms": 528.1798529904336,
+          "median_ms": 527.2756589110941,
+          "minimum_ms": 526.5714970882982,
+          "output_bytes": 7074704,
+          "pairs": 252668,
+          "repeats": 7,
+          "samples_ms": [
+            527.5664271321148,
+            527.1922929678112,
+            526.5714970882982,
+            527.2756589110941,
+            526.8988399766386,
+            528.1798529904336,
+            527.5194877758622
+          ],
+          "structures_per_second": 485.51454191661276,
+          "warmup_traversals": 2
+        },
+        "tonari_cpu": {
+          "backend": "tonari_cpu",
+          "maximum_ms": 24.261104175820947,
+          "median_ms": 24.24657205119729,
+          "minimum_ms": 24.21098784543574,
+          "output_bytes": 7074704,
+          "pairs": 252668,
+          "repeats": 7,
+          "samples_ms": [
+            24.21098784543574,
+            24.22880521044135,
+            24.254163028672338,
+            24.261104175820947,
+            24.250767892226577,
+            24.24657205119729,
+            24.235795019194484
+          ],
+          "structures_per_second": 10558.193523581358,
+          "warmup_traversals": 42
+        },
+        "vesin_cpu_reused": {
+          "backend": "vesin_cpu_reused",
+          "maximum_ms": 43.091180035844445,
+          "median_ms": 43.03070902824402,
+          "minimum_ms": 42.95154917053878,
+          "output_bytes": 7074704,
+          "pairs": 252668,
+          "repeats": 7,
+          "samples_ms": [
+            43.091180035844445,
+            43.02539094351232,
+            43.07023901492357,
+            43.02209592424333,
+            42.95154917053878,
+            43.03070902824402,
+            43.04169490933418
+          ],
+          "structures_per_second": 5949.23964259965,
+          "warmup_traversals": 24
+        }
+      },
+      "half_list": true,
+      "include_self": false,
+      "name": "half_without_self"
+    },
+    {
+      "backends": {
+        "ase_primitive_rebuilt": {
+          "backend": "ase_primitive_rebuilt",
+          "maximum_ms": 528.1684270594269,
+          "median_ms": 527.8978392016143,
+          "minimum_ms": 527.333629084751,
+          "output_bytes": 7448000,
+          "pairs": 266000,
+          "repeats": 7,
+          "samples_ms": [
+            527.8978392016143,
+            528.1126329209656,
+            528.1684270594269,
+            527.7218939736485,
+            527.333629084751,
+            527.7152140624821,
+            527.9251511674374
+          ],
+          "structures_per_second": 484.94231457202216,
+          "warmup_traversals": 2
+        },
+        "tonari_cpu": {
+          "backend": "tonari_cpu",
+          "maximum_ms": 23.612325079739094,
+          "median_ms": 23.60331197269261,
+          "minimum_ms": 23.599675856530666,
+          "output_bytes": 7448000,
+          "pairs": 266000,
+          "repeats": 7,
+          "samples_ms": [
+            23.607208160683513,
+            23.612325079739094,
+            23.60331197269261,
+            23.605335038155317,
+            23.602290078997612,
+            23.599675856530666,
+            23.60110799781978
+          ],
+          "structures_per_second": 10845.935532105588,
+          "warmup_traversals": 43
+        },
+        "vesin_cpu_reused": {
+          "backend": "vesin_cpu_reused",
+          "maximum_ms": 45.27279897592962,
+          "median_ms": 45.063394121825695,
+          "minimum_ms": 45.039397198706865,
+          "output_bytes": 7448000,
+          "pairs": 266000,
+          "repeats": 7,
+          "samples_ms": [
+            45.04740983247757,
+            45.039397198706865,
+            45.26139213703573,
+            45.27279897592962,
+            45.209123054519296,
+            45.063394121825695,
+            45.058755902573466
+          ],
+          "structures_per_second": 5680.885893945807,
+          "warmup_traversals": 23
+        }
+      },
+      "half_list": true,
+      "include_self": true,
+      "name": "half_with_self"
+    }
+  ]
+}
