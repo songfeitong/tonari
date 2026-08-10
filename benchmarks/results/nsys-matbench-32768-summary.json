@@ -27,7 +27,7 @@
       "benchmarks/results/nsys-matbench-32768-final_cuda_api_sum.csv",
       "benchmarks/results/nsys-matbench-32768-final_nvtx_sum.csv"
     ],
-    "kernel_instances_including_warmup": 23,
+    "profiled_calls_including_warmup": 23,
     "profiled_iterations": 20,
     "raw_trace_committed": false,
     "warmup_iterations": 3

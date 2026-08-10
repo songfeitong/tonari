@@ -74,6 +74,8 @@ CUDA bin count 对每个 structure 在超过 `2^28` allocation limit 时饱和�
 
 CUDA cell-list 的 wrapped predicate 只在 representative wraps 全为零时与 public original-position formula 具有相同浮点运算。Prepare kernel 把 nonzero wrap 编码进已有 bin-count status；已有 host read 同时返回 bins 与 status，命中后 whole call 复用 fused exhaustive canonical predicate。正常 well-wrapped path 不增加同步；unwrapped 大体系可能退化为 `O(N² × images)` 并受 exhaustive `< 2^31` blocks 限制。
 
+所有 CPU/CUDA/reference 最终 predicates 都把 Python double `cutoff * cutoff` 一次计算后 cast 到 geometry dtype。Cell-list 的 bin sizing 仍使用 scalar cutoff，但不在 kernel 内对已经 cast 的 float32 cutoff 再平方；这保证内部 crossover 不改变 1 ulp strict-boundary semantics。
+
 Exact-size allocation 需要 count/prefix-sum 后的 device-to-host synchronization。Nonfinite input、wrap overflow 与 output-shift overflow 被编码进已有状态位置，与必要 read 一次返回，不为 validation 新增同步。所有 launches 使用 PyTorch current CUDA stream，并在目标 device guard 下运行。
 
 ## Autograd
@@ -84,7 +86,7 @@ Neighbor identity 是离散 topology，production 在搜索边界 detach 浮点 
 
 内部 `_reference.find_neighbors_reference` 与 public Torch shapes/signature 一致，独立执行 exhaustive PyTorch enumeration，不调用 production native search。它按原始 positions/output shifts 重建 displacement，并共享 int32/image-resource contract；只用于开发期 correctness，不属于 public surface。
 
-68 项 tests 覆盖 public surface、NumPy/Torch ecosystem、single/batch shapes、单位一致缩放、finite/partial/full PBC、rank-deficient 与近共线 active rows、mixed batch、ordinary/large unwrapped representatives、int32 rejection、nonfinite rejection、multiple images、periodic self-images、empty tiny cell、image/bin resource limits、exact 与 nextafter cutoff、float32/float64、randomized differential、rotation/reflection covariance、CUDA current stream 与 continuous-geometry backward。Tests 比较完整 `(source, target, Sx, Sy, Sz)` sets，不冻结 output order。
+74 项 tests 覆盖 public surface、NumPy/Torch ecosystem、single/batch shapes、invalid 0-D/1-D shape exceptions、单位一致缩放、finite/partial/full PBC、rank-deficient 与近共线 active rows、mixed batch、ordinary/large unwrapped representatives、int32 rejection、nonfinite rejection、multiple images、periodic self-images、empty tiny cell、image/bin resource limits、exact、nextafter 与 float32 1-ulp cutoff、randomized differential、rotation/reflection covariance、CUDA current stream 与 continuous-geometry backward。Tests 比较完整 `(source, target, Sx, Sy, Sz)` sets，不冻结 output order。
 
 ## ELFES 只读需求核对
 

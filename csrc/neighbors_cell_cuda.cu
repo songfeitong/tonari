@@ -307,6 +307,7 @@ __global__ void query_bins_kernel(
     int64_t n_atoms,
     int64_t batch_size,
     scalar_t cutoff,
+    scalar_t cutoff_squared,
     const int64_t* pair_offsets,
     int64_t* target_pair_counts,
     int64_t* shift_overflow,
@@ -390,7 +391,7 @@ __global__ void query_bins_kernel(
                 }
                 const bool onsite = source == target && output_shift[0] == 0 &&
                     output_shift[1] == 0 && output_shift[2] == 0;
-                if (!onsite && distance_squared < cutoff * cutoff) {
+                if (!onsite && distance_squared < cutoff_squared) {
                     bool shift_fits = true;
 #pragma unroll
                     for (int axis = 0; axis < 3; ++axis) {
@@ -652,6 +653,7 @@ std::vector<torch::Tensor> find_neighbors_cell_cuda(
             n_atoms,
             batch_size,
             static_cast<scalar_t>(cutoff),
+            static_cast<scalar_t>(cutoff * cutoff),
             nullptr,
             target_pair_counts.data_ptr<int64_t>(),
             target_pair_counts.data_ptr<int64_t>() + n_atoms,
@@ -688,6 +690,7 @@ std::vector<torch::Tensor> find_neighbors_cell_cuda(
             n_atoms,
             batch_size,
             static_cast<scalar_t>(cutoff),
+            static_cast<scalar_t>(cutoff * cutoff),
             pair_offsets.data_ptr<int64_t>(),
             nullptr,
             nullptr,

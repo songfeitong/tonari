@@ -19,6 +19,19 @@ def test_public_surface_contains_only_find_neighbors() -> None:
     assert not hasattr(tonari, "reference_radius_graph_pbc")
 
 
+@pytest.mark.parametrize("positions", [torch.tensor(1.0), torch.zeros(3)])
+def test_invalid_torch_positions_shape_raises_value_error(
+    positions: torch.Tensor,
+) -> None:
+    with pytest.raises(ValueError, match="positions must have shape"):
+        find_neighbors(
+            positions,
+            torch.eye(3),
+            torch.zeros(3, dtype=torch.bool),
+            1.0,
+        )
+
+
 def test_single_structure_default_matches_explicit_batch() -> None:
     positions = torch.tensor(
         [[0.1, 0.2, 0.3], [1.7, 0.4, 0.5], [0.6, 1.8, 1.1]],

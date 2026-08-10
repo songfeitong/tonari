@@ -16,9 +16,11 @@ CPU backend 初版审查确认并修复了以下问题：cell-list corner prunin
 
 项目随后从第一性原理重构为 `tonari`：公共面只保留 `find_neighbors`；`offsets=None` 与 batched `offsets` 是同一契约；返回值统一为 `pair_indices` 与施加在 source 上的 `cell_shifts`；Torch CPU、Torch CUDA 和 NumPy 共享同一个入口，NumPy 复用 native CPU backend；旧 package、symbol 和 alias 全部删除。
 
-重构后的作者侧验证包括 68 项 CUDA-visible tests、46 项 CPU-only tests 加 22 项 expected skips、10 项可运行 docstring examples、Ruff、offline lock check、CPU/CUDA 全量 Matbench/Vesin exact differential、dense CUDA spot comparison、正式 CPU/CUDA benchmark 与 Nsight profile。特别增加了单结构/Batch、生态混用拒绝、NumPy zero-copy-safe adapter、CPU/CUDA一致性以及 `positions`、`cells`、`cutoff` 同比缩放后的 neighbor identity 不变性。
+重构后的作者侧验证包括 74 项 CUDA-visible tests、50 项 CPU-only tests 加 24 项 expected skips、10 项可运行 docstring examples、Ruff、offline lock check、CPU/CUDA 全量 Matbench/Vesin exact differential、dense CUDA spot comparison、正式 CPU/CUDA benchmark 与 Nsight profile。特别增加了单结构/Batch、生态混用拒绝、NumPy zero-copy-safe adapter、CPU/CUDA一致性以及 `positions`、`cells`、`cutoff` 同比缩放后的 neighbor identity 不变性。
 
-最终独立 reviewer 的本轮结论将在 clean delivery revision 审查完成后追加于此，避免把作者自测误写成独立认证。
+本轮独立 reviewer 又确认两个重构边界。第一，0-D Torch/NumPy positions 在默认 offsets 构造中先触发 `len()` TypeError，与 docstring 的 invalid-shape ValueError 不一致；shape validation 已移动到 normalization 之前，并以 0-D/1-D 两种生态回归固定。第二，CUDA cell-list 先把 cutoff cast 成 float32 再平方，而 CPU/CUDA exhaustive/reference 先在 double 中平方再 cast，导致 255/256-atom crossover 在 1 ulp strict boundary 得到不同 pairs；cell-list query 现在单独接收统一的 `cutoff_squared`，并由跨 CPU/reference/CUDA 与 exhaustive/cell-list 的确定性回归固定。
+
+最终独立 reviewer 的本轮结论将在上述修复的 clean delivery revision 审查完成后追加于此，避免把作者自测误写成独立认证。
 
 ## 已知限制
 

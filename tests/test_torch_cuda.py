@@ -176,6 +176,31 @@ def test_cuda_strict_cutoff_and_periodic_self_images() -> None:
     }
 
 
+@pytest.mark.parametrize("n_atoms", [255, 256])
+def test_cuda_paths_use_the_same_float32_cutoff_rounding(n_atoms: int) -> None:
+    cutoff = 353.2019167901003
+    positions = torch.zeros((n_atoms, 3), dtype=torch.float32)
+    positions[1, 0] = torch.tensor(353.2019, dtype=torch.float32)
+    positions[2:, 1] = 1000 * torch.arange(2, n_atoms, dtype=torch.float32)
+    cell = torch.zeros((3, 3), dtype=torch.float32)
+    pbc = torch.zeros(3, dtype=torch.bool)
+    expected = {(0, 1, 0, 0, 0), (1, 0, 0, 0, 0)}
+
+    cpu = find_neighbors(positions, cell, pbc, cutoff)
+    cuda = find_neighbors(positions.cuda(), cell.cuda(), pbc.cuda(), cutoff)
+    reference = find_neighbors_reference(
+        positions,
+        cell[None],
+        pbc[None],
+        cutoff,
+        torch.tensor([0, n_atoms]),
+    )
+
+    assert pair_keys(*cpu) == expected
+    assert pair_keys(*cuda) == expected
+    assert pair_keys(*reference) == expected
+
+
 def test_cuda_allows_continuous_geometry_backward() -> None:
     positions = torch.tensor(
         [[0.1, 0.0, 0.0], [1.8, 0.2, 0.0]],

@@ -19,6 +19,19 @@ def torch_pair_keys(output: tuple[torch.Tensor, torch.Tensor]) -> set[tuple[int,
     return {tuple(row) for row in rows.tolist()}
 
 
+@pytest.mark.parametrize("positions", [np.array(1.0), np.zeros(3)])
+def test_invalid_numpy_positions_shape_raises_value_error(
+    positions: np.ndarray,
+) -> None:
+    with pytest.raises(ValueError, match="positions must have shape"):
+        find_neighbors(
+            positions,
+            np.eye(3),
+            np.zeros(3, dtype=np.bool_),
+            1.0,
+        )
+
+
 @pytest.mark.parametrize("dtype", [np.float32, np.float64])
 def test_numpy_single_structure_matches_torch(dtype: type[np.floating]) -> None:
     positions = np.array(

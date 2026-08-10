@@ -66,10 +66,11 @@ def find_neighbors(
         the inputs and, for Torch, on the same device. ``pair_indices`` has
         dtype ``int64`` and shape ``(2, num_pairs)``;
         ``source, target = pair_indices``. ``cell_shifts`` has dtype ``int32``
-        and shape ``(num_pairs, 3)``. Each shift translates the source image,
-        so for pair ``k`` in structure ``b`` its Cartesian displacement is
+        and shape ``(num_pairs, 3)``. Each shift translates the source image.
+        For one structure, pair ``k`` has Cartesian displacement
         ``positions[source[k]] - positions[target[k]] + cell_shifts[k] @
-        cells[b]``. Both outputs are dimensionless.
+        cells``. For a batch, first locate structure ``b`` from ``offsets`` and
+        use the same formula with ``cells[b]``. Both outputs are dimensionless.
 
     Raises:
         TypeError: If array arguments mix PyTorch and NumPy, or use an
@@ -141,6 +142,8 @@ def _normalize_torch_inputs(
     pbc: Tensor,
     offsets: Tensor | None,
 ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+    if positions.ndim != 2 or positions.shape[1] != 3:
+        raise ValueError("positions must have shape (N_total, 3)")
     if offsets is None:
         if cells.ndim != 2 or cells.shape != (3, 3):
             raise ValueError("single-structure cells must have shape (3, 3)")

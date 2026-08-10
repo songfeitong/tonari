@@ -38,8 +38,6 @@ def validate_torch_inputs(
 ) -> None:
     if positions.device.type not in ("cpu", "cuda"):
         raise ValueError("positions must be a CPU or CUDA tensor")
-    if positions.ndim != 2 or positions.shape[1] != 3:
-        raise ValueError("positions must have shape (N_total, 3)")
     if positions.dtype not in (torch.float32, torch.float64):
         raise ValueError("positions must have dtype float32 or float64")
     if offsets.ndim != 1 or offsets.numel() == 0 or offsets.dtype != torch.int64:

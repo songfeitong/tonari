@@ -44,7 +44,9 @@ CPU reviewer 找到四个核心反例：corner-bin pruning 在 strict boundary �
 
 这次重构还发现一个不常见但真实的 CPU 性能因素：Ninja 按 object filename 排序链接，重命名后 hot function 地址变化，完整 epoch 从约 144 ms 退到约 165 ms，而 machine code bytes 完全相同。将共享实现命名为 `geometry.*` 后，link order 和 hot address 恢复，性能也恢复。这里只记录经同进程 direct native A/B 证明的现象，不把它包装成可移植的通用优化规律。
 
-API 重构后共 68 项 CUDA-visible tests 全过，CPU-only 环境为 46 passed/22 skipped，公共 docstring 10 个 examples 全过。新增测试覆盖 NumPy/Torch 同一入口、ecosystem mixing rejection、single/batch 等价、CPU/CUDA/reference exact identity，以及 positions/cells/cutoff 一致缩放后的单位无关性。
+API 重构后第一轮共 68 项 CUDA-visible tests 全过，CPU-only 环境为 46 passed/22 skipped，公共 docstring 10 个 examples 全过。新增测试覆盖 NumPy/Torch 同一入口、ecosystem mixing rejection、single/batch 等价、CPU/CUDA/reference exact identity，以及 positions/cells/cutoff 一致缩放后的单位无关性。
+
+最终 API reviewer 继续找到两个边界。0-D positions 在构造隐式 offsets 时先执行 `len()`，导致 Torch 与 NumPy 都抛 TypeError 而不是 public docstring 约定的 invalid-shape ValueError；修复后 shape validation 先于 normalization。更重要的是，CUDA cell-list 在 kernel 内对已 cast 的 float32 cutoff 平方，而其他路径对 Python double cutoff 平方后再 cast，255/256-atom crossover 在精心构造的 1 ulp boundary 上分别返回两条与零条 pairs。最终 query kernel 同时接收 bin-sizing cutoff 与统一舍入的 `cutoff_squared`，跨 CPU/reference/CUDA 和 exhaustive/cell-list 的回归均返回相同两条有向 pairs。加入两项回归后测试矩阵为 CUDA-visible 74 passed，CPU-only 50 passed/24 skipped。
 
 ## 2026-08-10：最终真实 benchmark
 

@@ -61,6 +61,8 @@ Dense bin heads 与紧凑 int32 linked nodes 减少内存和 pointer chasing。�
 
 CUDA 选择更简单的正确性边界：cell-list prepare 一旦发现 nonzero representative wrap，整个调用复用已有的 exhaustive canonical predicate。它会让大规模未 wrap input 退化为 `O(N² × images)`，但避免维护第三套容易漂移的 cutoff 判断。正确性优先于一条只对病态输入更快、却难以证明一致的新路径。
 
+Float32 的 strict boundary 还要求所有路径使用同一种舍入顺序。Host 先以 double 计算 `cutoff * cutoff`，再把 `cutoff_squared` 转为 geometry dtype 传入最终 predicate；不能在某个 kernel 中先把 cutoff 转为 float32 后再平方，否则 exhaustive/cell-list crossover 会在 1 ulp 边界改变 pair identity。
+
 ### 5. CUDA 把 batch 当作执行单位
 
 `offsets` 把拼接的 positions 划分为独立 segments。CUDA metadata、bin layout、image insertion、count 和 write 都面向整个 heterogeneous batch 调度；不同 atom counts、cells 与 PBC patterns 可以共同占满 GPU，同时任何 pair 都只在自身 segment 内产生。
@@ -125,7 +127,7 @@ Nsight 中 32,768-atom case 的所有 kernels 平均总计约 0.140 ms/call，20
 
 ## 为什么可以信任结果
 
-68 项 tests 覆盖 NumPy、Torch CPU、Torch CUDA、single/batch shapes、ecosystem mixing、长度单位一致缩放、finite/partial/full PBC、rank-deficient 与近共线 active rows、multiple images、periodic self-images、strict boundary、unwrapped representatives、int32/resource errors、autograd、non-default stream 和独立 PyTorch reference。ASE 提供 triclinic partial-PBC reference。
+74 项 tests 覆盖 NumPy、Torch CPU、Torch CUDA、single/batch shapes、ecosystem mixing、长度单位一致缩放、finite/partial/full PBC、rank-deficient 与近共线 active rows、multiple images、periodic self-images、strict boundary、unwrapped representatives、int32/resource errors、autograd、non-default stream 和独立 PyTorch reference。ASE 提供 triclinic partial-PBC reference。
 
 正式 benchmark 在全部 1,536 个真实结构、2,780,158 个完整 `(source, target, Sx, Sy, Sz)` keys 上让 CPU/CUDA 与 Vesin 精确一致；代表 CUDA batch 又与 dense baseline 的 43,842 keys 精确一致。测试比较 key sets，不冻结 backend output order。
 
