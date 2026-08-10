@@ -51,8 +51,9 @@ def find_neighbors(
         cells: Cartesian cell vectors stored as rows. Use shape ``(3, 3)`` when
             ``offsets`` is ``None`` and ``(B, 3, 3)`` for a batch. Its floating
             dtype and, for Torch, device must match ``positions``. All values
-            must be finite, and the rows enabled by ``pbc`` must be linearly
-            independent; inactive rows and the full cell may be rank deficient.
+            must be finite. For every nonempty structure, the rows enabled by
+            ``pbc`` must be linearly independent; inactive rows and the full
+            cell may be rank deficient.
         pbc: Periodic boundary flags for the three cell rows. Use shape ``(3,)``
             for one structure and ``(B, 3)`` for a batch. The dtype must be
             ``bool`` and the array ecosystem/device must match ``positions``.
