@@ -48,6 +48,14 @@ QMugs benchmark 加入后，同一独立 reviewer 对官方来源、抽样、cac
 
 修复把zero-image mask的diagonal按`include_self`显式置真或置假，不影响非零shift的periodic self-images；回归覆盖float32 `1e-30`、float64 `1e-200`与full/half。作者侧完整suite增至119项并全部通过；reviewer又独立复跑四种underflow组合，确认CPU/reference/CUDA都精确返回唯一`(0, 0, [0, 0, 0])`，相关pair-option tests为31 passed。最终在clean HEAD `8e1cccc56e4f2dbd4231ef49f175470c39d9c5e4`给出PASS，无新的core correctness、性能或架构blocker。
 
+## Framework-neutral架构增量终审
+
+本轮独立5.6-sol high reviewer聚焦架构与核心实现，未围绕毫秒级benchmark波动或历史provenance扩大审查。它确认NumPy和Torch CPU bindings调用同一个只依赖C++标准库的core；NumPy路径既不import Torch，也不链接Torch、ATen或c10；CUDA metadata、schedule和exhaustive/cell-list选择全部归native provider；旧Python planning模块、旧bindings与旧implementation symbols已经删除，暂定项目名没有泄漏到native namespace、注释或错误信息。
+
+Reviewer在clean HEAD `b0d57b26e8bc3bc3895d78d983cfb9517c235b51`重跑119项完整tests，并额外执行80组包含empty、partial PBC、float32/float64和四种pair mode的NumPy CPU、Torch CPU、Torch CUDA batched differential，全部exact。它还在双GPU环境中让current device不同于输入device，并分别覆盖non-default stream下的exhaustive与cell-list路径；CPU/CUDA结果和device/stream行为均正确。NumPy input lifetime、GIL释放、Torch tensor ownership与native exception translation未发现缺陷，最终结论为PASS、无blocker。
+
+唯一非阻断观察是CUDA pybind入口当前持有Python GIL，因此native流程中的两次必要host synchronization会阻塞同一进程的其他Python threads。这不影响correctness、device/current-stream语义或常见每进程单训练线程工作流，留作确有并发需求时再优化。
+
 ## 已知限制
 
 One-shot API 每次重建 metadata 并按真实 pair 数精确分配输出；prepared metadata 需要单独设计 ownership 与 invalidation contract。极小非空 periodic cell 的物理 neighbor set 本身可能包含大量 images，因此 metadata/output memory 仍会随真实结果增长。CUDA 对 large unwrapped representatives 使用 whole-call exhaustive fallback，保证统一语义但不保证大体系仍维持 cell-list complexity。CPU 大体系的 Vesin 实现当前更成熟；QMugs 自然分布上两者基本打平，`tonari` 的 CPU 优势集中在更小分子。CPU timing 对 power policy 敏感，正式 JSON 已记录；CUDA JSON 保存 minimum/median/maximum 而不保存全部原始 samples。超过 9 GB 的 QMugs raw/cache 全量审计不适合常规 CI，因此依赖固定 URL、size、SHA 与本次正式审计。Benchmark 排除 data loading/H2D，Vesin GPU 受其逐 structure API 约束；本轮遵循真实工作流，没有人为构造超大单分子 scaling。Raw Nsight trace 保持 Git ignored，仓库提交可复现脚本、summary 和完整 CSV aggregates。
