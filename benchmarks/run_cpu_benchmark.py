@@ -218,7 +218,7 @@ def main() -> None:
     )
     parser.add_argument("--cutoff", type=float, default=5.0)
     parser.add_argument("--repeats", type=int, default=7)
-    parser.add_argument("--warmup-seconds", type=float, default=0.5)
+    parser.add_argument("--warmup-seconds", type=float, default=2.0)
     parser.add_argument("--seed", type=int, default=20_260_809)
     parser.add_argument("--cpu", type=int)
     args = parser.parse_args()
