@@ -56,4 +56,4 @@ CUDA 最终正式 run 使用 `DataLoader(batch_size=32)`、float32、整 batch H
 
 最终 Nsight profile 在 32,768 atoms 上测得全部 CUDA kernels 约 0.1356 ms/call，CUDA memory operations 约 0.0061 ms/call，NVTX one-shot range 约 0.3031 ms/call。Raw trace 保持 ignored；仓库提交复现脚本、summary 和完整 CSV aggregates。ELFES 只做只读需求核对：其当前 two-center 用法可由未来 adapter 在 scalar broad cutoff 后做 half-list canonicalization、species filtering 与 onsite addition，本轮没有修改或接入 ELFES。
 
-最终独立 reviewer 在 clean HEAD `715fcf2ffdb1ef00489d241212a6bb00c5b38184` 给出 PASS，无 confirmed blocker。除完整 test/Matbench/performance/provenance 复核外，它又执行 100 组 mixed-ecosystem/device differential、30 组大 unwrapped differential 和 200 组 float32 cutoff crossover，并确认旧 package、native symbol、tracked file、ignored build object、egg-info 与 pycache 均已从项目 workspace 清除。
+最终独立 reviewer 在 clean HEAD `715fcf2ffdb1ef00489d241212a6bb00c5b38184` 给出 PASS，无 confirmed blocker。除完整 test/Matbench/performance/provenance 复核外，它又执行 100 组 NumPy/Torch/CPU/CUDA/reference mixed-batch differential、30 组大 unwrapped differential 和 200 组 float32 cutoff crossover，并确认旧 package、native symbol、tracked file、ignored build object、egg-info 与 pycache 均已从项目 workspace 清除。
