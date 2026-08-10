@@ -111,8 +111,8 @@ def measure_backend(
     batches: Sequence[StructureBatch],
     cutoff: float,
     repeats: int,
-) -> dict[str, float | int | str]:
-    for batch in batches[: min(16, len(batches))]:
+) -> dict[str, object]:
+    for batch in batches:
         backend(batch, cutoff)
 
     elapsed_ms = []
@@ -132,6 +132,7 @@ def measure_backend(
         "median_ms": median_ms,
         "minimum_ms": min(elapsed_ms),
         "maximum_ms": max(elapsed_ms),
+        "samples_ms": elapsed_ms,
         "repeats": repeats,
         "structures": len(batches),
         "atoms": total_atoms,
@@ -209,8 +210,14 @@ def main() -> None:
     parser.add_argument("--cutoff", type=float, default=5.0)
     parser.add_argument("--repeats", type=int, default=7)
     parser.add_argument("--seed", type=int, default=20_260_809)
+    parser.add_argument("--cpu", type=int)
     args = parser.parse_args()
 
+    if args.cpu is not None:
+        available_cpus = os.sched_getaffinity(0)
+        if args.cpu not in available_cpus:
+            raise ValueError(f"CPU {args.cpu} is outside the process affinity")
+        os.sched_setaffinity(0, {args.cpu})
     torch.set_num_threads(1)
     dataset = MatbenchStructureDataset(args.cache, args.manifest, torch.float64)
     batches = load_single_structure_batches(dataset, args.seed)
@@ -253,7 +260,7 @@ def main() -> None:
             "batch_size": 1,
             "data_loading_timed": False,
             "dataloader": "map-style, deterministic shuffle, num_workers=0",
-            "warmup_structures": 16,
+            "warmup": "one complete workload traversal per backend",
             "statistic": "median wall time; minimum and maximum retained",
             "cpu_backend": "single-threaded hybrid exhaustive/cell-list; exhaustive candidate limit 16384",
             "output_order_compared": False,
