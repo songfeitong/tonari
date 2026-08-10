@@ -3,7 +3,7 @@ from __future__ import annotations
 import torch
 
 from torch_radius_graph import reference_radius_graph_pbc
-from torch_radius_graph._geometry import build_search_metadata
+from torch_radius_graph._geometry import build_cuda_schedule, build_search_metadata
 
 
 def edge_keys(edge_index: torch.Tensor, shifts: torch.Tensor) -> set[tuple[int, ...]]:
@@ -114,5 +114,6 @@ def test_cell_list_metadata_is_not_limited_by_dense_grid_size() -> None:
         1.0,
         n_atoms_total=n_atoms,
     )
-    assert metadata.total_nodes == n_atoms
-    assert metadata.total_blocks >= 2**31
+    schedule = build_cuda_schedule(metadata)
+    assert schedule.total_nodes == n_atoms
+    assert schedule.total_blocks >= 2**31

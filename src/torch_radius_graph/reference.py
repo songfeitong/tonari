@@ -29,7 +29,7 @@ def reference_radius_graph_pbc(
     cutoff = float(cutoff)
     cutoff_squared = cutoff * cutoff
     int32_range = torch.iinfo(torch.int32)
-    validate_inputs(positions, ptr, cells, pbc, cutoff, require_cuda=False)
+    validate_inputs(positions, ptr, cells, pbc, cutoff)
     ptr_cpu = ptr.detach().cpu()
     pbc_cpu = pbc.detach().cpu()
     if ptr_cpu[0].item() != 0 or ptr_cpu[-1].item() != len(positions):
