@@ -103,6 +103,7 @@ CPU 与 CUDA 在全部 8,192 个分子、15,144,842 个完整 `(source, target, 
 正式复现命令为：
 
 ```bash
+/home/ftsong/.local/bin/uv sync --frozen --group dev
 sudo sh -c 'echo performance > /sys/devices/system/cpu/cpu31/cpufreq/scaling_governor; echo performance > /sys/devices/system/cpu/cpu31/cpufreq/energy_performance_preference'
 PYTHONPATH=src:. CUDA_VISIBLE_DEVICES='' .venv/bin/python \
 benchmarks/run_qmugs_cpu_benchmark.py --cpu 31 --repeats 11 \
