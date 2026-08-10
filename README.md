@@ -68,6 +68,6 @@ CUDA 的既有正式结果保持不变：RTX PRO 6000 Blackwell 上，32-structu
 
 当前统一 API 支持 CPU/CUDA、float32/float64、同一 batch 内 mixed finite/partial/full PBC、不同 cell、active rows 线性独立的 rank-deficient cell、empty structures、有限 positions/cells、未 wrap atom representatives，以及 CUDA current stream。CPU extension 始终构建，CUDA extension 可选；CPU native search 会释放 Python GIL，但当前每个调用内部是单线程的，batched CPU 输入按 structure 顺序处理。
 
-对每个 atom 和 active axis，由 representative 计算出的整数 periodic wrap 必须能由 int32 表示；返回 cell shift、cell-list node 和总 atom indexing 也受明确的 int32 bounds 约束，超出时直接报错，不静默截断。暂不提供 edge sorting、neighbor cap、per-edge/species cutoff、Verlet skin、prepared metadata cache、CUDA Graph capture、`torch.compile`/export 或跨 device dispatch。
+对每个 atom 和 active axis，由 representative 计算出的整数 periodic wrap 必须能由 int32 表示；返回 cell shift、cell-list node 和总 atom indexing 也受明确的 int32 bounds 约束，超出时直接报错，不静默截断。CUDA cell-list 遇到任一 nonzero representative wrap 时会让整个公开调用回退到 canonical exhaustive CUDA predicate，以保证大坐标消去下与 CPU/public vector formula 完全一致；因此大规模未 wrap CUDA batch 可能退化为 `O(N² × images)`，并受 exhaustive `< 2^31` blocks 限制。暂不提供 edge sorting、neighbor cap、per-edge/species cutoff、Verlet skin、prepared metadata cache、CUDA Graph capture、`torch.compile`/export 或跨 device dispatch。
 
 ELFES 当前 two-center 路径以一个 scalar broad cutoff 调 Vesin half-list，再做 species cutoff 过滤并显式加入 onsite。新 CPU backend 已满足其 geometry、uniform cutoff、periodic images 和 strict-boundary 需求，但公开 API 返回 Torch full directed graph 且排除 onsite，因此还需要一个明确的 adapter/canonicalization design；本任务刻意没有修改或接入 ELFES。

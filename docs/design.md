@@ -44,7 +44,9 @@ CPU backend 当前内部单线程。pybind binding 使用 `gil_scoped_release`�
 
 CUDA 小结构路径先用 O(N) kernel 验证 finite positions 并预计算 int32 representative wraps，再把完整 `(source, target, image)` candidate space 直接映射到 CUDA blocks，不 materialize candidate tensors。Count pass 每个 block 只执行一次 global atomic；host 精确分配输出后，write pass 使用 block scan，并由每个 block 一次性预留输出区间。当 batch 内所有 structure 都少于 256 atoms 时启用。
 
-大结构路径先 wrap representatives，并在同一 kernel 中融合 per-structure Cartesian bounds；随后把相关 periodic source images 插入 cutoff-sized Cartesian bins。每个 warp 负责一个 target，由前 27 个 lanes 遍历相邻 bins；两次 query pass 先统计 per-target edges，再写入 device prefix sum 生成的 offsets。若 dense-bin safety bounds 失败才回退 fused exhaustive，并在此时检查 exhaustive block-grid bound。
+大结构路径先 wrap representatives，并在同一 kernel 中融合 per-structure Cartesian bounds；随后把相关 periodic source images 插入 cutoff-sized Cartesian bins。每个 warp 负责一个 target，由前 27 个 lanes 遍历相邻 bins；两次 query pass 先统计 per-target edges，再写入 device prefix sum 生成的 offsets。每个 structure 的 bin count 一旦超过 `2^28` allocation limit 就在 device 上饱和为 `limit + 1`，因此 batched cumsum 不会先被无用的巨大精确计数溢出；host 看到超过 limit 后回退 fused exhaustive，并在此时检查 exhaustive block-grid bound。
+
+CUDA cell-list 的 wrapped predicate 只在所有 representative wraps 都为零时与 public original-position formula 具有相同浮点运算。Prepare kernel 因此把“发现任一 nonzero wrap”编码进原有 bin-count status word，已有 cumsum host read 同时返回 bins 与 status；命中后 whole call 直接复用 `radius_graph_pbc_cuda` 的 original-position/output-shift predicate，不维护第三份容易漂移的 strict-cutoff 实现。该设计不增加正常 well-wrapped cell-list 的 host synchronization，但 unwrapped 大体系会退化为 exhaustive，并受 `< 2^31` thread blocks 限制。
 
 256-atom crossover 是目标 Blackwell GPU 上的 provisional heuristic。它与 CPU 的 16,384-candidate threshold 相互独立：CUDA 的固定成本、parallel occupancy 与 batch composition 不适合套用 CPU 的决策规则。
 
@@ -64,6 +66,6 @@ ELFES 当前 `group_atom_image_pairs` 接受一个 NumPy `Geometry`，构造 Ves
 
 ## 正确性策略
 
-`reference_radius_graph_pbc` 是独立 exhaustive PyTorch implementation，不调用 CPU/CUDA native search。50 项 unit tests 比较完整 `(source, target, Sx, Sy, Sz)` key sets，不冻结 edge order；覆盖 finite/partial/full PBC、rank-deficient 与近共线但满秩 active rows、mixed batch、普通和约一亿 cell translation 的 unwrapped representatives、int32 range rejection、nonfinite rejection、multiple images、periodic self-images、tiny-cell empty structure、image-count resource limit、exact 与 nextafter cutoff boundary、float32/float64、CPU randomized differential、rotation/reflection covariance、CUDA non-default stream，以及 continuous-geometry backward。
+`reference_radius_graph_pbc` 是独立 exhaustive PyTorch implementation，不调用 CPU/CUDA native search，并按原始 positions 与 output shifts 逐轴执行 public vector formula。53 项 unit tests 比较完整 `(source, target, Sx, Sy, Sz)` key sets，不冻结 edge order；覆盖 finite/partial/full PBC、rank-deficient 与近共线但满秩 active rows、mixed batch、普通和约一亿 cell translation 的 unwrapped representatives、int32 range rejection、nonfinite rejection、multiple images、periodic self-images、tiny-cell empty structure、production/reference image-count resource limit、sparse batched bin-count saturation、exact 与 nextafter cutoff boundary、float32/float64、CPU randomized differential、rotation/reflection covariance、CUDA non-default stream，以及 continuous-geometry backward。
 
 ASE 提供 triclinic partial-PBC external case。正式 CPU benchmark 还对全部 1,536 个 Matbench structures、2,780,158 个 keys 使用 Vesin 0.6.1 做 exact comparison；CUDA 既有正式记录使用同一 corpus，并另外与独立 Equiformer/FairChem-style dense semantics baseline 对比。

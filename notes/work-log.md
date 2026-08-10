@@ -62,7 +62,7 @@ Exhaustive 的成本是 `N² × image_count`，所以没有沿用 CUDA 的 256-a
 
 ## CPU correctness 与真实数据
 
-CPU tests 新增 mixed finite/partial/full batch、float32/float64、ASE triclinic partial PBC、small-cell multiple images、periodic self-images、strict cutoff、unwrapped representative relabel、continuous geometry backward、tiny-cell empty structure、cell-list path、sparse bounds fallback、NaN/Inf、dependent 与近共线满秩 active rows、int32 wrap/shift errors、periodic image resource limit、O(3) rotation/reflection 和 deterministic randomized differential。与既有 CUDA/reference tests 合计 50 项，另有 290 组开发期 CPU/reference/CUDA differential cases。
+CPU tests 新增 mixed finite/partial/full batch、float32/float64、ASE triclinic partial PBC、small-cell multiple images、periodic self-images、strict cutoff、unwrapped representative relabel、continuous geometry backward、tiny-cell empty structure、cell-list path、sparse bounds fallback、NaN/Inf、dependent 与近共线满秩 active rows、int32 wrap/shift errors、periodic image resource limit、O(3) rotation/reflection 和 deterministic randomized differential。最终与既有 CUDA/reference tests 合计 53 项，另有 290 组开发期 CPU/reference/CUDA differential cases。
 
 Formal benchmark 仍使用原来固定 revision 与 SHA-256 的 `matbench_mp_e_form` 1,536-structure sample，但 DataLoader 改为真实单 structure workflow：`batch_size=1`、deterministic shuffle、float64。Vesin baseline 使用一个跨重复复用的 `NeighborList(full_list=True, sorted=False, n_threads=1)`；计时前对全部 1,536 structures、2,780,158 keys 做 exact comparison，全部一致。
 
@@ -78,4 +78,10 @@ CPU 初版完成后，新的 GPT-5.6 high reasoning reviewer 只读检查了实�
 
 最终处理不是给复现加 magic epsilon：删除收益很小的 corner-bin pruning；empty structure 在 rank/repeat 前短路；以直接 one-sided Jacobi SVD 取代 Gram normal equations；cell list 用按输入量级推导的保守 broad-phase 误差带，并只在边界壳按原始 positions/output shift 重算 public strict-cutoff formula。另对 periodic image Cartesian product 增加 checked `2^24` resource limit，防止合法但极小的非空 cell 在 host 上不可控 OOM。
 
-修复后 50 项 tests、290 组额外 differential cases 和全部 1,536 个真实结构/2,780,158 keys 均通过。正式 benchmark 从旧版 2.02× 收敛到最终 1.73×；团队接受这个变化，因为旧数字没有覆盖同等严格的数值边界，而最终结论仍然清晰。Benchmark runner 同时补上 clean-worktree enforcement 和 cache/binary SHA，回应 reviewer 对 provenance 的意见。
+第一轮修复后 50 项 tests、290 组额外 differential cases 和全部 1,536 个真实结构/2,780,158 keys 均通过。正式 benchmark 从旧版 2.02× 收敛到最终 1.73×；团队接受这个变化，因为旧数字没有覆盖同等严格的数值边界，而最终结论仍然清晰。Benchmark runner 同时补上 clean-worktree enforcement 和 cache/binary SHA，回应 reviewer 对 provenance 的意见。
+
+第二轮复审又发现 CPU 与 CUDA cell-list 对合法 float32 大共同晶胞平移有四个 key 的分歧：CPU/exhaustive CUDA 已按 original positions/output shift 判断，而 cell-list CUDA 仍把 wrapped arithmetic 当作 strict predicate。最终没有复制一份新的 CUDA boundary-shell 判据，而是在现有 prepare/status/cumsum 流程中检测 nonzero wrap，并将整个调用路由到已有 canonical exhaustive CUDA implementation。Standalone 256-atom regression 把旧差异放大到 508 keys，并固定两个漏边与两个伪边；修复后 CPU、新 reference 与 CUDA 都得到 64,264 个相同 keys。Reference 同时改为 public original-position formula，并获得与 production 相同的 `2^24` image guard。
+
+最终 53 项 tests、完整 Matbench/Vesin 与 dense spot exact validation、CUDA memcheck 和 290 组 differential cases 全部通过。Reviewer 的 synthetic scaling 显示 unwrapped fallback 在 256/512/1,024/2,048 atoms 相对 well-wrapped cell list 慢约 1.03×/1.41×/2.88×/8.48×；它被保留为明确的非阻塞限制，因为验收要求统一正确语义，不要求未 wrap 大体系仍维持 cell-list 复杂度。
+
+最后的资源复审构造了两个各 256 atoms、Cartesian extent 1,700,000 Å 的 finite members。旧版每个 structure 的 bin count 约 `4.913e18`，单独仍在 int64 内，但 batched cumsum 先溢成负数，未能进入预期的 sparse-bin fallback。最终 `define_bins_kernel` 不再计算超过用途的精确巨大数：任一 dimension/product 超过 `2^28` safety limit 就饱和为 `limit + 1`，host据此稳定选择 exhaustive；新增 batched regression 与 CPU key set 完全一致。

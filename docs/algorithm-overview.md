@@ -55,7 +55,7 @@ CPU exhaustive 的真实工作量是 `N² × image_count`，同样 32 个 atoms 
 
 大体系把 wrapped source images 插入边长接近 cutoff 的 Cartesian bins，但只有落在 target representatives bounding box 外扩搜索 cutoff 范围内的 images 才成为 linked nodes。每个 target 访问相邻 `3×3×3` bins，再按距离筛选 nodes；它不枚举全部 atom pairs，也不为很远的 periodic images 建节点。开发期曾加入 target-to-bin corner pruning，但独立审查在严格 cutoff 边界发现单向漏边，而真实 benchmark 收益只有噪声量级，因此最终删除，换取更简单可靠的固定 stencil。
 
-未 wrap representatives 会让“wrapped 搜索位移”和 public vector formula 在浮点消去上略有差异。Cell list 因此只把 wrapped distance 当作 broad phase：根据输入数量级建立保守误差带，边界壳中的 candidate 必须用原始 positions 与最终 output shift 重新判断严格 cutoff；误差带过大时直接回退 exhaustive。这保留常见输入的快速路径，又不把近边界物理语义交给搜索近似。
+未 wrap representatives 会让“wrapped 搜索位移”和 public vector formula 在浮点消去上略有差异。CPU cell list 因此只把 wrapped distance 当作 broad phase：根据输入数量级建立保守误差带，边界壳中的 candidate 必须用原始 positions 与最终 output shift 重新判断严格 cutoff；误差带过大时直接回退 exhaustive。CUDA 则采用更简单的硬边界：只要 cell-list prepare 发现任一 nonzero representative wrap，整个调用便复用已有 exhaustive CUDA canonical predicate。两种处理都不把近边界物理语义交给搜索近似；CUDA 的取舍是大规模未 wrap batch 可能失去线性 cell-list 复杂度。
 
 实现使用 dense bin-head array 和紧凑 int32 linked nodes。对于极端稀疏 finite coordinates，若 dense grid 相对真实 image 数过大，就回退 exhaustive，避免为一片空空间分配病态内存。这是显式工程安全边界，不是物理 tolerance。
 
@@ -123,7 +123,7 @@ CUDA 的主要优势来自把 batch 作为执行单位；CPU 结果与 CUDA 结�
 
 ## 为什么可以信任结果
 
-Production output 不依赖 edge order，而是按完整 `(source, target, Sx, Sy, Sz)` key set 验证。独立 exhaustive PyTorch reference、ASE triclinic partial-PBC case、Vesin 0.6.1 external reference、50 项 CPU/CUDA tests、290 组额外 CPU/reference/CUDA differential cases、autograd backward、non-default CUDA stream 和 CUDA memcheck 共同覆盖两套路径。全部 1,536 个真实结构、2,780,158 条 edge keys 在 CPU 上与 Vesin 精确一致；CUDA 正式记录也通过同一 corpus。
+Production output 不依赖 edge order，而是按完整 `(source, target, Sx, Sy, Sz)` key set 验证。独立 exhaustive PyTorch reference、ASE triclinic partial-PBC case、Vesin 0.6.1 external reference、53 项 CPU/CUDA tests、290 组额外 CPU/reference/CUDA differential cases、autograd backward、non-default CUDA stream 和 CUDA memcheck 共同覆盖两套路径。全部 1,536 个真实结构、2,780,158 条 edge keys 在 CPU 上与 Vesin 精确一致；CUDA 正式记录与最终修复后的全样本 spot validation 也通过同一 corpus。
 
 ## 已知边界
 
@@ -133,6 +133,7 @@ Production output 不依赖 edge order，而是按完整 `(source, target, Sx, S
 - One-shot API 每次重建少量 metadata；静态 topology 可能从 prepared metadata API 获益，但 ownership 与 mutation invalidation 尚需设计。
 - 非空 structure 的 batched periodic image shifts 当前设有 `2^24` resource limit，极小 cell 会在枚举前明确报错；即便放宽该限制，真实 graph 和输出仍会随物理 image/edge 数增长。
 - CPU 16,384-candidate 与 CUDA 256-atom crossovers 都是当前 workstation evidence，不是 correctness contract 或普适阈值。
+- CUDA cell list 对 nonzero representative wraps 回退 whole-call exhaustive；256/512/1,024/2,048-atom synthetic spot 中相对 well-wrapped cell list 分别慢约 1.03×/1.41×/2.88×/8.48×，这是正确性优先的已知性能边界。
 
 ## 最终判断
 

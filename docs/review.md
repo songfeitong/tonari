@@ -24,3 +24,28 @@
 ## 残余风险
 
 One-shot API 仍会在每次调用重建 metadata 并同步精确分配输出；prepared metadata 的 ownership/invalidation contract 尚未设计。极小非空 periodic cell 的真实 graph 本身可能包含大量 images，metadata/output memory 会按物理 edge 数增长。Nsight raw trace 因体积与本地路径保持 Git ignored，仓库保存可复现 profile script、完整命令、machine-readable summary，以及完整 kernel/memory/API/NVTX CSV records；性能证据仍只代表当前硬件与软件版本。
+
+## CPU 后端独立终审
+
+CPU/CUDA 一体化重构、CPU benchmark 与初版中文文档完成后，再启用同一个独立 reviewer 的新审查轮次。它从 public vector formula、严格 cutoff、rank/dual 数值稳定性、resource bounds、CPU/CUDA 一致性、真实 Matbench/Vesin evidence、benchmark provenance 和 Git hygiene 重新检查，而不是沿用第一次 CUDA 终审结论。
+
+### 已确认问题与处理
+
+| 严重性 | 已确认问题 | 处理结果 |
+| --- | --- | --- |
+| 高 | CPU cell-list 的 target-to-bin corner pruning 在 `nextafter(cutoff, 0)` 附近可能只保留一个方向 | 删除收益只有噪声量级的 corner pruning，固定扫描 27 bins；float32/float64 强制 cell-list 回归固定双向 strict semantics |
+| 高 | Shared metadata 对 empty tiny cell 仍准备 images；Gram rank check 又会把合法近共线 rows 误判为退化 | Empty structure 在 rank/repeat 前短路；直接在 active rows 上做 long-double one-sided Jacobi SVD，不形成会平方条件数的 Gram matrix |
+| 高 | CPU cell-list 用 wrapped coordinates 做最终 cutoff，对合法大未 wrap representatives 漏 edge | Wrapped distance 仅作带保守误差带的 broad phase，边界壳按 original positions/output shift 重算 public formula，unsafe 时 exhaustive |
+| 中 | 合法极小非空 cell 可在 image Cartesian product 枚举前不可控 OOM | 以 checked multiplication 执行明确的 batched `2^24` image-shift resource limit；production/reference 同步 fail-fast |
+| 高 | CPU/CUDA cell-list 对 float32 大共同晶胞平移产生漏边和伪边，破坏 unified API | CUDA prepare 发现任一 nonzero wrap 时，通过已有 status/cumsum host read 将 whole call 路由到 canonical exhaustive CUDA public predicate；新增 n=256 cross-device regression |
+| 高 | 两个各自仍在 int64 内的巨大 sparse bin counts 在 batched cumsum 相加后溢为负数 | Device bin count 超过 `2^28` safety limit 即饱和为 `limit + 1`，不保留无用精确大数；host稳定进入既有 exhaustive sparse fallback |
+
+### 独立复测证据
+
+Reviewer 对 one-sided Jacobi 做了 12,000 个 rank-1/2/3、scale `1e-10`–`1e10`、condition number 到 `1e16` 的 metadata fuzz，并以 mpmath 80-digit arithmetic 复核 SVD decision 与 dual；未找到反例。CPU conservative broad phase 又经过 1,200 个 inner-shell/strict-boundary directed cases、500 个 float32 individual-wrap cases、400 个 common-wrap Vesin cases和独立 public-formula enumeration，未发现错误。
+
+全部 1,536 个 Matbench structures、2,780,158 个 keys 再次与 Vesin 精确一致；CPU JSON 的 samples、median/min/max、throughput、ratio、manifest/cache/extension SHA、clean revision、CPU affinity、single-thread 和 reused `NeighborList` 都经独立重算。最终代码另通过 53 项 unit tests、290 组开发期 differential、CUDA memcheck、CPU-only skip matrix、Ruff、Markdown Prettier 和 Git checks。
+
+### 新增残余限制
+
+CUDA 对 unwrapped cell-list input 的 whole-call exhaustive fallback 保证语义统一，但在 256/512/1,024/2,048 atoms 的 synthetic scaling 中相对 well-wrapped cell list 分别慢约 1.03×/1.41×/2.88×/8.48×，并受 `< 2^31` exhaustive blocks 限制。任务验收不要求未 wrap 大体系保持 cell-list 复杂度，因此该项按已记录的性能边界保留，而不是用未经充分验证的第三套 cutoff predicate 换取速度。
