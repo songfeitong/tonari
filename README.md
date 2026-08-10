@@ -1,12 +1,8 @@
 # tonari
 
-**tonari** is a minimal Python package for fast neighbor-list construction in atomistic modelling. It supports batched inputs with CPU and CUDA backends and is particularly well suited to building radius graphs for atomistic GNNs.
+**tonari** (隣, “neighbor”) is a minimal Python package for fast neighbor-list construction in atomistic modelling. It supports batched inputs with CPU and CUDA backends and is particularly well suited to building radius graphs for atomistic GNNs.
 
 [![CI](https://github.com/songfeitong/tonari/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/songfeitong/tonari/actions/workflows/ci.yml)
-
-> [!WARNING]
->
-> **tonari** is 100% vibe coded. That said, it has a pretty thorough test suite, and its results have been checked against established neighbor-search implementations. Use at your own risk.
 
 ## API
 
