@@ -111,9 +111,14 @@ def measure_backend(
     batches: Sequence[StructureBatch],
     cutoff: float,
     repeats: int,
+    warmup_seconds: float,
 ) -> dict[str, object]:
-    for batch in batches:
-        backend(batch, cutoff)
+    warmup_start = time.perf_counter()
+    warmup_traversals = 0
+    while time.perf_counter() - warmup_start < warmup_seconds:
+        for batch in batches:
+            backend(batch, cutoff)
+        warmup_traversals += 1
 
     elapsed_ms = []
     edge_count = 0
@@ -133,6 +138,7 @@ def measure_backend(
         "minimum_ms": min(elapsed_ms),
         "maximum_ms": max(elapsed_ms),
         "samples_ms": elapsed_ms,
+        "warmup_traversals": warmup_traversals,
         "repeats": repeats,
         "structures": len(batches),
         "atoms": total_atoms,
@@ -148,6 +154,7 @@ def benchmark_workload(
     batches: Sequence[StructureBatch],
     cutoff: float,
     repeats: int,
+    warmup_seconds: float,
 ) -> dict[str, object]:
     vesin = VesinCpuBackend(cutoff)
     source_ids = [batch.source_ids[0] for batch in batches]
@@ -157,6 +164,7 @@ def benchmark_workload(
         batches,
         cutoff,
         repeats,
+        warmup_seconds,
     )
     baseline = measure_backend(
         "vesin_cpu_reused",
@@ -164,6 +172,7 @@ def benchmark_workload(
         batches,
         cutoff,
         repeats,
+        warmup_seconds,
     )
     return {
         "name": name,
@@ -209,10 +218,13 @@ def main() -> None:
     )
     parser.add_argument("--cutoff", type=float, default=5.0)
     parser.add_argument("--repeats", type=int, default=7)
+    parser.add_argument("--warmup-seconds", type=float, default=0.5)
     parser.add_argument("--seed", type=int, default=20_260_809)
     parser.add_argument("--cpu", type=int)
     args = parser.parse_args()
 
+    if args.repeats < 1 or args.warmup_seconds <= 0:
+        raise ValueError("repeats and warmup-seconds must be positive")
     if args.cpu is not None:
         available_cpus = os.sched_getaffinity(0)
         if args.cpu not in available_cpus:
@@ -228,6 +240,7 @@ def main() -> None:
             batches,
             args.cutoff,
             args.repeats,
+            args.warmup_seconds,
         )
     ]
     scaling_source_id, scaled = scaling_batches(dataset)
@@ -238,6 +251,7 @@ def main() -> None:
                 [batch],
                 args.cutoff,
                 max(args.repeats, 12),
+                args.warmup_seconds,
             )
         )
 
@@ -260,7 +274,7 @@ def main() -> None:
             "batch_size": 1,
             "data_loading_timed": False,
             "dataloader": "map-style, deterministic shuffle, num_workers=0",
-            "warmup": "one complete workload traversal per backend",
+            "warmup_seconds_per_backend_and_workload": args.warmup_seconds,
             "statistic": "median wall time; minimum and maximum retained",
             "cpu_backend": "single-threaded hybrid exhaustive/cell-list; exhaustive candidate limit 16384",
             "output_order_compared": False,
