@@ -65,18 +65,18 @@ benchmarks/run_cuda_benchmark.py --require-clean \
 
 ## CUDA 结果
 
-硬件是一张 NVIDIA RTX PRO 6000 Blackwell Workstation Edition，compute capability 12.0；软件为 Python 3.12.3、PyTorch 2.12.1+cu130 和 Vesin 0.6.1。正式 record 是 `benchmarks/results/rtx-pro-6000-blackwell.json`；implementation revision 为 `613966b3c9246282792b2b7cbbbf160a0bdf7e30`，CUDA extension SHA-256 为 `e730fcd14e7168a8eb555ddc57ea49e1ebc2977c98b6fe061bfc4efd17a66c78`。
+硬件是一张 NVIDIA RTX PRO 6000 Blackwell Workstation Edition，compute capability 12.0；软件为 Python 3.12.3、PyTorch 2.12.1+cu130 和 Vesin 0.6.1。正式 record 是 `benchmarks/results/rtx-pro-6000-blackwell.json`；implementation revision 为 `01eeac5683c2871d572338de437716d0689f5e50`，CUDA extension SHA-256 为 `78c0af2e407fac90a332e227af5f73212d8c23cf0930756fcedaeffa3a4e495c`。
 
 | Workload | Atoms | tonari CUDA | Vesin GPU/structure | Vesin / tonari | Dense PyTorch | Dense / tonari |
 | --- | --: | --: | --: | --: | --: | --: |
-| 1,536-structure DataLoader epoch | 75,238 | 12.024 ms | 493.940 ms | 41.08× | skipped | — |
-| Median 32-structure batch | 1,126 | 0.2227 ms | 9.3111 ms | 41.81× | 42.7788 ms | 192.08× |
-| 真实结构，1×1×1 | 64 | 0.1001 ms | 0.3838 ms | 3.83× | 0.6983 ms | 6.98× |
-| 派生 supercell，2×2×2 | 512 | 0.1433 ms | 0.6300 ms | 4.40× | 6.5976 ms | 46.05× |
-| 派生 supercell，3×3×3 | 1,728 | 0.1448 ms | 0.8219 ms | 5.67× | 73.1677 ms | 505.16× |
-| 派生 supercell，4×4×4 | 4,096 | 0.1491 ms | 0.8223 ms | 5.52× | skipped | — |
-| 派生 supercell，6×6×6 | 13,824 | 0.1802 ms | 1.0022 ms | 5.56× | skipped | — |
-| 派生 supercell，8×8×8 | 32,768 | 0.2338 ms | 1.4992 ms | 6.41× | skipped | — |
+| 1,536-structure DataLoader epoch | 75,238 | 12.107 ms | 494.393 ms | 40.84× | skipped | — |
+| Median 32-structure batch | 1,126 | 0.2252 ms | 9.2855 ms | 41.23× | 42.7812 ms | 189.97× |
+| 真实结构，1×1×1 | 64 | 0.0969 ms | 0.3733 ms | 3.85× | 0.6898 ms | 7.12× |
+| 派生 supercell，2×2×2 | 512 | 0.1444 ms | 0.6293 ms | 4.36× | 6.6022 ms | 45.71× |
+| 派生 supercell，3×3×3 | 1,728 | 0.1442 ms | 0.8262 ms | 5.73× | 73.1652 ms | 507.27× |
+| 派生 supercell，4×4×4 | 4,096 | 0.1486 ms | 0.8118 ms | 5.46× | skipped | — |
+| 派生 supercell，6×6×6 | 13,824 | 0.1811 ms | 1.0332 ms | 5.71× | skipped | — |
+| 派生 supercell，8×8×8 | 32,768 | 0.2539 ms | 1.4912 ms | 5.87× | skipped | — |
 
 CUDA 的核心优势不是单个距离公式更神奇，而是整个 batch 一次进入 native pipeline、候选不 materialize、cell list 的中间状态保持在 device、输出精确分配。Median batch 中 dense baseline 额外占用约 6.9 GB Torch allocator memory，tonari 约 1.3 MB；这解释了为什么“进入模型前动态构邻居”在常见训练工作流中可以成为很小的 overhead，而不是显存和 latency 瓶颈。
 
@@ -84,7 +84,7 @@ CUDA 正式数字相对早期原型显著改善，但不能仅凭 source-level d
 
 ## CUDA profiling
 
-最终 32,768-atom workload 使用 Nsight Systems 记录 3 次 warmup 和 20 次 profile calls。23 组全部 CUDA kernels 合计 3.221 ms，即每次约 0.1400 ms；memory operations 每次约 0.0061 ms；20-call NVTX range 合计 6.275 ms，即每次约 0.3138 ms。主要 kernels 的平均耗时为 wrapping/AABB 53.10 µs、pair counting 36.30 µs、pair writing 37.04 µs、periodic image insertion 6.38 µs。
+最终 32,768-atom workload 使用 Nsight Systems 记录 3 次 warmup 和 20 次 profile calls。23 次 calls 的全部 CUDA kernels 合计 3.119 ms，即每次约 0.1356 ms；memory operations 每次约 0.0061 ms；20-call NVTX range 合计 6.062 ms，即每次约 0.3031 ms。主要 kernels 的平均耗时为 wrapping/AABB 50.26 µs、pair counting 34.19 µs、pair writing 37.49 µs、periodic image insertion 6.40 µs。
 
 复现命令为：
 

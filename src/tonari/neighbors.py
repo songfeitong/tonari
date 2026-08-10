@@ -47,19 +47,22 @@ def find_neighbors(
             ``(N, 3)`` PyTorch tensor or NumPy array. For a batch, concatenate
             all positions into ``(N_total, 3)``. The dtype must be ``float32``
             or ``float64``. Torch inputs may be on CPU or CUDA; NumPy inputs use
-            the CPU backend.
+            the CPU backend. All values must be finite.
         cells: Cartesian cell vectors stored as rows. Use shape ``(3, 3)`` when
             ``offsets`` is ``None`` and ``(B, 3, 3)`` for a batch. Its floating
-            dtype and, for Torch, device must match ``positions``.
+            dtype and, for Torch, device must match ``positions``. All values
+            must be finite, and the rows enabled by ``pbc`` must be linearly
+            independent; inactive rows and the full cell may be rank deficient.
         pbc: Periodic boundary flags for the three cell rows. Use shape ``(3,)``
             for one structure and ``(B, 3)`` for a batch. The dtype must be
             ``bool`` and the array ecosystem/device must match ``positions``.
-        cutoff: Strict positive distance cutoff. ``positions``, ``cells``, and
-            ``cutoff`` must use the same length unit.
+        cutoff: Strict, finite, positive distance cutoff. ``positions``,
+            ``cells``, and ``cutoff`` must use the same length unit.
         offsets: Optional ``int64`` structure boundaries in the concatenated
             ``positions``, with shape ``(B + 1,)``. It must start at zero, be
             nondecreasing, and end at ``N_total``. ``None`` denotes one
-            structure and is equivalent to ``[0, N]``.
+            structure and is equivalent to ``[0, N]``. Its array ecosystem
+            and, for Torch, device must match ``positions``.
 
     Returns:
         A tuple ``(pair_indices, cell_shifts)`` in the same array ecosystem as
@@ -75,10 +78,12 @@ def find_neighbors(
     Raises:
         TypeError: If array arguments mix PyTorch and NumPy, or use an
             unsupported container type.
-        ValueError: If shapes, dtypes, devices, offsets, periodic cells, cutoff,
-            or implementation index/resource bounds are invalid.
-        RuntimeError: If the required native CPU or CUDA extension is missing,
-            or a backend execution error occurs.
+        ValueError: If frontend shapes, dtypes, devices, offsets, cutoff,
+            periodic cells, or host-validated index/resource bounds are invalid.
+        RuntimeError: If the required native CPU or CUDA extension is missing;
+            if native search discovers nonfinite positions or a representative
+            wrap/output shift outside its integer range; or if backend execution
+            otherwise fails.
 
     Note:
         The result contains every directed atom-image pair whose squared

@@ -6,7 +6,7 @@
 
 `tonari` 没有发明新的 neighbor-search 数学，而是把 exhaustive search 与 Cartesian cell list 按 CPU、CUDA 和真实调用方式重新组织：小体系不为索引付费，大体系不为 `N²` 付费，CUDA batch 不为逐体系 launch 付费，CPU 不为 Python 小算子付费，NumPy 与 PyTorch 共享同一个 native CPU implementation。
 
-在固定单核的 1,536-structure `matbench_mp_e_form` epoch 中，CPU 为 143.80 ms，公平复用的单线程 Vesin 为 248.08 ms，`tonari` 快 1.73×。在 RTX PRO 6000 Blackwell 的 `batch_size=32` epoch 中，CUDA 为 12.02 ms，逐 structure Vesin GPU 为 493.94 ms；代表性 32-structure batch 相对独立 Equiformer/FairChem-style dense baseline 快约 192×。这些是固定硬件、软件与 workload 的工程证据，不是跨平台保证。
+在固定单核的 1,536-structure `matbench_mp_e_form` epoch 中，CPU 为 143.80 ms，公平复用的单线程 Vesin 为 248.08 ms，`tonari` 快 1.73×。在 RTX PRO 6000 Blackwell 的 `batch_size=32` epoch 中，CUDA 为 12.11 ms，逐 structure Vesin GPU 为 494.39 ms；代表性 32-structure batch 相对独立 Equiformer/FairChem-style dense baseline 快约 190×。这些是固定硬件、软件与 workload 的工程证据，不是跨平台保证。
 
 ## 问题本质
 
@@ -112,12 +112,12 @@ CPU 的优势集中在真实数据中占多数的小结构与低固定成本；�
 
 | Workload | tonari CUDA | Vesin GPU/structure | Dense baseline |
 | --- | --: | --: | --: |
-| 1,536-structure epoch | 12.024 ms | 493.940 ms | skipped |
-| 32-structure 代表 batch | 0.2227 ms | 9.3111 ms | 42.7788 ms |
-| 单个真实 64-atom 晶体 | 0.1001 ms | 0.3838 ms | 0.6983 ms |
-| 32,768-atom 派生 supercell | 0.2338 ms | 1.4992 ms | 候选约 290 亿，跳过 |
+| 1,536-structure epoch | 12.107 ms | 494.393 ms | skipped |
+| 32-structure 代表 batch | 0.2252 ms | 9.2855 ms | 42.7812 ms |
+| 单个真实 64-atom 晶体 | 0.0969 ms | 0.3733 ms | 0.6898 ms |
+| 32,768-atom 派生 supercell | 0.2539 ms | 1.4912 ms | 候选约 290 亿，跳过 |
 
-Nsight 中 32,768-atom case 的所有 kernels 平均总计约 0.140 ms/call，20 次公开调用的 NVTX range 为 6.275 ms。相对旧二进制的提升主要位于 host/binding 路径；主要 GPU kernels 用时保持同一量级，因此不能把提升解释成遗漏了搜索工作。
+Nsight 中 32,768-atom case 的所有 kernels 平均总计约 0.136 ms/call，20 次公开调用的 NVTX range 为 6.062 ms。相对旧二进制的提升主要位于 host/binding 路径；主要 GPU kernels 用时保持同一量级，因此不能把提升解释成遗漏了搜索工作。
 
 ## 为什么适合在模型入口动态搜索
 

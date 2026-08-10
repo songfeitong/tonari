@@ -1,19 +1,19 @@
 {
   "final_profile": {
-    "all_kernel_average_milliseconds_per_call": 0.140049,
+    "all_kernel_average_milliseconds_per_call": 0.135588,
     "all_memory_operation_average_milliseconds_per_call": 0.006111,
     "kernel_average_microseconds": {
-      "count_pairs": 36.2986,
-      "insert_images": 6.3846,
-      "wrap_and_atomic_bounds": 53.0958,
-      "write_pairs": 37.039
+      "count_pairs": 34.1897,
+      "insert_images": 6.3972,
+      "wrap_and_atomic_bounds": 50.256,
+      "write_pairs": 37.4897
     },
-    "profile_nvtx_milliseconds": 6.275409,
-    "profile_nvtx_milliseconds_per_call": 0.31377,
-    "repository_revision": "19c2b44cea7695a7290bdd0eb68e3c78e258413e"
+    "profile_nvtx_milliseconds": 6.062429,
+    "profile_nvtx_milliseconds_per_call": 0.303121,
+    "repository_revision": "01eeac5683c2871d572338de437716d0689f5e50"
   },
   "environment": {
-    "cuda_extension_sha256": "e730fcd14e7168a8eb555ddc57ea49e1ebc2977c98b6fe061bfc4efd17a66c78",
+    "cuda_extension_sha256": "78c0af2e407fac90a332e227af5f73212d8c23cf0930756fcedaeffa3a4e495c",
     "gpu": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
     "nsight_systems": "2025.6.3.343-256337165561v0",
     "torch": "2.12.1+cu130"

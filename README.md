@@ -76,7 +76,7 @@ PYTHONPATH=src CUDA_VISIBLE_DEVICES=1 \
 
 在 AMD Ryzen Threadripper PRO 9975WX 的单个固定 core 上，`DataLoader(batch_size=1)` 的完整 epoch 中，`tonari` 为 143.80 ms，复用同一个单线程 Vesin `NeighborList` 为 248.08 ms，前者快 1.73×。单个 64-atom 真实结构为 0.0417 ms 对 0.0453 ms；512-atom real-derived supercell 已接近交叉点，之后 Vesin 的成熟 CPU cell list 更快。
 
-在 NVIDIA RTX PRO 6000 Blackwell 上，`DataLoader(batch_size=32)` 的完整 epoch 中，`tonari` 为 12.02 ms，逐 structure Vesin GPU 为 493.94 ms。代表性 32-structure batch 中，`tonari` 为 0.223 ms、Vesin 为 9.31 ms、独立 Equiformer/FairChem-style dense baseline 为 42.78 ms，三者得到完全相同的 43,842 个 pair keys。32,768-atom real-derived supercell 中，`tonari` 为 0.234 ms、Vesin 为 1.499 ms。
+在 NVIDIA RTX PRO 6000 Blackwell 上，`DataLoader(batch_size=32)` 的完整 epoch 中，`tonari` 为 12.11 ms，逐 structure Vesin GPU 为 494.39 ms。代表性 32-structure batch 中，`tonari` 为 0.225 ms、Vesin 为 9.29 ms、独立 Equiformer/FairChem-style dense baseline 为 42.78 ms，三者得到完全相同的 43,842 个 pair keys。32,768-atom real-derived supercell 中，`tonari` 为 0.254 ms、Vesin 为 1.491 ms。
 
 CPU 与 CUDA 都在全部 1,536 个结构、2,780,158 个 `(source, target, Sx, Sy, Sz)` keys 上与 Vesin 精确一致。正式 JSON 记录 clean implementation revision、data/cache/extension SHA 与全部 timing samples；Nsight summary 与 CSV 保存 kernel、memory、API 和 NVTX 证据。
 

@@ -20,6 +20,8 @@ CPU backend 初版审查确认并修复了以下问题：cell-list corner prunin
 
 本轮独立 reviewer 又确认两个重构边界。第一，0-D Torch/NumPy positions 在默认 offsets 构造中先触发 `len()` TypeError，与 docstring 的 invalid-shape ValueError 不一致；shape validation 已移动到 normalization 之前，并以 0-D/1-D 两种生态回归固定。第二，CUDA cell-list 先把 cutoff cast 成 float32 再平方，而 CPU/CUDA exhaustive/reference 先在 double 中平方再 cast，导致 255/256-atom crossover 在 1 ulp strict boundary 得到不同 pairs；cell-list query 现在单独接收统一的 `cutoff_squared`，并由跨 CPU/reference/CUDA 与 exhaustive/cell-list 的确定性回归固定。
 
+修复后的 clean revision `01eeac5683c2871d572338de437716d0689f5e50` 重新执行正式 CUDA 流程：全部 1,536 个 Matbench structures、2,780,158 个 Vesin keys 与 43,842 个 dense keys 精确一致；epoch 12.107 ms、median batch 0.2252 ms，相对修复前分别变化约 +0.7% 与 +1.1%。新的 32,768-atom Nsight profile 为全部 kernels 约 0.1356 ms/call、NVTX range 约 0.3031 ms/call，没有确认的性能回归。
+
 最终独立 reviewer 的本轮结论将在上述修复的 clean delivery revision 审查完成后追加于此，避免把作者自测误写成独立认证。
 
 ## 已知限制
