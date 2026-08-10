@@ -20,6 +20,9 @@ def find_neighbors(
     pbc: Tensor,
     cutoff: float,
     offsets: Tensor | None = None,
+    *,
+    half_list: bool = False,
+    include_self: bool = False,
 ) -> tuple[Tensor, Tensor]: ...
 
 
@@ -30,6 +33,9 @@ def find_neighbors(
     pbc: NDArray[np.bool_],
     cutoff: float,
     offsets: NDArray[np.int64] | None = None,
+    *,
+    half_list: bool = False,
+    include_self: bool = False,
 ) -> tuple[NDArray[np.int64], NDArray[np.int32]]: ...
 
 
@@ -39,8 +45,11 @@ def find_neighbors(
     pbc: Tensor | np.ndarray,
     cutoff: float,
     offsets: Tensor | np.ndarray | None = None,
+    *,
+    half_list: bool = False,
+    include_self: bool = False,
 ) -> tuple[Tensor, Tensor] | tuple[np.ndarray, np.ndarray]:
-    """Find all directed atom-image pairs within a strict distance cutoff.
+    """Find atom-image pairs within a strict distance cutoff.
 
     Args:
         positions: Atomic Cartesian positions. For a single structure, use a
@@ -64,6 +73,13 @@ def find_neighbors(
             nondecreasing, and end at ``N_total``. ``None`` denotes one
             structure and is equivalent to ``[0, N]``. Its array ecosystem
             and, for Torch, device must match ``positions``.
+        half_list: If ``False`` (default), return the full directed list. If
+            ``True``, retain one canonical representative from each pair and
+            reverse-pair equivalence class. The canonical representative is
+            the lexicographically smaller of ``(source, target, Sx, Sy, Sz)``
+            and ``(target, source, -Sx, -Sy, -Sz)``.
+        include_self: Whether to include exactly one zero-shift self pair
+            ``(i, i, [0, 0, 0])`` for every atom. The default is ``False``.
 
     Returns:
         A tuple ``(pair_indices, cell_shifts)`` in the same array ecosystem as
@@ -77,8 +93,8 @@ def find_neighbors(
         use the same formula with ``cells[b]``. Both outputs are dimensionless.
 
     Raises:
-        TypeError: If array arguments mix PyTorch and NumPy, or use an
-            unsupported container type.
+        TypeError: If array arguments mix PyTorch and NumPy, use an unsupported
+            container type, or either pair option is not a Python ``bool``.
         ValueError: If frontend shapes, dtypes, devices, offsets, cutoff,
             periodic cells, or host-validated index/resource bounds are invalid.
         RuntimeError: If the required native CPU or CUDA extension is missing;
@@ -87,12 +103,17 @@ def find_neighbors(
             otherwise fails.
 
     Note:
-        The result contains every directed atom-image pair whose squared
-        distance is strictly less than ``cutoff**2``. The zero-shift onsite pair
-        ``(i, i, [0, 0, 0])`` is excluded, while periodic self-images and
-        multiple images of the same atom pair are retained. Pairs never cross
-        structures, and shifts along inactive ``pbc`` axes are zero. Output
-        order is unspecified.
+        The result contains atom-image pairs whose squared distance is strictly
+        less than ``cutoff**2``. ``half_list=False`` returns both directions:
+        pair ``(source, target, S)`` has reverse pair
+        ``(target, source, -S)``. ``half_list=True`` returns only the canonical
+        direction defined above. A zero-shift self pair
+        ``(i, i, [0, 0, 0])`` is controlled only by ``include_self`` and has
+        zero displacement and distance. Periodic self-images ``(i, i, S)``
+        with ``S != 0`` remain ordinary cutoff pairs; a half list keeps one of
+        ``S`` and ``-S``. Multiple periodic images are retained rather than
+        reduced to a minimum image. Pairs never cross structures, shifts along
+        inactive ``pbc`` axes are zero, and output order is unspecified.
 
         Pair discovery is discrete and is not differentiable. Torch
         ``positions`` and ``cells`` may require gradients; recompute
@@ -120,12 +141,30 @@ def find_neighbors(
         (torch.Size([2, 2]), [0.800000011920929, 0.800000011920929])
     """
 
+    if not isinstance(half_list, bool) or not isinstance(include_self, bool):
+        raise TypeError("half_list and include_self must be bool")
     if isinstance(positions, Tensor):
         _require_matching_ecosystem(Tensor, cells=cells, pbc=pbc, offsets=offsets)
-        return _find_neighbors_torch(positions, cells, pbc, cutoff, offsets)
+        return _find_neighbors_torch(
+            positions,
+            cells,
+            pbc,
+            cutoff,
+            offsets,
+            half_list=half_list,
+            include_self=include_self,
+        )
     if isinstance(positions, np.ndarray):
         _require_matching_ecosystem(np.ndarray, cells=cells, pbc=pbc, offsets=offsets)
-        return _find_neighbors_numpy(positions, cells, pbc, cutoff, offsets)
+        return _find_neighbors_numpy(
+            positions,
+            cells,
+            pbc,
+            cutoff,
+            offsets,
+            half_list=half_list,
+            include_self=include_self,
+        )
     raise TypeError("positions must be a PyTorch tensor or NumPy array")
 
 
@@ -174,6 +213,9 @@ def _find_neighbors_torch(
     pbc: Tensor,
     cutoff: float,
     offsets: Tensor | None,
+    *,
+    half_list: bool,
+    include_self: bool,
 ) -> tuple[Tensor, Tensor]:
     positions, cells, pbc, offsets = _normalize_torch_inputs(
         positions, cells, pbc, offsets
@@ -198,7 +240,7 @@ def _find_neighbors_torch(
             raise RuntimeError(
                 "the tonari CPU extension is not built; install the project"
             ) from error
-        return _C_cpu.find_neighbors_cpu(*arguments, cutoff)
+        return _C_cpu.find_neighbors_cpu(*arguments, cutoff, half_list, include_self)
 
     try:
         from . import _C_cuda
@@ -218,6 +260,8 @@ def _find_neighbors_torch(
             schedule.total_blocks,
             schedule.total_nodes,
             cutoff,
+            half_list,
+            include_self,
         )
     if schedule.total_blocks >= _INT32_INDEX_LIMIT:
         raise ValueError(
@@ -227,6 +271,8 @@ def _find_neighbors_torch(
         *cuda_arguments,
         schedule.total_blocks,
         cutoff,
+        half_list,
+        include_self,
     )
 
 
@@ -246,6 +292,9 @@ def _find_neighbors_numpy(
     pbc: np.ndarray,
     cutoff: float,
     offsets: np.ndarray | None,
+    *,
+    half_list: bool,
+    include_self: bool,
 ) -> tuple[np.ndarray, np.ndarray]:
     torch_offsets = None if offsets is None else _numpy_to_torch(offsets)
     pair_indices, cell_shifts = _find_neighbors_torch(
@@ -254,5 +303,7 @@ def _find_neighbors_numpy(
         _numpy_to_torch(pbc),
         cutoff,
         torch_offsets,
+        half_list=half_list,
+        include_self=include_self,
     )
     return pair_indices.numpy(), cell_shifts.numpy()

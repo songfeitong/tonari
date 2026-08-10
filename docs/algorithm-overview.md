@@ -81,6 +81,12 @@ NumPy input 在安全时通过 `torch.from_numpy` 与 native CPU backend 共享�
 
 API 重命名后，CPU 算法对应 object file 的 `.text` bytes 与旧版逐字节相同，但文件名改变了 Ninja 的 link order，使热点 native code 地址整体移动，真实 epoch 从约 144 ms 回退到 165 ms；Vesin 同次测量保持约 248 ms，排除了系统噪声。同进程直接调用旧/新 extension 又把差异定位到 native search 的 117 vs 138 ms。
 
+### 9. Full、half 与 self 是 candidate policy，不是输出后处理
+
+`include_self` 精确控制 zero-shift self pair `(i, i, [0, 0, 0])`，不会误伤 `(i, i, S != 0)` periodic self-images。`half_list` 比较 `(source, target, S)` 与 `(target, source, -S)` 的公开五元 key，在 native candidate acceptance阶段只保留 canonical一侧。CPU half path会在距离计算和写出前尽早排除 reverse redundancy；CUDA count/write也使用同一个 compile-time policy。这样 half list直接少分配约一半输出，而不是先构 full list再在Python里扔掉一半。
+
+Runtime只在 native入口把两个 bool映射为四种 mode，hot loop本身是compile-time specialization。默认 full/no-self仍是message-passing主路径，不承担每个candidate的动态mode分支。
+
 最终把共享 `periodic_geometry` 文件重命名为更自然的 `geometry`，让链接顺序成为 `bindings → geometry → neighbors`，热点函数地址恢复后正式 epoch 回到约 144.00 ms。这个案例很有代表性：高频微调用中，instruction-cache 与 branch-predictor aliasing 足以放大纯布局变化；“源码算法没变”不等于二进制性能没变。
 
 ## 与 Vesin 和 Equiformer-style dense baseline 的关系
@@ -137,11 +143,13 @@ CPU 的趋势说明优势不是无限延伸：4–30-heavy-atom bins 上 `tonari
 
 对于未来 PyG/GNN adapter，推荐 Dataset 只保存 atomic numbers、positions、cell、PBC 与 labels；batch 到达模型后，由模型拥有的 builder 根据自身 cutoff 调用 `find_neighbors`，再把 `pair_indices` 映射为 `edge_index`、把重建的 `displacements` 映射为 `edge_vectors`。这样 Dataset 不携带 ad hoc cutoff，数据增强、结构扰动、MD 和不同模型配置也不会读取 stale connectivity。
 
+Message passing通常直接请求默认 full directed list；对称 pair interaction可以请求 canonical half list。若某个下游从half输入恢复full，它应在adapter边界显式补 `(target, source, -S)`，核心search不猜测集成语义。
+
 在 GPU 训练中，通常应先把 graph-free batch 一次传到 CUDA，再调用 CUDA backend。CPU backend 更适合 CPU inference、预处理/诊断、无 GPU 环境与 NumPy workflow。固定结构反复消费时 prepared metadata 可能有价值，但它需要明确 ownership、mutation invalidation 与 workspace lifetime，不应偷偷缓存 Tensor identity。
 
 ## 为什么可以信任结果
 
-81 项 tests 覆盖 NumPy、Torch CPU、Torch CUDA、single/batch shapes、ecosystem mixing、长度单位一致缩放、finite/partial/full PBC、rank-deficient 与近共线 active rows、multiple images、periodic self-images、strict boundary、unwrapped representatives、int32/resource errors、autograd、non-default stream、独立 PyTorch reference、CPU-only benchmark import，以及 QMugs download resume/SDF/selection/cache 与 finite dense baseline。ASE 提供 triclinic partial-PBC reference。
+完整 tests覆盖 NumPy、Torch CPU、Torch CUDA、single/batch shapes、ecosystem mixing、长度单位一致缩放、finite/partial/full PBC、rank-deficient 与近共线 active rows、multiple images、periodic self-images、strict boundary、unwrapped representatives、int32/resource errors、autograd、non-default stream、独立 PyTorch reference、QMugs preparation，以及四种full/half/self组合。Vesin和ASE都提供外部exact reference；它们的一侧方向先归一化为tonari公开canonical key，Vesin缺少的zero-shift self由测试/benchmark adapter明确补入。
 
 正式 benchmark 在全部 1,536 个真实晶体、2,780,158 个完整 `(source, target, Sx, Sy, Sz)` keys，以及全部 8,192 个 QMugs 分子、15,144,842 个 keys 上让 CPU/CUDA 与 Vesin 精确一致；Matbench 与 QMugs representative CUDA batches 又分别在 43,842 和 1,322,646 个 keys 上与 dense baseline 精确一致。测试比较 key sets，不冻结 backend output order。
 

@@ -15,7 +15,7 @@ extensions = [
             "csrc/geometry.cpp",
             "csrc/neighbors_cpu.cpp",
         ],
-        depends=["csrc/geometry.h", "csrc/neighbors_cpu.h"],
+        depends=["csrc/geometry.h", "csrc/neighbors_cpu.h", "csrc/pair_policy.h"],
         extra_compile_args=["-O3"],
     )
 ]
@@ -29,7 +29,7 @@ if CUDA_HOME is not None and torch.version.cuda is not None:
                 "csrc/neighbors_cuda.cu",
                 "csrc/neighbors_cell_cuda.cu",
             ],
-            depends=["csrc/neighbors_cuda.h"],
+            depends=["csrc/neighbors_cuda.h", "csrc/pair_policy.h"],
             extra_compile_args={
                 "cxx": ["-O3"],
                 "nvcc": ["-O3", "-lineinfo"],

@@ -12,4 +12,6 @@ std::vector<torch::Tensor> find_neighbors_cpu(
     const torch::Tensor& duals,
     const torch::Tensor& image_shifts,
     const torch::Tensor& image_offsets,
-    double cutoff);
+    double cutoff,
+    bool half_list,
+    bool include_self);

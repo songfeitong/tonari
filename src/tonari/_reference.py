@@ -6,6 +6,7 @@ from math import ceil
 import torch
 from torch import Tensor
 
+from ._pairs import canonical_half_mask
 from ._search import validate_torch_inputs
 from .neighbors import _normalize_torch_inputs
 
@@ -19,6 +20,9 @@ def find_neighbors_reference(
     pbc: Tensor,
     cutoff: float,
     offsets: Tensor | None = None,
+    *,
+    half_list: bool = False,
+    include_self: bool = False,
 ) -> tuple[Tensor, Tensor]:
     """Find neighbors exhaustively for development-time correctness checks."""
 
@@ -108,12 +112,19 @@ def find_neighbors_reference(
                 + displacements[..., 2] * displacements[..., 2]
             )
             within_cutoff = distance_squared < cutoff_squared
-            if shift_values == (0, 0, 0):
+            if shift_values == (0, 0, 0) and not include_self:
                 within_cutoff.fill_diagonal_(False)
             source, target = torch.nonzero(within_cutoff, as_tuple=True)
             if source.numel() == 0:
                 continue
             selected_shifts = shifts[source, target]
+            selected_pairs = torch.stack((source + start, target + start))
+            if half_list:
+                keep = canonical_half_mask(selected_pairs, selected_shifts)
+                selected_pairs = selected_pairs[:, keep]
+                selected_shifts = selected_shifts[keep]
+                if selected_pairs.shape[1] == 0:
+                    continue
             if torch.any(
                 (selected_shifts < int32_range.min)
                 | (selected_shifts > int32_range.max)
@@ -121,7 +132,7 @@ def find_neighbors_reference(
                 raise ValueError(
                     "a cell shift required by the neighbor list exceeds the int32 output range"
                 )
-            pair_indices.append(torch.stack((source + start, target + start)))
+            pair_indices.append(selected_pairs)
             pair_shifts.append(selected_shifts.to(torch.int32))
 
     if not pair_indices:

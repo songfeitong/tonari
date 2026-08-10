@@ -1,4 +1,5 @@
 #include "neighbors_cpu.h"
+#include "pair_policy.h"
 
 #include <algorithm>
 #include <cmath>
@@ -216,7 +217,7 @@ bool conservative_cell_list_cutoff(
 }
 
 
-template <typename scalar_t>
+template <typename scalar_t, tonari::PairMode Mode>
 inline void append_candidate(
     int64_t source,
     int64_t target,
@@ -230,17 +231,18 @@ inline void append_candidate(
     scalar_t cutoff_squared,
     PairBuffers& pairs) {
     const int32_t* search_shift = image_shifts + 3 * shift;
-    if (source == target && search_shift[0] == 0 && search_shift[1] == 0 &&
-        search_shift[2] == 0) {
-        return;
-    }
     int64_t output_shift[3];
     for (int axis = 0; axis < 3; ++axis) {
         output_shift[axis] = static_cast<int64_t>(search_shift[axis]) -
             static_cast<int64_t>(atom_wraps[3 * source + axis]) +
             static_cast<int64_t>(atom_wraps[3 * target + axis]);
     }
-    if (!distance_known_inside) {
+    const bool zero_shift_self =
+        tonari::is_zero_shift_self_pair(source, target, output_shift);
+    if (!tonari::keep_pair_identity<Mode>(source, target, output_shift)) {
+        return;
+    }
+    if (!zero_shift_self && !distance_known_inside) {
         scalar_t distance_squared = scalar_t(0);
         for (int cartesian = 0; cartesian < 3; ++cartesian) {
             scalar_t component = positions[3 * source + cartesian] -
@@ -269,7 +271,7 @@ inline void append_candidate(
 }
 
 
-template <typename scalar_t>
+template <typename scalar_t, tonari::PairMode Mode>
 inline void append_cell_candidate(
     int64_t source,
     int64_t target,
@@ -285,6 +287,19 @@ inline void append_cell_candidate(
     scalar_t inner_cutoff_squared,
     scalar_t cutoff_squared,
     PairBuffers& pairs) {
+    if constexpr (tonari::kHalfList<Mode>) {
+        const int32_t* search_shift = image_shifts + 3 * shift;
+        int64_t output_shift[3];
+        for (int axis = 0; axis < 3; ++axis) {
+            output_shift[axis] = static_cast<int64_t>(search_shift[axis]) -
+                static_cast<int64_t>(atom_wraps[3 * source + axis]) +
+                static_cast<int64_t>(atom_wraps[3 * target + axis]);
+        }
+        if (!tonari::keep_pair_identity<Mode>(
+                source, target, output_shift)) {
+            return;
+        }
+    }
     scalar_t search_distance_squared = scalar_t(0);
     for (int cartesian = 0; cartesian < 3; ++cartesian) {
         const scalar_t component = wrapped_positions[3 * source + cartesian] -
@@ -295,7 +310,7 @@ inline void append_cell_candidate(
     if (search_distance_squared >= search_cutoff_squared) {
         return;
     }
-    append_candidate(
+    append_candidate<scalar_t, Mode>(
         source,
         target,
         atom_offset,
@@ -310,7 +325,7 @@ inline void append_cell_candidate(
 }
 
 
-template <typename scalar_t>
+template <typename scalar_t, tonari::PairMode Mode>
 void search_exhaustive(
     int64_t atom_offset,
     int64_t n_atoms,
@@ -324,7 +339,7 @@ void search_exhaustive(
     for (int64_t target = 0; target < n_atoms; ++target) {
         for (int64_t source = 0; source < n_atoms; ++source) {
             for (int64_t shift = 0; shift < n_shifts; ++shift) {
-                append_candidate(
+                append_candidate<scalar_t, Mode>(
                     source,
                     target,
                     atom_offset,
@@ -413,7 +428,7 @@ int64_t bin_index(
 }
 
 
-template <typename scalar_t>
+template <typename scalar_t, tonari::PairMode Mode>
 bool search_cell_list(
     int64_t atom_offset,
     int64_t n_atoms,
@@ -511,7 +526,7 @@ bool search_cell_list(
                         (x * layout.dimensions[1] + y) * layout.dimensions[2] + z;
                     for (int32_t node = bin_heads[bin]; node >= 0;
                          node = nodes[node].next) {
-                        append_cell_candidate(
+                        append_cell_candidate<scalar_t, Mode>(
                             nodes[node].source,
                             target,
                             atom_offset,
@@ -535,7 +550,7 @@ bool search_cell_list(
 }
 
 
-template <typename scalar_t>
+template <typename scalar_t, tonari::PairMode Mode>
 PairBuffers build_neighbor_pairs(
     const torch::Tensor& positions,
     const torch::Tensor& offsets,
@@ -581,7 +596,7 @@ PairBuffers build_neighbor_pairs(
             image_shift_data + 3 * shift_offset;
         if (candidate_count_at_most(
                 n_atoms, n_shifts, kExhaustiveCandidateLimit)) {
-            search_exhaustive(
+            search_exhaustive<scalar_t, Mode>(
                 atom_offset,
                 n_atoms,
                 n_shifts,
@@ -611,7 +626,7 @@ PairBuffers build_neighbor_pairs(
         const scalar_t inner_cutoff = std::max(
             scalar_t(0), 2 * scalar_cutoff - search_cutoff);
         if (!cell_list_cutoff_is_safe ||
-            !search_cell_list(
+            !search_cell_list<scalar_t, Mode>(
                 atom_offset,
                 n_atoms,
                 n_shifts,
@@ -625,7 +640,7 @@ PairBuffers build_neighbor_pairs(
                 inner_cutoff * inner_cutoff,
                 cutoff_squared,
                 pairs)) {
-            search_exhaustive(
+            search_exhaustive<scalar_t, Mode>(
                 atom_offset,
                 n_atoms,
                 n_shifts,
@@ -640,6 +655,41 @@ PairBuffers build_neighbor_pairs(
     return pairs;
 }
 
+
+template <typename scalar_t>
+PairBuffers dispatch_neighbor_pairs(
+    const torch::Tensor& positions,
+    const torch::Tensor& offsets,
+    const torch::Tensor& cells,
+    const torch::Tensor& duals,
+    const torch::Tensor& image_shifts,
+    const torch::Tensor& image_offsets,
+    double cutoff,
+    bool half_list,
+    bool include_self) {
+    auto build = [&]<tonari::PairMode Mode>() {
+        return build_neighbor_pairs<scalar_t, Mode>(
+            positions,
+            offsets,
+            cells,
+            duals,
+            image_shifts,
+            image_offsets,
+            cutoff);
+    };
+    switch (tonari::pair_mode(half_list, include_self)) {
+        case tonari::PairMode::Full:
+            return build.template operator()<tonari::PairMode::Full>();
+        case tonari::PairMode::FullWithSelf:
+            return build.template operator()<tonari::PairMode::FullWithSelf>();
+        case tonari::PairMode::Half:
+            return build.template operator()<tonari::PairMode::Half>();
+        case tonari::PairMode::HalfWithSelf:
+            return build.template operator()<tonari::PairMode::HalfWithSelf>();
+    }
+    TORCH_CHECK(false, "invalid pair mode");
+}
+
 }  // namespace
 
 
@@ -650,20 +700,24 @@ std::vector<torch::Tensor> find_neighbors_cpu(
     const torch::Tensor& duals,
     const torch::Tensor& image_shifts,
     const torch::Tensor& image_offsets,
-    double cutoff) {
+    double cutoff,
+    bool half_list,
+    bool include_self) {
     validate_cpu_inputs(
         positions, offsets, cells, duals, image_shifts, image_offsets);
     PairBuffers pairs;
     AT_DISPATCH_FLOATING_TYPES(
         positions.scalar_type(), "find_neighbors_cpu", [&] {
-            pairs = build_neighbor_pairs<scalar_t>(
+            pairs = dispatch_neighbor_pairs<scalar_t>(
                 positions,
                 offsets,
                 cells,
                 duals,
                 image_shifts,
                 image_offsets,
-                cutoff);
+                cutoff,
+                half_list,
+                include_self);
         });
 
     const int64_t n_pairs = static_cast<int64_t>(pairs.sources.size());

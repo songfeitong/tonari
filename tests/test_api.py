@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import inspect
+
 import pytest
 import torch
 
@@ -17,6 +19,14 @@ def test_public_surface_contains_only_find_neighbors() -> None:
     assert tonari.__all__ == ["find_neighbors"]
     assert not hasattr(tonari, "radius_graph_pbc")
     assert not hasattr(tonari, "reference_radius_graph_pbc")
+
+
+def test_pair_options_are_keyword_only_and_default_to_existing_behavior() -> None:
+    signature = inspect.signature(find_neighbors)
+    assert signature.parameters["half_list"].kind is inspect.Parameter.KEYWORD_ONLY
+    assert signature.parameters["include_self"].kind is inspect.Parameter.KEYWORD_ONLY
+    assert signature.parameters["half_list"].default is False
+    assert signature.parameters["include_self"].default is False
 
 
 @pytest.mark.parametrize("positions", [torch.tensor(1.0), torch.zeros(3)])
@@ -54,7 +64,11 @@ def test_single_structure_default_matches_explicit_batch() -> None:
 
 
 @pytest.mark.parametrize("scale", [1e-3, 1e3])
-def test_neighbor_identity_is_independent_of_length_unit(scale: float) -> None:
+@pytest.mark.parametrize("half_list", [False, True])
+@pytest.mark.parametrize("include_self", [False, True])
+def test_neighbor_identity_is_independent_of_length_unit(
+    scale: float, half_list: bool, include_self: bool
+) -> None:
     positions = torch.tensor(
         [[0.2, 0.3, 0.1], [1.6, 0.2, 0.4], [0.7, 1.5, 1.0]],
         dtype=torch.float64,
@@ -64,8 +78,11 @@ def test_neighbor_identity_is_independent_of_length_unit(scale: float) -> None:
         dtype=torch.float64,
     )
     pbc = torch.tensor([True, True, True])
-    baseline = find_neighbors(positions, cell, pbc, 1.25)
-    scaled = find_neighbors(positions * scale, cell * scale, pbc, 1.25 * scale)
+    options = {"half_list": half_list, "include_self": include_self}
+    baseline = find_neighbors(positions, cell, pbc, 1.25, **options)
+    scaled = find_neighbors(
+        positions * scale, cell * scale, pbc, 1.25 * scale, **options
+    )
     assert pair_keys(scaled) == pair_keys(baseline)
 
 

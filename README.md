@@ -1,6 +1,6 @@
 # tonari
 
-`tonari` 是一个同时面向 NumPy 与 PyTorch、CPU 与 CUDA 的通用 neighbor-search 实验项目。它用一个公共函数返回 strict cutoff 内全部有向 atom-image pairs；finite 与 periodic geometry 使用同一接口，periodicity 只由 `pbc` 表达，核心接口不依赖 GNN/PyG 术语。Production implementation 不依赖 Vesin；Vesin 只用于外部 correctness reference 与公平性能 baseline。
+`tonari` 是一个同时面向 NumPy 与 PyTorch、CPU 与 CUDA 的通用 neighbor-search 实验项目。它用一个公共函数返回 strict cutoff 内的 full directed 或 canonical half atom-image pairs；finite 与 periodic geometry 使用同一接口，periodicity 只由 `pbc` 表达，核心接口不依赖 GNN/PyG 术语。Production implementation 不依赖 Vesin 或 ASE；二者只用于外部 correctness reference 与公平性能 baseline。
 
 第一次阅读建议从[算法总览](docs/algorithm-overview.md)开始；精确契约与内部结构见[设计文档](docs/design.md)，真实晶体与分子测量见[性能方法与结果](docs/benchmark.md)，开发取舍见[工作记录](notes/work-log.md)，独立审查见[终审记录](docs/review.md)。
 
@@ -13,6 +13,9 @@ pair_indices, cell_shifts = find_neighbors(
     pbc,
     cutoff,
     offsets=None,
+    *,
+    half_list=False,
+    include_self=False,
 )
 ```
 
@@ -37,7 +40,11 @@ displacements = (
 distances = torch.linalg.vector_norm(displacements, dim=1)
 ```
 
-`pair_indices` 为 int64、形状 `[2, num_pairs]`；`cell_shifts` 为 int32、形状 `[num_pairs, 3]`。Cell vectors 按行保存，shift 施加在 source image，因此 displacement 是 `positions[source] - positions[target] + cell_shifts @ cell`。结果包含距离严格小于 `cutoff` 的全部有向 pairs，只排除 `(i, i, [0, 0, 0])`，保留 periodic self-images 与 multiple images，不产生跨 structure pairs，并保证 inactive PBC axes 上的 shift 为零。输出顺序没有接口保证。
+`pair_indices` 为 int64、形状 `[2, num_pairs]`；`cell_shifts` 为 int32、形状 `[num_pairs, 3]`。Cell vectors 按行保存，shift 施加在 source image，因此 displacement 是 `positions[source] - positions[target] + cell_shifts @ cell`。结果只包含距离严格小于 `cutoff` 的 pairs，保留 periodic self-images 与 multiple images，不产生跨 structure pairs，并保证 inactive PBC axes 上的 shift 为零。输出顺序没有接口保证。
+
+默认 `half_list=False, include_self=False` 与原行为一致：返回排除 zero-shift self pair `(i, i, [0, 0, 0])` 的 full directed list。`include_self=True` 为每个 atom 原生加入且只加入一个 zero-shift self pair，不影响 `(i, i, S != 0)` periodic self-images。`half_list=True` 对 pair `(source, target, S)` 和 reverse `(target, source, -S)` 只保留五元 key `(source, target, Sx, Sy, Sz)` 按 lexicographical order 较小的一侧；它只去除 reverse redundancy，不执行 minimum-image reduction。
+
+典型 message-passing workflow 继续使用默认 full list，使每个 target 独立聚合消息。对称 pair interaction 可以直接请求 half list；若下游最终仍需要 full list，应在 adapter 边界显式补 reverse pairs。
 
 NumPy 调用使用完全相同的函数与形状规则：
 
@@ -68,7 +75,7 @@ PYTHONPATH=src CUDA_VISIBLE_DEVICES=1 \
   /home/ftsong/projects/elfes-workspace/elfes/.venv/bin/python -m pytest -q
 ```
 
-系统 CUDA toolkit 为 13.2，而 PyTorch wheel 使用 CUDA 13.0 构建，因此 extension build 会出现 minor-version warning；当前机器上的编译、导入、81 项测试与 benchmark 均成功。正式发布工具链仍应优先让 toolkit minor version 与 PyTorch wheel 对齐。
+系统 CUDA toolkit 为 13.2，而 PyTorch wheel 使用 CUDA 13.0 构建，因此 extension build 会出现 minor-version warning；当前机器上的编译、导入、完整测试与 benchmark 均成功。正式发布工具链仍应优先让 toolkit minor version 与 PyTorch wheel 对齐。
 
 ## 真实结构证据
 
@@ -92,4 +99,4 @@ Finite-molecule workload 来自 QMugs。脚本从 665,911 个 ChEMBL 分子、1,
 
 CPU backend 当前单线程并在 batch 内顺序处理 structures；CUDA 对正常 well-wrapped batch 使用 fused exhaustive 或 batched cell list。大规模未 wrap CUDA input 为保持 public displacement formula 的浮点语义，可能回退 exhaustive 并失去 cell-list 复杂度。One-shot API 每次重建 metadata；当前不提供排序、neighbor cap、species-dependent cutoff、Verlet skin、prepared metadata cache、CUDA Graph capture 或 `torch.compile`/export contract。
 
-ELFES 仍保持只读。现有 two-center 路径需要单结构 NumPy、统一 broad cutoff、partial/full PBC、multiple images 和 strict filtering，`tonari` 已覆盖这些基础能力；未来接入仍需明确把 full directed pairs 转成 half list、做 species cutoff post-filter 并补 onsite，本任务没有提前冻结或实现该 adapter。
+ELFES 仍保持只读。现有 two-center 路径需要单结构 NumPy、统一 broad cutoff、partial/full PBC、multiple images、half list、zero-shift onsite 与 strict species filtering，`tonari` 已覆盖前六项；未来 adapter 可以请求 `half_list=True, include_self=True`，再做 species cutoff post-filter。本任务没有接入或修改 ELFES。

@@ -3,6 +3,7 @@
 #include <c10/cuda/CUDAGuard.h>
 
 #include "neighbors_cuda.h"
+#include "pair_policy.h"
 
 #include <cstdint>
 #include <limits>
@@ -290,7 +291,7 @@ __global__ void insert_images_kernel(
 }
 
 
-template <typename scalar_t, bool write_pairs>
+template <typename scalar_t, bool write_pairs, tonari::PairMode Mode>
 __global__ void query_bins_kernel(
     const int64_t* offsets,
     const scalar_t* cells,
@@ -389,9 +390,11 @@ __global__ void query_bins_kernel(
                         static_cast<int64_t>(atom_wraps[3 * source + axis]) +
                         static_cast<int64_t>(atom_wraps[3 * target + axis]);
                 }
-                const bool onsite = source == target && output_shift[0] == 0 &&
-                    output_shift[1] == 0 && output_shift[2] == 0;
-                if (!onsite && distance_squared < cutoff_squared) {
+                const bool zero_shift_self =
+                    tonari::is_zero_shift_self_pair(source, target, output_shift);
+                if (tonari::keep_pair_identity<Mode>(
+                        source, target, output_shift) &&
+                    (zero_shift_self || distance_squared < cutoff_squared)) {
                     bool shift_fits = true;
 #pragma unroll
                     for (int axis = 0; axis < 3; ++axis) {
@@ -440,6 +443,96 @@ __global__ void query_bins_kernel(
 }
 
 
+template <typename scalar_t>
+struct QueryArguments {
+    const int64_t* offsets;
+    const scalar_t* cells;
+    const scalar_t* wrapped_positions;
+    const int32_t* atom_wraps;
+    const int32_t* image_shifts;
+    const int64_t* image_offsets;
+    const int64_t* node_offsets;
+    const scalar_t* bin_origins;
+    const int64_t* bin_dimensions;
+    const int64_t* bin_offsets;
+    const int32_t* bin_heads;
+    const int32_t* node_next;
+    int64_t n_atoms;
+    int64_t batch_size;
+    scalar_t cutoff;
+    scalar_t cutoff_squared;
+    const int64_t* pair_offsets;
+    int64_t* target_pair_counts;
+    int64_t* shift_overflow;
+    int64_t n_pairs;
+    int64_t* pair_indices;
+    int32_t* cell_shifts;
+};
+
+
+template <typename scalar_t, bool write_pairs, tonari::PairMode Mode>
+void launch_query_bins(
+    const QueryArguments<scalar_t>& arguments,
+    int64_t blocks,
+    cudaStream_t stream) {
+    query_bins_kernel<scalar_t, write_pairs, Mode>
+        <<<blocks, kThreads, 0, stream>>>(
+            arguments.offsets,
+            arguments.cells,
+            arguments.wrapped_positions,
+            arguments.atom_wraps,
+            arguments.image_shifts,
+            arguments.image_offsets,
+            arguments.node_offsets,
+            arguments.bin_origins,
+            arguments.bin_dimensions,
+            arguments.bin_offsets,
+            arguments.bin_heads,
+            arguments.node_next,
+            arguments.n_atoms,
+            arguments.batch_size,
+            arguments.cutoff,
+            arguments.cutoff_squared,
+            arguments.pair_offsets,
+            arguments.target_pair_counts,
+            arguments.shift_overflow,
+            arguments.n_pairs,
+            arguments.pair_indices,
+            arguments.cell_shifts);
+}
+
+
+template <typename scalar_t, bool write_pairs>
+void dispatch_query_bins(
+    tonari::PairMode mode,
+    const QueryArguments<scalar_t>& arguments,
+    int64_t blocks,
+    cudaStream_t stream) {
+    switch (mode) {
+        case tonari::PairMode::Full:
+            launch_query_bins<scalar_t, write_pairs, tonari::PairMode::Full>(
+                arguments, blocks, stream);
+            break;
+        case tonari::PairMode::FullWithSelf:
+            launch_query_bins<
+                scalar_t,
+                write_pairs,
+                tonari::PairMode::FullWithSelf>(arguments, blocks, stream);
+            break;
+        case tonari::PairMode::Half:
+            launch_query_bins<scalar_t, write_pairs, tonari::PairMode::Half>(
+                arguments, blocks, stream);
+            break;
+        case tonari::PairMode::HalfWithSelf:
+            launch_query_bins<
+                scalar_t,
+                write_pairs,
+                tonari::PairMode::HalfWithSelf>(arguments, blocks, stream);
+            break;
+    }
+}
+
+
 void validate_cell_inputs(
     const torch::Tensor& positions,
     const torch::Tensor& offsets,
@@ -476,7 +569,9 @@ std::vector<torch::Tensor> find_neighbors_cell_cuda(
     const torch::Tensor& node_offsets,
     int64_t total_blocks,
     int64_t total_nodes,
-    double cutoff) {
+    double cutoff,
+    bool half_list,
+    bool include_self) {
     validate_cell_inputs(
         positions,
         offsets,
@@ -491,6 +586,7 @@ std::vector<torch::Tensor> find_neighbors_cell_cuda(
     const auto stream = at::cuda::getCurrentCUDAStream(positions.get_device());
     const int64_t n_atoms = positions.size(0);
     const int64_t batch_size = offsets.numel() - 1;
+    const auto mode = tonari::pair_mode(half_list, include_self);
     auto pair_indices = torch::empty({2, 0}, positions.options().dtype(torch::kInt64));
     auto cell_shifts = torch::empty({0, 3}, positions.options().dtype(torch::kInt32));
     if (n_atoms == 0) {
@@ -576,7 +672,9 @@ std::vector<torch::Tensor> find_neighbors_cell_cuda(
             image_offsets,
             block_offsets,
             total_blocks,
-            cutoff);
+            cutoff,
+            half_list,
+            include_self);
     }
     if (total_bins > kMaximumDenseBins ||
         (total_nodes > 0 && total_bins > kMaximumBinsPerNode * total_nodes)) {
@@ -593,7 +691,9 @@ std::vector<torch::Tensor> find_neighbors_cell_cuda(
             image_offsets,
             block_offsets,
             total_blocks,
-            cutoff);
+            cutoff,
+            half_list,
+            include_self);
     }
 
     auto bin_heads = torch::full(
@@ -637,7 +737,7 @@ std::vector<torch::Tensor> find_neighbors_cell_cuda(
     C10_CUDA_CHECK(cudaMemsetAsync(
         pair_offsets.data_ptr<int64_t>(), 0, sizeof(int64_t), stream));
     AT_DISPATCH_FLOATING_TYPES(positions.scalar_type(), "count_neighbor_search_cell_pairs", [&] {
-        query_bins_kernel<scalar_t, false><<<query_blocks, kThreads, 0, stream>>>(
+        const QueryArguments<scalar_t> arguments{
             offsets.data_ptr<int64_t>(),
             cells.data_ptr<scalar_t>(),
             wrapped_positions.data_ptr<scalar_t>(),
@@ -659,7 +759,9 @@ std::vector<torch::Tensor> find_neighbors_cell_cuda(
             target_pair_counts.data_ptr<int64_t>() + n_atoms,
             0,
             nullptr,
-            nullptr);
+            nullptr};
+        dispatch_query_bins<scalar_t, false>(
+            mode, arguments, query_blocks, stream);
     });
     C10_CUDA_KERNEL_LAUNCH_CHECK();
     pair_offsets.slice(0, 1, n_atoms + 2)
@@ -674,7 +776,7 @@ std::vector<torch::Tensor> find_neighbors_cell_cuda(
         return {pair_indices, cell_shifts};
     }
     AT_DISPATCH_FLOATING_TYPES(positions.scalar_type(), "write_neighbor_search_cell_pairs", [&] {
-        query_bins_kernel<scalar_t, true><<<query_blocks, kThreads, 0, stream>>>(
+        const QueryArguments<scalar_t> arguments{
             offsets.data_ptr<int64_t>(),
             cells.data_ptr<scalar_t>(),
             wrapped_positions.data_ptr<scalar_t>(),
@@ -696,7 +798,9 @@ std::vector<torch::Tensor> find_neighbors_cell_cuda(
             nullptr,
             n_pairs,
             pair_indices.data_ptr<int64_t>(),
-            cell_shifts.data_ptr<int32_t>());
+            cell_shifts.data_ptr<int32_t>()};
+        dispatch_query_bins<scalar_t, true>(
+            mode, arguments, query_blocks, stream);
     });
     C10_CUDA_KERNEL_LAUNCH_CHECK();
     return {pair_indices, cell_shifts};

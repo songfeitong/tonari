@@ -11,6 +11,9 @@ pair_indices, cell_shifts = find_neighbors(
     pbc,
     cutoff,
     offsets=None,
+    *,
+    half_list=False,
+    include_self=False,
 )
 ```
 
@@ -30,7 +33,9 @@ NumPy frontend 不是第二套搜索实现。Writeable、aligned、nonnegative-s
 positions[source[k]] - positions[target[k]] + cell_shifts[k] @ cells[b]
 ```
 
-结果包含 squared distance 严格小于 `cutoff**2` 的全部有向 atom-image pairs。只排除 zero-shift onsite `(i, i, [0, 0, 0])`；保留 periodic self-images、同一 atom pair 的 multiple images 与 reverse pair。Inactive PBC axes 的 shift 必须为零。Batch members 之间绝不产生 pair。Output order 没有接口保证，correctness 使用完整五元 key set 比较。
+结果只包含 squared distance 严格小于 `cutoff**2` 的 atom-image pairs。默认 `half_list=False, include_self=False` 返回排除 zero-shift self pair `(i, i, [0, 0, 0])` 的 full directed list；`include_self=True` 为每个 atom 加入恰好一个该 pair。Periodic self-images `(i, i, S != 0)`、同一 atom pair 的 multiple images 与 strict cutoff 语义不受 self 选项影响。
+
+Pair `(source, target, S)` 的 reverse 是 `(target, source, -S)`。`half_list=True` 对五元 key `(source, target, Sx, Sy, Sz)` 与 reverse key 做 lexicographical comparison，只保留较小者。普通 pair 因 source index 决定方向；periodic self-image 保留第一个非零 shift component 为负的一侧；zero-shift self 与自己的 reverse 相同，因此最多出现一次。Half list 只去除 reverse redundancy，不执行 minimum-image reduction。Inactive PBC axes 的 shift 必须为零，batch members 之间绝不产生 pair，output order 没有接口保证。
 
 函数不绑定 Å、Bohr 或其他长度单位。`positions`、`cells` 与 `cutoff` 必须使用同一单位；`pair_indices` 和 `cell_shifts` 无量纲。一致缩放三种长度输入不改变 pair identity。
 
@@ -52,6 +57,8 @@ Python boundary 验证 ecosystem、shapes、dtypes、devices、cutoff 与 offset
 
 CPU 对 batch members 顺序处理，每个 structure 独立选择 exhaustive 或 Cartesian cell list。Native call 使用 `py::gil_scoped_release`，但内部不启动 thread pool；调用方可以在 DataLoader workers、进程池或 DDP 层决定并行度，避免 workers 与 backend threads 乘法 oversubscription。
 
+四种 pair policy 在 Python/native boundary 只 dispatch 一次，随后进入 compile-time-specialized candidate acceptance；默认 full/no-self hot path 不承担 per-candidate runtime mode branch。Zero-shift self 判断与 canonical half rule 集中在共享 C++ header。Half exhaustive path 在距离计算前排除非 canonical方向，half cell-list path在 wrapped-distance筛选前做同样的 identity check，因此减少距离计算、写出和 output memory，而不是先生成 full list再过滤。
+
 ### Exhaustive path
 
 候选工作量为 `N² × image_count`。不超过 16,384 时，直接遍历 target、source 与 search image，只构造三维 displacement 并执行 strict `distance² < cutoff²`。它不建立 bins、hash table或 candidate tensors，适合常见小结构。16,384 来自固定 Matbench workload 的 crossover sweep，是性能参数而非 public contract。
@@ -67,6 +74,8 @@ Dense bin grid 少于 `2^26` entries，并限制相对 possible source images �
 ## CUDA backend
 
 CUDA 接受整个 heterogeneous batch。`CudaSearchSchedule` 将每个 structure 的 atom/image tasks 编入全局 block/node offsets，kernels 通过 segment lookup 找到所属 structure；所有生成 pair 都留在相应 offsets 区间。
+
+Pair mode 同样在 launch boundary dispatch 到四个 compile-time kernel specialization。Fused exhaustive 的 count/write 共享同一 candidate predicate；cell-list 的 query count/write共享同一 policy。默认 full list仍是主要 CUDA path，half list正确地减少输出与显存，但不引入额外专用调度。
 
 Batch 内最大 structure 少于 256 atoms 时使用 fused exhaustive：`(source, target, image)` candidates 直接映射到 threads，block reduction 计数、block scan 写出，不 materialize dense candidates。达到 crossover 后使用 batched Cartesian cell list：prepare kernel 融合 representative wrapping 与 per-structure bounds；source images 插入 bins；每个 warp 负责一个 target，由前 27 lanes 遍历相邻 bins；count/prefix-sum 后精确分配并 write。
 
@@ -86,13 +95,13 @@ Neighbor identity 是离散 topology，production 在搜索边界 detach 浮点 
 
 内部 `_reference.find_neighbors_reference` 与 public Torch shapes/signature 一致，独立执行 exhaustive PyTorch enumeration，不调用 production native search。它按原始 positions/output shifts 重建 displacement，并共享 int32/image-resource contract；只用于开发期 correctness，不属于 public surface。
 
-81 项 tests 覆盖 public surface、NumPy/Torch ecosystem、single/batch shapes、invalid 0-D/1-D shape exceptions、单位一致缩放、finite/partial/full PBC、rank-deficient 与近共线 active rows、mixed batch、ordinary/large unwrapped representatives、int32 rejection、nonfinite rejection、multiple images、periodic self-images、empty tiny cell、image/bin resource limits、exact、nextafter 与 float32 1-ulp cutoff、randomized differential、rotation/reflection covariance、CUDA current stream、continuous-geometry backward、CPU-only benchmark import，以及 QMugs download resume/SDF/selection/cache 与 finite dense baseline。Tests 比较完整 `(source, target, Sx, Sy, Sz)` sets，不冻结 output order。
+Tests 覆盖 public surface、NumPy/Torch ecosystem、single/batch shapes、单位一致缩放、finite/partial/full PBC、rank-deficient 与近共线 active rows、mixed batch、ordinary/large unwrapped representatives、int32/resource rejection、multiple images、periodic self-images、strict cutoff、randomized differential、rotation/reflection covariance、CUDA current stream、continuous-geometry backward、QMugs preparation，以及四种 full/half/self组合。新增的核心不变量是：self切换只增加每个 atom的 zero-shift self、half输出等于 full输出的 canonical key set、补 reverse可恢复 full，并且 NumPy、Torch CPU、Torch CUDA、reference、Vesin与ASE按统一方向归一化后精确一致。Tests 不冻结 output order。
 
 ## ELFES 只读需求核对
 
-ELFES 当前 `group_atom_image_pairs` 接受单个 NumPy `Geometry`，用统一 `2 * max(atom_cutoffs)` broad cutoff 调 Vesin half list，再按 species-dependent cutoff 严格过滤并显式加入 onsite。它与 `tonari` 的共同需求是 NumPy CPU、单结构、scalar broad cutoff、partial/full PBC、strict boundary、multiple images、int32 shifts 与 unwrapped representative gauge。
+ELFES 当前 `group_atom_image_pairs` 接受单个 NumPy `Geometry`，用统一 `2 * max(atom_cutoffs)` broad cutoff 调 Vesin half list，再按 species-dependent cutoff 严格过滤并显式加入 onsite。它与 `tonari` 的共同需求是 NumPy CPU、单结构、scalar broad cutoff、partial/full PBC、strict boundary、multiple images、canonical half list、zero-shift onsite、int32 shifts 与 unwrapped representative gauge。
 
-`tonari` 返回 full directed pairs 并排除 onsite，因此未来 adapter 仍需定义 half-list canonicalization、species post-filter 与 onsite insertion。当前任务只确认能力覆盖，不修改 ELFES，也不把该 adapter 反向污染核心 API。
+`tonari` 可以直接返回 canonical half list并原生包含 zero-shift self pair，因此未来 adapter只需明确 broad cutoff与species post-filter。当前任务只确认能力覆盖，不修改 ELFES，也不把 species规则反向污染核心 API。
 
 ## 暂不支持
 

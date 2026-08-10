@@ -5,6 +5,7 @@
 #include <cub/block/block_scan.cuh>
 
 #include "neighbors_cuda.h"
+#include "pair_policy.h"
 
 #include <cstdint>
 #include <limits>
@@ -85,7 +86,7 @@ __global__ void prepare_atom_wraps_kernel(
 }
 
 
-template <typename scalar_t>
+template <typename scalar_t, tonari::PairMode Mode>
 __device__ __forceinline__ bool evaluate_candidate(
     int64_t task_index,
     int64_t batch_index,
@@ -128,24 +129,28 @@ __device__ __forceinline__ bool evaluate_candidate(
             static_cast<int64_t>(atom_wraps[3 * target + axis]);
     }
 
-    if (source == target && cell_shift[0] == 0 && cell_shift[1] == 0 &&
-        cell_shift[2] == 0) {
+    const bool zero_shift_self =
+        tonari::is_zero_shift_self_pair(source, target, cell_shift);
+    if (!tonari::keep_pair_identity<Mode>(source, target, cell_shift)) {
         return false;
     }
 
     scalar_t distance_squared = scalar_t(0);
+    if (!zero_shift_self) {
 #pragma unroll
-    for (int cartesian = 0; cartesian < 3; ++cartesian) {
-        scalar_t component = source_position[cartesian] - target_position[cartesian];
+        for (int cartesian = 0; cartesian < 3; ++cartesian) {
+            scalar_t component =
+                source_position[cartesian] - target_position[cartesian];
 #pragma unroll
-        for (int axis = 0; axis < 3; ++axis) {
-            component += static_cast<scalar_t>(cell_shift[axis]) *
-                structure_cell[3 * axis + cartesian];
+            for (int axis = 0; axis < 3; ++axis) {
+                component += static_cast<scalar_t>(cell_shift[axis]) *
+                    structure_cell[3 * axis + cartesian];
+            }
+            distance_squared += component * component;
         }
-        distance_squared += component * component;
-    }
-    if (distance_squared >= cutoff_squared) {
-        return false;
+        if (distance_squared >= cutoff_squared) {
+            return false;
+        }
     }
 #pragma unroll
     for (int axis = 0; axis < 3; ++axis) {
@@ -163,7 +168,7 @@ __device__ __forceinline__ bool evaluate_candidate(
 }
 
 
-template <typename scalar_t>
+template <typename scalar_t, tonari::PairMode Mode>
 __global__ void count_pairs_kernel(
     const scalar_t* positions,
     const int64_t* offsets,
@@ -183,7 +188,7 @@ __global__ void count_pairs_kernel(
     int64_t source = 0;
     int64_t target = 0;
     int64_t cell_shift[3] = {0, 0, 0};
-    const int hit = evaluate_candidate(
+    const int hit = evaluate_candidate<scalar_t, Mode>(
         task_index,
         batch_index,
         positions,
@@ -211,7 +216,7 @@ __global__ void count_pairs_kernel(
 }
 
 
-template <typename scalar_t>
+template <typename scalar_t, tonari::PairMode Mode>
 __global__ void write_pairs_kernel(
     const scalar_t* positions,
     const int64_t* offsets,
@@ -233,7 +238,7 @@ __global__ void write_pairs_kernel(
     int64_t source = 0;
     int64_t target = 0;
     int64_t cell_shift[3] = {0, 0, 0};
-    const int hit = evaluate_candidate(
+    const int hit = evaluate_candidate<scalar_t, Mode>(
         task_index,
         batch_index,
         positions,
@@ -274,6 +279,169 @@ __global__ void write_pairs_kernel(
     }
 }
 
+
+template <typename scalar_t, tonari::PairMode Mode>
+void launch_count_pairs(
+    const torch::Tensor& positions,
+    const torch::Tensor& offsets,
+    const torch::Tensor& cells,
+    const torch::Tensor& atom_wraps,
+    const torch::Tensor& image_shifts,
+    const torch::Tensor& image_offsets,
+    const torch::Tensor& block_offsets,
+    int64_t batch_size,
+    scalar_t cutoff_squared,
+    torch::Tensor& count_result,
+    int64_t total_blocks,
+    cudaStream_t stream) {
+    count_pairs_kernel<scalar_t, Mode><<<total_blocks, kBlockSize, 0, stream>>>(
+        positions.data_ptr<scalar_t>(),
+        offsets.data_ptr<int64_t>(),
+        cells.data_ptr<scalar_t>(),
+        atom_wraps.data_ptr<int32_t>(),
+        image_shifts.data_ptr<int32_t>(),
+        image_offsets.data_ptr<int64_t>(),
+        block_offsets.data_ptr<int64_t>(),
+        batch_size,
+        cutoff_squared,
+        count_result.data_ptr<int64_t>(),
+        count_result.data_ptr<int64_t>() + 1);
+}
+
+
+template <typename scalar_t>
+void dispatch_count_pairs(
+    tonari::PairMode mode,
+    const torch::Tensor& positions,
+    const torch::Tensor& offsets,
+    const torch::Tensor& cells,
+    const torch::Tensor& atom_wraps,
+    const torch::Tensor& image_shifts,
+    const torch::Tensor& image_offsets,
+    const torch::Tensor& block_offsets,
+    int64_t batch_size,
+    scalar_t cutoff_squared,
+    torch::Tensor& count_result,
+    int64_t total_blocks,
+    cudaStream_t stream) {
+    auto launch = [&]<tonari::PairMode Mode>() {
+        launch_count_pairs<scalar_t, Mode>(
+            positions,
+            offsets,
+            cells,
+            atom_wraps,
+            image_shifts,
+            image_offsets,
+            block_offsets,
+            batch_size,
+            cutoff_squared,
+            count_result,
+            total_blocks,
+            stream);
+    };
+    switch (mode) {
+        case tonari::PairMode::Full:
+            launch.template operator()<tonari::PairMode::Full>();
+            break;
+        case tonari::PairMode::FullWithSelf:
+            launch.template operator()<tonari::PairMode::FullWithSelf>();
+            break;
+        case tonari::PairMode::Half:
+            launch.template operator()<tonari::PairMode::Half>();
+            break;
+        case tonari::PairMode::HalfWithSelf:
+            launch.template operator()<tonari::PairMode::HalfWithSelf>();
+            break;
+    }
+}
+
+
+template <typename scalar_t, tonari::PairMode Mode>
+void launch_write_pairs(
+    const torch::Tensor& positions,
+    const torch::Tensor& offsets,
+    const torch::Tensor& cells,
+    const torch::Tensor& atom_wraps,
+    const torch::Tensor& image_shifts,
+    const torch::Tensor& image_offsets,
+    const torch::Tensor& block_offsets,
+    int64_t batch_size,
+    scalar_t cutoff_squared,
+    int64_t n_pairs,
+    torch::Tensor& pair_cursor,
+    torch::Tensor& pair_indices,
+    torch::Tensor& cell_shifts,
+    int64_t total_blocks,
+    cudaStream_t stream) {
+    write_pairs_kernel<scalar_t, Mode><<<total_blocks, kBlockSize, 0, stream>>>(
+        positions.data_ptr<scalar_t>(),
+        offsets.data_ptr<int64_t>(),
+        cells.data_ptr<scalar_t>(),
+        atom_wraps.data_ptr<int32_t>(),
+        image_shifts.data_ptr<int32_t>(),
+        image_offsets.data_ptr<int64_t>(),
+        block_offsets.data_ptr<int64_t>(),
+        batch_size,
+        cutoff_squared,
+        n_pairs,
+        pair_cursor.data_ptr<int64_t>(),
+        pair_indices.data_ptr<int64_t>(),
+        cell_shifts.data_ptr<int32_t>());
+}
+
+
+template <typename scalar_t>
+void dispatch_write_pairs(
+    tonari::PairMode mode,
+    const torch::Tensor& positions,
+    const torch::Tensor& offsets,
+    const torch::Tensor& cells,
+    const torch::Tensor& atom_wraps,
+    const torch::Tensor& image_shifts,
+    const torch::Tensor& image_offsets,
+    const torch::Tensor& block_offsets,
+    int64_t batch_size,
+    scalar_t cutoff_squared,
+    int64_t n_pairs,
+    torch::Tensor& pair_cursor,
+    torch::Tensor& pair_indices,
+    torch::Tensor& cell_shifts,
+    int64_t total_blocks,
+    cudaStream_t stream) {
+    auto launch = [&]<tonari::PairMode Mode>() {
+        launch_write_pairs<scalar_t, Mode>(
+            positions,
+            offsets,
+            cells,
+            atom_wraps,
+            image_shifts,
+            image_offsets,
+            block_offsets,
+            batch_size,
+            cutoff_squared,
+            n_pairs,
+            pair_cursor,
+            pair_indices,
+            cell_shifts,
+            total_blocks,
+            stream);
+    };
+    switch (mode) {
+        case tonari::PairMode::Full:
+            launch.template operator()<tonari::PairMode::Full>();
+            break;
+        case tonari::PairMode::FullWithSelf:
+            launch.template operator()<tonari::PairMode::FullWithSelf>();
+            break;
+        case tonari::PairMode::Half:
+            launch.template operator()<tonari::PairMode::Half>();
+            break;
+        case tonari::PairMode::HalfWithSelf:
+            launch.template operator()<tonari::PairMode::HalfWithSelf>();
+            break;
+    }
+}
+
 }  // namespace
 
 
@@ -286,7 +454,9 @@ std::vector<torch::Tensor> find_neighbors_cuda(
     const torch::Tensor& image_offsets,
     const torch::Tensor& block_offsets,
     int64_t total_blocks,
-    double cutoff) {
+    double cutoff,
+    bool half_list,
+    bool include_self) {
     TORCH_CHECK(positions.is_cuda(), "positions must be a CUDA tensor");
     TORCH_CHECK(offsets.is_cuda() && cells.is_cuda() && duals.is_cuda(), "all inputs must be CUDA tensors");
     TORCH_CHECK(image_shifts.is_cuda() && image_offsets.is_cuda() && block_offsets.is_cuda(), "all metadata must be CUDA tensors");
@@ -303,6 +473,7 @@ std::vector<torch::Tensor> find_neighbors_cuda(
     const c10::cuda::CUDAGuard device_guard(positions.device());
     const auto stream = at::cuda::getCurrentCUDAStream(positions.get_device());
     const int64_t batch_size = offsets.numel() - 1;
+    const auto mode = tonari::pair_mode(half_list, include_self);
     auto pair_indices = torch::empty({2, 0}, positions.options().dtype(torch::kInt64));
     auto cell_shifts = torch::empty({0, 3}, positions.options().dtype(torch::kInt32));
     if (total_blocks == 0) {
@@ -325,18 +496,20 @@ std::vector<torch::Tensor> find_neighbors_cuda(
             atom_wraps.data_ptr<int32_t>(),
             count_result.data_ptr<int64_t>() + 2,
             count_result.data_ptr<int64_t>() + 3);
-        count_pairs_kernel<scalar_t><<<total_blocks, kBlockSize, 0, stream>>>(
-            positions.data_ptr<scalar_t>(),
-            offsets.data_ptr<int64_t>(),
-            cells.data_ptr<scalar_t>(),
-            atom_wraps.data_ptr<int32_t>(),
-            image_shifts.data_ptr<int32_t>(),
-            image_offsets.data_ptr<int64_t>(),
-            block_offsets.data_ptr<int64_t>(),
+        dispatch_count_pairs<scalar_t>(
+            mode,
+            positions,
+            offsets,
+            cells,
+            atom_wraps,
+            image_shifts,
+            image_offsets,
+            block_offsets,
             batch_size,
             cutoff_squared,
-            count_result.data_ptr<int64_t>(),
-            count_result.data_ptr<int64_t>() + 1);
+            count_result,
+            total_blocks,
+            stream);
     });
     C10_CUDA_KERNEL_LAUNCH_CHECK();
     const auto count_result_cpu = count_result.cpu();
@@ -360,20 +533,23 @@ std::vector<torch::Tensor> find_neighbors_cuda(
     auto pair_cursor = torch::zeros({1}, positions.options().dtype(torch::kInt64));
     AT_DISPATCH_FLOATING_TYPES(positions.scalar_type(), "write_neighbor_search_pairs", [&] {
         const scalar_t cutoff_squared = static_cast<scalar_t>(cutoff * cutoff);
-        write_pairs_kernel<scalar_t><<<total_blocks, kBlockSize, 0, stream>>>(
-            positions.data_ptr<scalar_t>(),
-            offsets.data_ptr<int64_t>(),
-            cells.data_ptr<scalar_t>(),
-            atom_wraps.data_ptr<int32_t>(),
-            image_shifts.data_ptr<int32_t>(),
-            image_offsets.data_ptr<int64_t>(),
-            block_offsets.data_ptr<int64_t>(),
+        dispatch_write_pairs<scalar_t>(
+            mode,
+            positions,
+            offsets,
+            cells,
+            atom_wraps,
+            image_shifts,
+            image_offsets,
+            block_offsets,
             batch_size,
             cutoff_squared,
             n_pairs,
-            pair_cursor.data_ptr<int64_t>(),
-            pair_indices.data_ptr<int64_t>(),
-            cell_shifts.data_ptr<int32_t>());
+            pair_cursor,
+            pair_indices,
+            cell_shifts,
+            total_blocks,
+            stream);
     });
     C10_CUDA_KERNEL_LAUNCH_CHECK();
     return {pair_indices, cell_shifts};
