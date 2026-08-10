@@ -1,14 +1,70 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 from pathlib import Path
+from typing import Self
+from unittest.mock import patch
 
 import numpy as np
+import pytest
 import torch
 
 from benchmarks.baselines import dense_candidate_count, torch_dense_batch
 from benchmarks.qmugs_data import QmugsStructureDataset, select_qmugs
-from scripts.prepare_qmugs import parse_sdf, select_candidates, write_deterministic_npz
+from scripts.prepare_qmugs import (
+    ensure_download,
+    parse_sdf,
+    select_candidates,
+    write_deterministic_npz,
+)
+
+
+class MockResponse:
+    def __init__(self, contents: bytes, status: int) -> None:
+        self.contents = contents
+        self.status = status
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        return None
+
+    def read(self, size: int) -> bytes:
+        del size
+        contents, self.contents = self.contents, b""
+        return contents
+
+
+def test_download_keeps_truncated_response_resumable(tmp_path: Path) -> None:
+    path = tmp_path / "source.bin"
+    digest = hashlib.sha256(b"abcde").hexdigest()
+
+    with (
+        patch(
+            "scripts.prepare_qmugs.urllib.request.urlopen",
+            return_value=MockResponse(b"abc", 200),
+        ),
+        pytest.raises(RuntimeError, match="rerun to resume"),
+    ):
+        ensure_download(path, "https://example.test/source.bin", 5, digest)
+
+    assert not path.exists()
+    assert path.with_suffix(".bin.part").read_bytes() == b"abc"
+
+    with patch(
+        "scripts.prepare_qmugs.urllib.request.urlopen",
+        return_value=MockResponse(b"de", 206),
+    ) as urlopen:
+        assert (
+            ensure_download(path, "https://example.test/source.bin", 5, digest)
+            == digest
+        )
+
+    assert path.read_bytes() == b"abcde"
+    assert not path.with_suffix(".bin.part").exists()
+    assert urlopen.call_args.args[0].get_header("Range") == "bytes=3-"
 
 
 def test_parse_qmugs_v2000_sdf() -> None:

@@ -78,9 +78,9 @@ PYTHONPATH=src CUDA_VISIBLE_DEVICES=1 \
 
 在 NVIDIA RTX PRO 6000 Blackwell 上，`DataLoader(batch_size=32)` 的完整 epoch 中，`tonari` 为 12.11 ms，逐 structure Vesin GPU 为 494.39 ms。代表性 32-structure batch 中，`tonari` 为 0.225 ms、Vesin 为 9.29 ms、独立 Equiformer/FairChem-style dense baseline 为 42.78 ms，三者得到完全相同的 43,842 个 pair keys。32,768-atom real-derived supercell 中，`tonari` 为 0.254 ms、Vesin 为 1.491 ms。
 
-CPU 与 CUDA 都在全部 1,536 个结构、2,780,158 个 `(source, target, Sx, Sy, Sz)` keys 上与 Vesin 精确一致。正式 JSON 记录 clean implementation revision、data/cache/extension SHA 与全部 timing samples；Nsight summary 与 CSV 保存 kernel、memory、API 和 NVTX 证据。
+CPU 与 CUDA 都在全部 1,536 个结构、2,780,158 个 `(source, target, Sx, Sy, Sz)` keys 上与 Vesin 精确一致。正式 JSON 都记录 clean implementation revision 与 data/cache/extension SHA；CPU JSON 保存全部 timing samples，CUDA JSON 保存 minimum/median/maximum。Nsight summary 与 CSV 保存 kernel、memory、API 和 NVTX 证据。
 
-Finite-molecule workload 来自 QMugs。脚本从 665,911 个 ChEMBL 分子、1,992,984 个 conformers 中为每个分子选择 GFN2-xTB 能量最低的 conformer，再构造互不重叠的 4,096-molecule population sample 与 4,096-molecule size-balanced sample。Population sample 的总原子数中位数为 52；size-balanced sample 按 4–10、11–20、…、81–100 个重原子分为八档，总原子数最高 221。Raw data 位于 ignored cache；仓库提交固定 source SHA、deterministic cache、manifest 和 selection CSV。
+Finite-molecule workload 来自 QMugs。脚本从 665,911 个 ChEMBL 分子、1,992,984 个 conformers 中为每个分子选择 GFN2-xTB 能量最低的 conformer，再构造互不重叠的 4,096-molecule population sample 与 4,096-molecule size-balanced sample。Population sample 的总原子数中位数为 52；size-balanced sample 按 4–10、11–20、…、81–100 个重原子分为八档，总原子数最高 221。Raw data 与 deterministic cache 位于 ignored `cache/`；仓库提交固定 source/cache SHA、可重复生成脚本、manifest 和 selection CSV。数据作者、论文、许可与 ChEMBL attribution 见 [`benchmarks/data/QMUGS_ATTRIBUTION.md`](benchmarks/data/QMUGS_ATTRIBUTION.md)。
 
 固定单核 CPU 上，QMugs population epoch 中 `tonari` 为 154.67 ms，复用 Vesin 为 179.28 ms，前者快 1.16×；size-balanced epoch 为 278.70 对 290.34 ms。小于等于 65 个重原子的六档中 `tonari` 快 1.04–1.35×，66–100 个重原子的两档中 Vesin 约快 1.07×，与 Matbench supercell crossover 结论一致。
 

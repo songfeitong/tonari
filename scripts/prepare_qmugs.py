@@ -78,12 +78,23 @@ def ensure_download(
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".part")
     if path.exists():
-        if path.stat().st_size != expected_bytes:
-            raise RuntimeError(f"{path} has an unexpected size")
-    elif temporary.exists() and temporary.stat().st_size == expected_bytes:
-        temporary.replace(path)
-    else:
-        resume_bytes = temporary.stat().st_size if temporary.exists() else 0
+        final_size = path.stat().st_size
+        if final_size == expected_bytes:
+            actual_sha256 = sha256(path)
+            if expected_sha256 and actual_sha256 != expected_sha256:
+                raise RuntimeError(
+                    f"{path} has an unexpected SHA-256; remove it and rerun"
+                )
+            return actual_sha256
+        if final_size < expected_bytes and not temporary.exists():
+            path.replace(temporary)
+        else:
+            raise RuntimeError(f"{path} has an unexpected size; remove it and rerun")
+
+    resume_bytes = temporary.stat().st_size if temporary.exists() else 0
+    if resume_bytes > expected_bytes:
+        raise RuntimeError(f"{temporary} is larger than expected; remove it and rerun")
+    if resume_bytes < expected_bytes:
         request = urllib.request.Request(url)
         if resume_bytes:
             request.add_header("Range", f"bytes={resume_bytes}-")
@@ -92,13 +103,18 @@ def ensure_download(
             with temporary.open("ab" if append else "wb") as output:
                 while chunk := response.read(4 * 1024 * 1024):
                     output.write(chunk)
-        temporary.replace(path)
-        if path.stat().st_size != expected_bytes:
-            raise RuntimeError(f"downloaded {path.name} has an unexpected size")
 
-    actual_sha256 = sha256(path)
+    if temporary.stat().st_size != expected_bytes:
+        raise RuntimeError(
+            f"downloaded {path.name} has an unexpected size; rerun to resume"
+        )
+    actual_sha256 = sha256(temporary)
     if expected_sha256 and actual_sha256 != expected_sha256:
-        raise RuntimeError(f"downloaded {path.name} has an unexpected SHA-256")
+        raise RuntimeError(
+            f"downloaded {path.name} has an unexpected SHA-256; "
+            f"remove {temporary} and rerun"
+        )
+    temporary.replace(path)
     return actual_sha256
 
 
