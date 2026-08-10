@@ -296,6 +296,41 @@ def test_cell_list_path_handles_mixed_finite_and_partial_pbc_batch() -> None:
     assert torch.all(shifts[edge_batch == 1, 1:] == 0)
 
 
+def test_cell_list_large_common_translation_uses_public_vector_formula() -> None:
+    cell = torch.tensor(
+        [
+            [-0.9499396681785583, 2.3687520027160645, 1.7597240209579468],
+            [-3.4348089694976807, -1.8801195621490479, 1.9097744226455688],
+            [2.5219004154205322, -1.9322474002838135, 4.843184471130371],
+        ]
+    )
+    positions = torch.tensor([-2138.380859375, -11887.5810546875, 10318.5625]).repeat(
+        256, 1
+    )
+    positions[52] = torch.tensor(
+        [-2135.800048828125, -11886.6826171875, 10317.2880859375]
+    )
+    positions[40] = torch.tensor(
+        [-2141.306396484375, -11885.267578125, 10315.8291015625]
+    )
+    positions[61] = torch.tensor([-2135.84033203125, -11887.59375, 10317.1181640625])
+    arguments = (
+        positions,
+        torch.tensor([0, len(positions)]),
+        cell[None],
+        torch.ones((1, 3), dtype=torch.bool),
+        1.4481067657470703,
+    )
+    expected = radius_graph_pbc(*arguments)
+    actual = cuda_graph(*arguments)
+    expected_keys = edge_keys(*expected)
+    assert (23, 52, 0, -1, 0) in expected_keys
+    assert (52, 23, 0, 1, 0) in expected_keys
+    assert (40, 61, -1, -1, 1) not in expected_keys
+    assert (61, 40, 1, 1, -1) not in expected_keys
+    assert edge_keys(*actual) == expected_keys
+
+
 def test_rejects_dependent_active_cell_rows() -> None:
     with pytest.raises(ValueError, match="linearly independent"):
         cuda_graph(

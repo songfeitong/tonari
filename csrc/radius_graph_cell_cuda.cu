@@ -111,7 +111,7 @@ __global__ void wrap_positions_kernel(
     int32_t* atom_wraps,
     scalar_t* bounds_minimum,
     scalar_t* bounds_maximum,
-    int64_t* invalid_input) {
+    int64_t* input_status) {
     const int64_t atom = static_cast<int64_t>(blockIdx.x) * blockDim.x + threadIdx.x;
     if (atom >= n_atoms) {
         return;
@@ -126,8 +126,8 @@ __global__ void wrap_positions_kernel(
         finite &= isfinite(position[cartesian]);
     }
     if (!finite) {
-        atomicExch(
-            reinterpret_cast<unsigned long long*>(invalid_input),
+        atomicOr(
+            reinterpret_cast<unsigned long long*>(input_status),
             static_cast<unsigned long long>(1));
 #pragma unroll
         for (int axis = 0; axis < 3; ++axis) {
@@ -149,14 +149,22 @@ __global__ void wrap_positions_kernel(
         }
         if (!isfinite(fractional) || fractional < -upper_bound ||
             fractional >= upper_bound) {
-            atomicExch(
-                reinterpret_cast<unsigned long long*>(invalid_input),
+            atomicOr(
+                reinterpret_cast<unsigned long long*>(input_status),
                 static_cast<unsigned long long>(1));
             wraps[axis] = 0;
         } else {
             wraps[axis] = static_cast<int32_t>(floor(fractional));
         }
         atom_wraps[3 * atom + axis] = wraps[axis];
+    }
+    if (wraps[0] != 0 || wraps[1] != 0 || wraps[2] != 0) {
+        // Wrapped arithmetic is only a search aid. For unwrapped
+        // representatives, use the exhaustive public-vector predicate to
+        // avoid a device-dependent cutoff decision from cancellation.
+        atomicOr(
+            reinterpret_cast<unsigned long long*>(input_status),
+            static_cast<unsigned long long>(2));
     }
 #pragma unroll
     for (int cartesian = 0; cartesian < 3; ++cartesian) {
@@ -187,11 +195,8 @@ __global__ void define_bins_kernel(
         return;
     }
     if (batch == batch_size) {
-        // The final slot is not a regular bin count: it encodes wrap/finite
-        // errors as INT64_MIN so one cumsum and host read return count and status.
-        bin_counts[batch] = bin_counts[batch] == 0
-            ? 0
-            : std::numeric_limits<int64_t>::min();
+        // The final slot is a status word carried through the same cumsum as
+        // the bin counts, so the existing host read returns both values.
         return;
     }
     int64_t count = 1;
@@ -536,10 +541,30 @@ std::vector<torch::Tensor> radius_graph_pbc_cell_cuda(
         bin_ptr.data_ptr<int64_t>(), 0, sizeof(int64_t), stream));
     bin_ptr.slice(0, 1, batch_size + 2)
         .copy_(torch::cumsum(bin_counts, 0, torch::kInt64));
-    const int64_t total_bins = bin_ptr[batch_size + 1].item<int64_t>();
+    const auto bin_result_cpu =
+        bin_ptr.slice(0, batch_size, batch_size + 2).cpu();
+    const int64_t* bin_result = bin_result_cpu.data_ptr<int64_t>();
+    const int64_t total_bins = bin_result[0];
+    const int64_t input_status = bin_result[1] - total_bins;
     TORCH_CHECK(
-        total_bins >= 0,
+        (input_status & 1) == 0,
         "positions must be finite and periodic representative wraps must fit int32");
+    if ((input_status & 2) != 0) {
+        TORCH_CHECK(
+            total_blocks < (int64_t{1} << 31),
+            "unwrapped representatives require the exhaustive CUDA path with "
+            "fewer than 2^31 thread blocks");
+        return radius_graph_pbc_cuda(
+            positions,
+            ptr,
+            cells,
+            duals,
+            image_shifts,
+            image_ptr,
+            block_ptr,
+            total_blocks,
+            cutoff);
+    }
     if (total_bins > kMaximumDenseBins ||
         (total_nodes > 0 && total_bins > kMaximumBinsPerNode * total_nodes)) {
         TORCH_CHECK(

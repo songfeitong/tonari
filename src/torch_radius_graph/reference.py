@@ -8,6 +8,8 @@ from torch import Tensor
 
 from ._geometry import validate_inputs
 
+_MAXIMUM_IMAGE_SHIFTS = 2**24
+
 
 @torch.no_grad()
 def reference_radius_graph_pbc(
@@ -43,6 +45,7 @@ def reference_radius_graph_pbc(
 
     edge_indices: list[Tensor] = []
     edge_shifts: list[Tensor] = []
+    total_image_count = 0
     for batch_index in range(ptr.numel() - 1):
         start = int(ptr_cpu[batch_index])
         stop = int(ptr_cpu[batch_index + 1])
@@ -54,7 +57,6 @@ def reference_radius_graph_pbc(
             (stop - start, 3), dtype=torch.int64, device=positions.device
         )
         repeats = [0, 0, 0]
-        wrapped_positions = structure_positions
         if active_axes.numel() > 0:
             active_cell = cells[batch_index, active_axes]
             active_duals = torch.linalg.pinv(active_cell)
@@ -69,14 +71,18 @@ def reference_radius_graph_pbc(
                 )
             active_wrap = floored_fractional.to(torch.int64)
             atom_wrap[:, active_axes] = active_wrap
-            wrapped_positions = (
-                structure_positions - active_wrap.to(positions.dtype) @ active_cell
-            )
             for local_axis, axis in enumerate(active_axes.tolist()):
                 reciprocal_norm = float(
                     torch.linalg.vector_norm(active_duals[:, local_axis]).cpu()
                 )
                 repeats[axis] = ceil(cutoff * reciprocal_norm)
+
+        image_count = 1
+        for repeat in repeats:
+            image_count *= 2 * repeat + 1
+        if total_image_count + image_count > _MAXIMUM_IMAGE_SHIFTS:
+            raise ValueError("periodic image count exceeds the 2^24 resource limit")
+        total_image_count += image_count
 
         for shift_values in product(
             range(-repeats[0], repeats[0] + 1),
@@ -86,25 +92,39 @@ def reference_radius_graph_pbc(
             image_shift = torch.tensor(
                 shift_values, dtype=torch.int64, device=positions.device
             )
-            translation = image_shift.to(positions.dtype) @ cells[batch_index]
-            vectors = (
-                wrapped_positions[:, None, :]
-                - wrapped_positions[None, :, :]
-                + translation
+            shifts = (
+                image_shift[None, None, :]
+                - atom_wrap[:, None, :]
+                + atom_wrap[None, :, :]
             )
-            within_cutoff = torch.sum(vectors * vectors, dim=-1) < cutoff_squared
+            vectors = structure_positions[:, None, :] - structure_positions[None, :, :]
+            for axis in range(3):
+                vectors = (
+                    vectors
+                    + shifts[..., axis, None].to(positions.dtype)
+                    * cells[batch_index, axis]
+                )
+            distance_squared = (
+                vectors[..., 0] * vectors[..., 0]
+                + vectors[..., 1] * vectors[..., 1]
+                + vectors[..., 2] * vectors[..., 2]
+            )
+            within_cutoff = distance_squared < cutoff_squared
             if shift_values == (0, 0, 0):
                 within_cutoff.fill_diagonal_(False)
             source, target = torch.nonzero(within_cutoff, as_tuple=True)
             if source.numel() == 0:
                 continue
-            shifts = image_shift[None, :] - atom_wrap[source] + atom_wrap[target]
-            if torch.any((shifts < int32_range.min) | (shifts > int32_range.max)):
+            selected_shifts = shifts[source, target]
+            if torch.any(
+                (selected_shifts < int32_range.min)
+                | (selected_shifts > int32_range.max)
+            ):
                 raise ValueError(
                     "a cell shift required by the cutoff graph exceeds the int32 output range"
                 )
             edge_indices.append(torch.stack((source + start, target + start)))
-            edge_shifts.append(shifts.to(torch.int32))
+            edge_shifts.append(selected_shifts.to(torch.int32))
 
     if not edge_indices:
         return (

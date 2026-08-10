@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pytest
 import torch
 
 from torch_radius_graph import reference_radius_graph_pbc
@@ -103,6 +104,17 @@ def test_empty_periodic_reference_skips_tiny_cell_image_enumeration() -> None:
     )
     assert edge_index.shape == (2, 0)
     assert shifts.shape == (0, 3)
+
+
+def test_reference_rejects_pathological_periodic_image_count() -> None:
+    with pytest.raises(ValueError, match="image count.*resource limit"):
+        reference_radius_graph_pbc(
+            torch.zeros((1, 3), dtype=torch.float64),
+            torch.tensor([0, 1]),
+            (0.001 * torch.eye(3, dtype=torch.float64))[None],
+            torch.ones((1, 3), dtype=torch.bool),
+            1.0,
+        )
 
 
 def test_cell_list_metadata_is_not_limited_by_dense_grid_size() -> None:
