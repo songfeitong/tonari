@@ -12,13 +12,13 @@ Native build 分成始终构建的 `_C_cpu` 与可选的 `_C_cuda`。`_C_cpu` �
 
 搜索时只沿 active periodic axes wrap representatives。若 source 和 target representatives 的整数 wraps 分别为 `q_source` 和 `q_target`，search-image shift `T` 会按 `S = T - q_source + q_target` 返回。这保证使用原始输入 representatives 重建的 vector 完全一致，使 representative translation 只 relabel shifts，而不改变物理 edges。每个 `q` 和最终 `S` 都必须落在 int32 范围内；任一条件不满足都会显式报错。
 
-对于 active-row matrix `A`，metadata 使用 dual `A.T @ inv(A @ A.T)`。它的 column norms 是 reciprocal face-height factors，每个 active image range 为 `ceil(cutoff * norm(dual_axis))`，inactive range 为零。Native implementation 在 float64 中构造最多 `3 x 3` 的 Gram matrix，以 symmetric Jacobi eigenvalues 检查与原 Torch SVD 相同量级的 rank tolerance，再用 partial-pivot Gauss-Jordan 求 inverse。该处理无需补齐或求逆完整 cell，统一支持 finite Geometry、rank-1 wire、rank-2 slab、triclinic cell 和 full periodic cell。
+对于 active-row matrix `A`，metadata 使用其 pseudoinverse transpose 作为 dual；满行秩时与 `A.T @ inv(A @ A.T)` 等价。Dual column norms 是 reciprocal face-height factors，每个 active image range 为 `ceil(cutoff * norm(dual_axis))`，inactive range 为零。Native implementation 直接在 active rows 上执行 long-double one-sided Jacobi SVD，同时完成 rank check 与 pseudoinverse；它刻意不先形成 Gram matrix，因为正规方程会把条件数平方并把合法的近共线 active rows误判为退化。该处理无需补齐或求逆完整 cell，统一支持 finite Geometry、rank-1 wire、rank-2 slab、triclinic cell 和 full periodic cell。
 
 ## 公共 metadata 与 device schedule
 
 Python boundary 先验证 shapes、dtypes、devices 和 cutoff，再把很小的 `ptr/cells/pbc` 复制到 CPU。`_C_cpu.build_periodic_metadata_cpu` 一次返回 duals、拼接的 int32 image shifts 和 image pointers；empty structure 的 image count 直接为零，因此 tiny periodic cell 不会为零 atoms 枚举 images。Cells 的 finite 与 active-rank 验证也在这个负责边界完成。
 
-公共 `SearchMetadata` 只包含 CPU/CUDA 都需要的信息：duals、image shifts、image pointers、atom counts、image counts 与 maximum atoms。CUDA-only block pointers、node pointers、total blocks 和 total nodes 位于独立 `CudaSearchSchedule`。这个拆分消除了旧设计中“搜索 metadata 天生等于 CUDA launch metadata”的偶然耦合。
+公共 `SearchMetadata` 只包含 CPU/CUDA 都需要的信息：duals、image shifts、image pointers、atom counts、image counts 与 maximum atoms。非空 batch 的累计 periodic image shifts 设有 `2^24` resource limit，并在 Cartesian product 分配和枚举前以 checked multiplication 验证；这把极小 cell 的不可控 host OOM 变成确定错误。CUDA-only block pointers、node pointers、total blocks 和 total nodes 位于独立 `CudaSearchSchedule`。这个拆分消除了旧设计中“搜索 metadata 天生等于 CUDA launch metadata”的偶然耦合。
 
 ## Hybrid CPU 搜索
 
@@ -32,7 +32,9 @@ CPU public batch 在一个释放 GIL 的 native C++ call 中按 structure 顺序
 
 ### Cell-list path
 
-大候选空间先以 wrapped target representatives 的 Cartesian AABB 建立边长等于 cutoff 的 dense bins。对每个 source atom 与 periodic image，只把落在 AABB 外扩一个 cutoff 范围内的 image 插入；node 保存 int32 source、image index 和 linked-list next。每个 target 检查自身 bin 周围 `3 x 3 x 3` stencil，并先计算 target point 到 candidate bin AABB 的精确最短距离，若其平方已经不小于 cutoff²，就不遍历该 bin 的 nodes。
+大候选空间先以 wrapped target representatives 的 Cartesian AABB 建立 dense bins。对每个 source atom 与 periodic image，只把落在 AABB 外扩 search cutoff 范围内的 image 插入；node 保存 int32 source、image index 和 linked-list next。每个 target 固定检查自身 bin 周围 `3 x 3 x 3` stencil，再对 nodes 做距离筛选。曾实现的 target-to-bin corner pruning 在严格 cutoff 边界会受 bin-coordinate 舍入影响而破坏双向语义，收益又很小，因此 production 明确不使用它。
+
+Search cutoff 不是物理 tolerance，而是只用于 broad phase 的保守上界。Wrapped search formula 与使用原始 representatives/output shifts 的 public formula 在实数上等价，但对很大的未 wrap coordinates 具有不同浮点消去；实现根据 position、wrap、image shift 与 cell 的最大操作尺度扩大 broad-phase cutoff。明显处于误差带内侧的 candidate 可直接接受 wrapped distance，边界壳必须用 public formula 重算严格 `distance² < cutoff²`；若所需 padding 超过 cutoff，则不冒险使用 cell list，回退 exhaustive。最终 graph 始终由 public formula 定义。
 
 固定 density、cutoff 和邻居数时，该路径接近 `O(N + E)`；但它仍必须写出全部 `E` 条有向 edges。Dense bin grid 限制为少于 `2^26` entries，并要求平均每个 possible source image 不超过 64 bins，否则回退 exhaustive，避免极端稀疏 finite coordinates 分配巨大空 grid。回退可能在人工超稀疏大体系上退化为 `O(N²)`，这是明确记录的安全取舍。
 
@@ -62,6 +64,6 @@ ELFES 当前 `group_atom_image_pairs` 接受一个 NumPy `Geometry`，构造 Ves
 
 ## 正确性策略
 
-`reference_radius_graph_pbc` 是独立 exhaustive PyTorch implementation，不调用 CPU/CUDA native search。44 项 unit tests 比较完整 `(source, target, Sx, Sy, Sz)` key sets，不冻结 edge order；覆盖 finite/partial/full PBC、rank-deficient cell、mixed batch、unwrapped representatives、int32 range rejection、nonfinite rejection、multiple images、periodic self-images、tiny-cell empty structure、exact 与 nextafter cutoff boundary、float32/float64、CPU randomized differential、rotation/reflection covariance、CUDA non-default stream，以及 continuous-geometry backward。
+`reference_radius_graph_pbc` 是独立 exhaustive PyTorch implementation，不调用 CPU/CUDA native search。50 项 unit tests 比较完整 `(source, target, Sx, Sy, Sz)` key sets，不冻结 edge order；覆盖 finite/partial/full PBC、rank-deficient 与近共线但满秩 active rows、mixed batch、普通和约一亿 cell translation 的 unwrapped representatives、int32 range rejection、nonfinite rejection、multiple images、periodic self-images、tiny-cell empty structure、image-count resource limit、exact 与 nextafter cutoff boundary、float32/float64、CPU randomized differential、rotation/reflection covariance、CUDA non-default stream，以及 continuous-geometry backward。
 
 ASE 提供 triclinic partial-PBC external case。正式 CPU benchmark 还对全部 1,536 个 Matbench structures、2,780,158 个 keys 使用 Vesin 0.6.1 做 exact comparison；CUDA 既有正式记录使用同一 corpus，并另外与独立 Equiformer/FairChem-style dense semantics baseline 对比。

@@ -56,10 +56,11 @@ CUDA_VISIBLE_DEVICES=1 \
 PYTHONPATH=. CUDA_VISIBLE_DEVICES='' \
 /home/ftsong/projects/elfes-workspace/elfes/.venv/bin/python \
 benchmarks/run_cpu_benchmark.py --cpu 31 --repeats 11 \
+  --warmup-seconds 2 --require-clean \
   --output runs/reproduced-cpu-benchmark.json
 ```
 
-AMD Ryzen Threadripper PRO 9975WX 上，完整 1,536-structure epoch 为 123.10 ms，Vesin 为 248.71 ms，本实现快 2.02×；64-atom 与 512-atom real-derived single structures 分别快 1.32× 和 1.40×。到 1,728 atoms 后 Vesin 开始领先，32,768 atoms 时本实现为 20.11 ms、Vesin 为 13.10 ms。换言之，CPU backend 已在 ELFES 常见的小/中型体系区间形成真实优势，但当前 single-thread cell list 还没有超过 Vesin 的大体系成熟度。
+AMD Ryzen Threadripper PRO 9975WX 上，完整 1,536-structure epoch 为 143.55 ms，Vesin 为 248.19 ms，本实现快 1.73×；64-atom real structure 为 0.0411 ms，对 Vesin 的 0.0457 ms，快 1.11×。512-atom real-derived supercell 已接近交叉点，本实现慢约 4.6%；到 1,728 atoms 后 Vesin 明显领先，32,768 atoms 时本实现为 24.04 ms、Vesin 为 13.14 ms。换言之，CPU backend 已在真实数据中占多数的常见小体系调用上形成优势，但当前 single-thread cell list 没有超过 Vesin 的大体系成熟度。
 
 CUDA 的既有正式结果保持不变：RTX PRO 6000 Blackwell 上，32-structure DataLoader workload 相对逐 structure Vesin GPU 的最大价值来自 batch-first execution。CPU 与 CUDA 的完整方法、全部 samples、版本和结果分别见[性能文档](docs/benchmark.md)、`benchmarks/results/threadripper-pro-9975wx-cpu.json` 与 `benchmarks/results/rtx-pro-6000-blackwell.json`。
 

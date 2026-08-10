@@ -22,32 +22,33 @@ CPU 正式复现命令为：
 PYTHONPATH=. CUDA_VISIBLE_DEVICES='' \
 /home/ftsong/projects/elfes-workspace/elfes/.venv/bin/python \
 benchmarks/run_cpu_benchmark.py --cpu 31 --repeats 11 \
+  --warmup-seconds 2 --require-clean \
   --output benchmarks/results/threadripper-pro-9975wx-cpu.json
 ```
 
 ## CPU 结果
 
-硬件为 AMD Ryzen Threadripper PRO 9975WX 32-Cores，32 个 physical cores、每 core 一个 hardware thread；正式进程 affinity 为 `[31]`。软件为 Python 3.12.3、PyTorch 2.12.1+cu130、Vesin 0.6.1。Machine-readable record 为 `benchmarks/results/threadripper-pro-9975wx-cpu.json`，implementation/method revision 为 `9e342ef815c596a09e81eca4cbb6ce6d102ba247`。
+硬件为 AMD Ryzen Threadripper PRO 9975WX 32-Cores，32 个 physical cores、每 core 一个 hardware thread；正式进程 affinity 为 `[31]`。软件为 Python 3.12.3、PyTorch 2.12.1+cu130、Vesin 0.6.1。Machine-readable record 为 `benchmarks/results/threadripper-pro-9975wx-cpu.json`，implementation/method revision 为 `bd30fa1e50b785aea9cb9242d3889f171dd201db`。脚本以 `--require-clean` 拒绝 dirty worktree，并在 record 中保存 `repository_worktree_clean=true`、sample cache SHA-256 `3ed2ab145d8ef2751352917c0b48dd8577d6fffd98a6b33a5bc3e1be5ac60545` 和实际 CPU extension SHA-256 `67d5da0dd03b1f8cff80130ac6f6b0b4e59e1b1cf432ea73bbddee3e12911727`，避免结果只绑定 Git HEAD 却没有绑定输入 cache 与被加载 binary。
 
 | Workload | Atoms | Edges | 本实现 CPU | Vesin CPU reused | Vesin / 本实现 |
 | --- | --: | --: | --: | --: | --: |
-| 1,536-structure DataLoader epoch | 75,238 | 2,780,158 | 123.103 ms | 248.713 ms | 2.02× |
-| 真实结构，1×1×1 | 64 | 744 | 0.0348 ms | 0.0457 ms | 1.32× |
-| 派生 supercell，2×2×2 | 512 | 5,952 | 0.1643 ms | 0.2297 ms | 1.40× |
-| 派生 supercell，3×3×3 | 1,728 | 20,088 | 0.8525 ms | 0.7150 ms | 0.84× |
-| 派生 supercell，4×4×4 | 4,096 | 47,616 | 2.4268 ms | 1.6498 ms | 0.68× |
-| 派生 supercell，6×6×6 | 13,824 | 160,704 | 8.4654 ms | 5.4847 ms | 0.65× |
-| 派生 supercell，8×8×8 | 32,768 | 380,928 | 20.1076 ms | 13.0951 ms | 0.65× |
+| 1,536-structure DataLoader epoch | 75,238 | 2,780,158 | 143.554 ms | 248.190 ms | 1.73× |
+| 真实结构，1×1×1 | 64 | 744 | 0.0411 ms | 0.0457 ms | 1.11× |
+| 派生 supercell，2×2×2 | 512 | 5,952 | 0.2391 ms | 0.2286 ms | 0.96× |
+| 派生 supercell，3×3×3 | 1,728 | 20,088 | 1.0997 ms | 0.7141 ms | 0.65× |
+| 派生 supercell，4×4×4 | 4,096 | 47,616 | 2.9385 ms | 1.6488 ms | 0.56× |
+| 派生 supercell，6×6×6 | 13,824 | 160,704 | 10.1501 ms | 5.4798 ms | 0.54× |
+| 派生 supercell，8×8×8 | 32,768 | 380,928 | 24.0409 ms | 13.1367 ms | 0.55× |
 
-完整 epoch 的 11 个本实现 samples 位于 123.035–123.282 ms，Vesin samples 位于 248.576–248.866 ms；精确值以 JSON 为准。固定 core 与 2 秒 warmup 是必要的方法细节：较短 0.5 秒 warmup 时，Threadripper 在累计约 1.2 秒后出现明显 frequency plateau change，若只报告最小值或短序列中位数会把 governor 行为混入算法结论。
+完整 epoch 的 11 个本实现 samples 位于 143.491–143.677 ms，Vesin samples 位于 247.934–248.449 ms；精确值以 JSON 为准。固定 core 与 2 秒 warmup 是必要的方法细节：较短 0.5 秒 warmup 时，Threadripper 在累计约 1.2 秒后出现明显 frequency plateau change，若只报告最小值或短序列中位数会把 governor 行为混入算法结论。
 
-结果的正确解释是“真实样本分布上的小/中型调用吞吐优势”，不是“大体系 cell list 全面超过 Vesin”。样本最多 444 atoms，epoch 中大量 structure 落在 native metadata 和低固定开销占主导的区间，因此总体快 2.02×；64 与 512 atoms 也单独领先。到 1,728 atoms，Vesin 已快约 1.19×；32,768 atoms 时快约 1.54×。Production 可以在 ELFES 常见体系中提供价值，同时保留对大体系继续优化或继续使用 Vesin 的诚实空间。
+结果的正确解释是“真实样本分布上的小体系调用吞吐优势”，不是“大体系 cell list 全面超过 Vesin”。样本最多 444 atoms，epoch 中大量 structure 落在 native metadata 和低固定开销占主导的区间，因此总体快 1.73×；64 atoms 单独领先，512 atoms 已接近交叉。到 1,728 atoms，Vesin 快约 1.54×；32,768 atoms 时快约 1.83×。Production 可以在 ELFES 常见小体系中提供价值，同时保留对大体系继续优化或继续使用 Vesin 的诚实空间。
 
 ## CPU crossover 与低成本优化证据
 
 CPU exhaustive/cell-list crossover 按 `N² × image_count` 判断。开发期在同一 1,536-structure epoch 上扫描 candidate limits 2,048、8,192、16,384、32,768、131,072，对应约 138.8、115.4、115.0、117.0、162.2 ms，因此选择 16,384。该 quick sweep 发生在正式 pinning/warmup protocol 完成前，只用于相对选择，不与正式表格混用；所有阈值的 correctness 相同。
 
-最初 CPU prototype 在 Python/Torch 中逐项构造 duals 和 image shifts，epoch 约 285.7 ms，慢于 Vesin 的约 232.7 ms。将公共 1–3 维 periodic metadata 移入一次 native CPU call 后，短 protocol 降至约 136.7 ms；删除每 structure 都会调用、但只在环境变量开启时才打印的临时 high-resolution profiler 后进一步降至约 117 ms。最终固定-core steady-state 数字为 123.1 ms，不能与不同 protocol 的开发值直接比较，但优化方向在相同阶段的 A/B runs 中成立。
+最初 CPU prototype 在 Python/Torch 中逐项构造 duals 和 image shifts，epoch 约 285.7 ms，慢于 Vesin 的约 232.7 ms。将公共 1–3 维 periodic metadata 移入一次 native CPU call 后，短 protocol 降至约 136.7 ms；删除每 structure 都会调用、但只在环境变量开启时才打印的临时 high-resolution profiler 后进一步降至约 117 ms。边界审查随后要求用直接 SVD 避免 Gram 条件数平方、用原始 representatives 复核 cell-list cutoff shell，并删除有严格边界缺陷的 corner-bin pruning；最终固定-core steady-state 数字为 143.6 ms。不同 protocol 的开发值不能与正式表格直接比较，但同阶段 A/B runs 和最终结果都支持核心优化方向，且正确性优先于保留旧数字。
 
 两项直觉优化被真实 workload 否决。将 bins 从 cutoff 改为 cutoff/2 把 32,768-atom candidate visits 从约 222 万降到 114 万，却因 neighbor-bin loops 增多把 query 从约 19 ms 推到 36 ms；利用反向边对称性只做一半距离判断再成对写出，也从约 18.5 ms 退到 20.9 ms。两者均已撤回，工作记录保留原因。
 
