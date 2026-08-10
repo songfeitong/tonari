@@ -6,7 +6,7 @@
 
 `tonari` 没有发明新的 neighbor-search 数学，而是把 exhaustive search 与 Cartesian cell list 按 CPU、CUDA 和真实调用方式重新组织：小体系不为索引付费，大体系不为 `N²` 付费，CUDA batch 不为逐体系 launch 付费，CPU 不为 Python 小算子付费，NumPy 与 PyTorch 共享同一个 native CPU implementation。
 
-在固定单核的 1,536-structure `matbench_mp_e_form` epoch 中，CPU 为 144.00 ms，公平复用的单线程 Vesin 为 248.46 ms，`tonari` 快 1.73×。在 RTX PRO 6000 Blackwell 的 `batch_size=32` epoch 中，CUDA 为 12.11 ms，逐 structure Vesin GPU 为 494.39 ms；代表性 32-structure batch 相对独立 Equiformer/FairChem-style dense baseline 快约 190×。补充的 QMugs finite-molecule workload 覆盖 8,192 个真实药物样分子、4–100 个重原子：CPU population epoch 快 1.16×，CUDA `batch_size=64` epoch 快约 136×，代表 batch 相对 finite dense baseline 快 2.69×。这些是固定硬件、软件与 workload 的工程证据，不是跨平台保证。
+在固定单核的 1,536-structure `matbench_mp_e_form` epoch 中，CPU 为 144.00 ms，公平复用的单线程 Vesin 为 248.46 ms，`tonari` 快 1.73×。在 RTX PRO 6000 Blackwell 的 `batch_size=32` epoch 中，CUDA 为 12.11 ms，逐 structure Vesin GPU 为 494.39 ms；代表性 32-structure batch 相对独立 Equiformer/FairChem-style dense baseline 快约 190×。补充的 QMugs finite-molecule workload 覆盖 8,192 个真实药物样分子、4–100 个重原子：CPU population epoch 与 Vesin 基本打平，CUDA `batch_size=64` epoch 快约 136×，代表 batch 相对 finite dense baseline 快 2.69×。这些是固定硬件、软件与 workload 的工程证据，不是跨平台保证。
 
 ## 问题本质
 
@@ -125,13 +125,13 @@ QMugs population sample 保留真实大小分布，总原子数中位数为 52�
 
 | Workload | tonari | Vesin | Dense baseline |
 | --- | --: | --: | --: |
-| CPU population epoch，4,096 molecules | 154.674 ms | 179.283 ms | — |
-| CPU size-balanced epoch，4,096 molecules | 278.703 ms | 290.344 ms | — |
+| CPU population epoch，4,096 molecules | 169.700 ms | 169.554 ms | — |
+| CPU size-balanced epoch，4,096 molecules | 303.687 ms | 281.308 ms | — |
 | CUDA population epoch，`batch_size=64` | 6.730 ms | 914.764 ms | skipped |
 | CUDA population representative batch | 0.1128 ms | 14.1688 ms | 0.3031 ms |
 | CUDA 81–100-heavy-atom representative batch | 0.1425 ms | 15.9462 ms | 0.7740 ms |
 
-CPU 的趋势说明优势不是无限延伸：4–65-heavy-atom bins 上 `tonari` 领先 1.04–1.35×，66–100-heavy-atom bins 上 Vesin 约领先 1.07×。CUDA 的主要收益来自一个 native call 处理完整 batch；`batch_size=8/32/64/128` 的 population epoch 时间从 45.471 降到 12.309、6.730、4.049 ms。Finite dense baseline 没有 periodic image padding，因此差距远小于晶体 workload，但随着分子变大仍从 2.43×扩大到 5.43×。
+CPU 的趋势说明优势不是无限延伸：4–30-heavy-atom bins 上 `tonari` 领先 1.03–1.20×，31–40 档基本进入 crossover，之后 Vesin 的成熟 cell list 逐渐领先。自然分布 population epoch 恰好打平，刻意强化大分子的 size-balanced epoch 则由 Vesin 领先约 1.08×。CUDA 的主要收益来自一个 native call 处理完整 batch；`batch_size=8/32/64/128` 的 population epoch 时间从 45.471 降到 12.309、6.730、4.049 ms。Finite dense baseline 没有 periodic image padding，因此差距远小于晶体 workload，但随着分子变大仍从 2.43×扩大到 5.43×。
 
 ## 为什么适合在模型入口动态搜索
 
@@ -141,7 +141,7 @@ CPU 的趋势说明优势不是无限延伸：4–65-heavy-atom bins 上 `tonari
 
 ## 为什么可以信任结果
 
-79 项 tests 覆盖 NumPy、Torch CPU、Torch CUDA、single/batch shapes、ecosystem mixing、长度单位一致缩放、finite/partial/full PBC、rank-deficient 与近共线 active rows、multiple images、periodic self-images、strict boundary、unwrapped representatives、int32/resource errors、autograd、non-default stream、独立 PyTorch reference，以及 QMugs SDF/selection/cache 与 finite dense baseline。ASE 提供 triclinic partial-PBC reference。
+81 项 tests 覆盖 NumPy、Torch CPU、Torch CUDA、single/batch shapes、ecosystem mixing、长度单位一致缩放、finite/partial/full PBC、rank-deficient 与近共线 active rows、multiple images、periodic self-images、strict boundary、unwrapped representatives、int32/resource errors、autograd、non-default stream、独立 PyTorch reference、CPU-only benchmark import，以及 QMugs download resume/SDF/selection/cache 与 finite dense baseline。ASE 提供 triclinic partial-PBC reference。
 
 正式 benchmark 在全部 1,536 个真实晶体、2,780,158 个完整 `(source, target, Sx, Sy, Sz)` keys，以及全部 8,192 个 QMugs 分子、15,144,842 个 keys 上让 CPU/CUDA 与 Vesin 精确一致；Matbench 与 QMugs representative CUDA batches 又分别在 43,842 和 1,322,646 个 keys 上与 dense baseline 精确一致。测试比较 key sets，不冻结 backend output order。
 

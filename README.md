@@ -68,7 +68,7 @@ PYTHONPATH=src CUDA_VISIBLE_DEVICES=1 \
   /home/ftsong/projects/elfes-workspace/elfes/.venv/bin/python -m pytest -q
 ```
 
-系统 CUDA toolkit 为 13.2，而 PyTorch wheel 使用 CUDA 13.0 构建，因此 extension build 会出现 minor-version warning；当前机器上的编译、导入、79 项测试与 benchmark 均成功。正式发布工具链仍应优先让 toolkit minor version 与 PyTorch wheel 对齐。
+系统 CUDA toolkit 为 13.2，而 PyTorch wheel 使用 CUDA 13.0 构建，因此 extension build 会出现 minor-version warning；当前机器上的编译、导入、81 项测试与 benchmark 均成功。正式发布工具链仍应优先让 toolkit minor version 与 PyTorch wheel 对齐。
 
 ## 真实结构证据
 
@@ -82,7 +82,7 @@ CPU 与 CUDA 都在全部 1,536 个结构、2,780,158 个 `(source, target, Sx, 
 
 Finite-molecule workload 来自 QMugs。脚本从 665,911 个 ChEMBL 分子、1,992,984 个 conformers 中为每个分子选择 GFN2-xTB 能量最低的 conformer，再构造互不重叠的 4,096-molecule population sample 与 4,096-molecule size-balanced sample。Population sample 的总原子数中位数为 52；size-balanced sample 按 4–10、11–20、…、81–100 个重原子分为八档，总原子数最高 221。Raw data 与 deterministic cache 位于 ignored `cache/`；仓库提交固定 source/cache SHA、可重复生成脚本、manifest 和 selection CSV。数据作者、论文、许可与 ChEMBL attribution 见 [`benchmarks/data/QMUGS_ATTRIBUTION.md`](benchmarks/data/QMUGS_ATTRIBUTION.md)。
 
-固定单核 CPU 上，QMugs population epoch 中 `tonari` 为 154.67 ms，复用 Vesin 为 179.28 ms，前者快 1.16×；size-balanced epoch 为 278.70 对 290.34 ms。小于等于 65 个重原子的六档中 `tonari` 快 1.04–1.35×，66–100 个重原子的两档中 Vesin 约快 1.07×，与 Matbench supercell crossover 结论一致。
+固定单核和明确 performance policy 的 CPU 上，QMugs population epoch 中 `tonari` 为 169.70 ms，复用 Vesin 为 169.55 ms，二者基本打平；size-balanced epoch 为 303.69 对 281.31 ms。`tonari` 在 4–30 个重原子的三档快 1.03–1.20×，从 31–40 个重原子档开始 Vesin 逐渐占优，真实分子明确给出了 CPU crossover。
 
 同一 Blackwell GPU 上，QMugs population `DataLoader(batch_size=64)` epoch 中 `tonari` 为 6.730 ms，逐结构 Vesin 为 914.764 ms；`batch_size=8/32/64/128` 的 `tonari` 时间分别为 45.471/12.309/6.730/4.049 ms，直接显示了 batch amortization。代表性 64-molecule batch 中，`tonari` 为 0.1128 ms、Vesin 为 14.1688 ms、finite dense PyTorch baseline 为 0.3031 ms。全部 8,192 个分子、15,144,842 个 Vesin keys 以及九个 dense representative batches 的 1,322,646 个 keys 均精确一致。
 

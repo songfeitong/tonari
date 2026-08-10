@@ -103,11 +103,12 @@ CPU 与 CUDA 在全部 8,192 个分子、15,144,842 个完整 `(source, target, 
 正式复现命令为：
 
 ```bash
-PYTHONPATH=src:. CUDA_VISIBLE_DEVICES='' \
-/home/ftsong/projects/elfes-workspace/elfes/.venv/bin/python \
+sudo sh -c 'echo performance > /sys/devices/system/cpu/cpu31/cpufreq/scaling_governor; echo performance > /sys/devices/system/cpu/cpu31/cpufreq/energy_performance_preference'
+PYTHONPATH=src:. CUDA_VISIBLE_DEVICES='' .venv/bin/python \
 benchmarks/run_qmugs_cpu_benchmark.py --cpu 31 --repeats 11 \
   --warmup-seconds 2 --require-clean \
   --output benchmarks/results/threadripper-pro-9975wx-qmugs-cpu.json
+sudo sh -c 'echo powersave > /sys/devices/system/cpu/cpu31/cpufreq/scaling_governor; echo balance_performance > /sys/devices/system/cpu/cpu31/cpufreq/energy_performance_preference'
 
 PYTHONPATH=src:. CUDA_VISIBLE_DEVICES=1 \
 /home/ftsong/projects/elfes-workspace/elfes/.venv/bin/python \
@@ -115,24 +116,24 @@ benchmarks/run_qmugs_cuda_benchmark.py --repeats 11 --require-clean \
   --output benchmarks/results/rtx-pro-6000-blackwell-qmugs.json
 ```
 
-正式 JSON 的 clean implementation revision 均为 `70a09d2fbe737a61677d68b3f5fbf1b685f2610e`。CPU extension SHA-256 为 `f6a193c29c97a2f86faf2e8901d6b97178f3ef26fa52b7288c57a64126764e95`，CUDA extension SHA-256 为 `78c0af2e407fac90a332e227af5f73212d8c23cf0930756fcedaeffa3a4e495c`；本轮没有修改 production native code，因此 hashes 与最终 Matbench records 相同。
+CPU 正式 JSON 的 clean implementation revision 为 `dca205966ab5643451b0f4c7d97cbc7c11123c57`，Python 为 3.12.13，CPU extension SHA-256 为 `a2466a5b24d9a427fcb8076a7eb286d8e3d52db22f12aaac5792b6f812a7d302`。Runner 固定 CPU31 和 Torch/Vesin 单线程，并在 JSON 中记录 `amd-pstate-epp` driver、`performance` governor/EPP、boost 与 frequency bounds；runner 本身不修改系统 policy，上述命令在测量后恢复原始设置。CUDA 正式 JSON 的 clean implementation revision 为 `70a09d2fbe737a61677d68b3f5fbf1b685f2610e`，Python 为 3.12.3，CUDA extension SHA-256 为 `78c0af2e407fac90a332e227af5f73212d8c23cf0930756fcedaeffa3a4e495c`。
 
 ## QMugs CPU 结果
 
 | Workload | Structures | Atoms | Pairs | tonari CPU | Vesin CPU reused | Vesin / tonari |
 | --- | --: | --: | --: | --: | --: | --: |
-| Population epoch | 4,096 | 226,648 | 5,320,936 | 154.674 ms | 179.283 ms | 1.16× |
-| Size-balanced epoch | 4,096 | 339,795 | 9,823,906 | 278.703 ms | 290.344 ms | 1.04× |
-| 4–10 heavy atoms | 512 | 9,096 | 138,600 | 9.707 ms | 13.108 ms | 1.35× |
-| 11–20 heavy atoms | 512 | 15,846 | 297,044 | 12.112 ms | 15.513 ms | 1.28× |
-| 21–30 heavy atoms | 512 | 23,953 | 515,654 | 15.920 ms | 19.167 ms | 1.20× |
-| 31–40 heavy atoms | 512 | 31,782 | 766,106 | 20.752 ms | 23.782 ms | 1.15× |
-| 41–50 heavy atoms | 512 | 41,717 | 1,103,462 | 28.226 ms | 30.957 ms | 1.10× |
-| 51–65 heavy atoms | 512 | 55,512 | 1,658,682 | 42.233 ms | 43.840 ms | 1.04× |
-| 66–80 heavy atoms | 512 | 71,480 | 2,292,736 | 63.678 ms | 59.511 ms | 0.93× |
-| 81–100 heavy atoms | 512 | 90,409 | 3,051,622 | 85.023 ms | 79.269 ms | 0.93× |
+| Population epoch | 4,096 | 226,648 | 5,320,936 | 169.700 ms | 169.554 ms | 1.00× |
+| Size-balanced epoch | 4,096 | 339,795 | 9,823,906 | 303.687 ms | 281.308 ms | 0.93× |
+| 4–10 heavy atoms | 512 | 9,096 | 138,600 | 9.917 ms | 11.868 ms | 1.20× |
+| 11–20 heavy atoms | 512 | 15,846 | 297,044 | 12.862 ms | 14.283 ms | 1.11× |
+| 21–30 heavy atoms | 512 | 23,953 | 515,654 | 17.396 ms | 17.997 ms | 1.03× |
+| 31–40 heavy atoms | 512 | 31,782 | 766,106 | 22.943 ms | 22.666 ms | 0.99× |
+| 41–50 heavy atoms | 512 | 41,717 | 1,103,462 | 31.166 ms | 29.780 ms | 0.96× |
+| 51–65 heavy atoms | 512 | 55,512 | 1,658,682 | 46.267 ms | 42.553 ms | 0.92× |
+| 66–80 heavy atoms | 512 | 71,480 | 2,292,736 | 69.588 ms | 58.151 ms | 0.84× |
+| 81–100 heavy atoms | 512 | 90,409 | 3,051,622 | 92.743 ms | 77.884 ms | 0.84× |
 
-QMugs 把 Matbench scaling 结论放到了更真实的 finite-molecule 分布上：低固定开销让 `tonari` 在常见小中分子上领先，但随着单分子增大，Vesin 的成熟 CPU cell list 在约 66 个重原子后反超。Population headline 保持数据自然分布，因此 1.16× 是比人为均衡尾部更具有工作流代表性的数字；size-balanced 和逐档数字用于揭示 crossover，不应替代 population headline。
+QMugs 把 Matbench scaling 结论放到了更真实的 finite-molecule 分布上：4–30-heavy-atom bins 中 `tonari` 领先 1.03–1.20×，31–40 档基本进入 crossover，之后 Vesin 的成熟 CPU cell list 逐渐领先。Population headline 保持自然大小分布并恰好打平；size-balanced workload 刻意让八个区间等权，因而更突出大分子尾部并由 Vesin 领先约 1.08×。Reviewer 发现首版 CPU JSON 没记录 power policy 且无法复现后，本表在明确记录的 Python 与 CPU frequency policy 下重新测量；旧的 1.16× headline 已撤回。
 
 ## QMugs CUDA 结果
 
