@@ -3,7 +3,7 @@ name = "tonari"
 version = "0.1.0"
 description = "Neighbor search for NumPy and PyTorch on CPU and CUDA"
 readme = "README.md"
-requires-python = "==3.12.*"
+requires-python = ">=3.11,<3.15"
 license = "MIT"
 license-files = ["LICENSE"]
 dependencies = [
@@ -34,6 +34,11 @@ dev = [
   "vesin==0.6.1",
 ]
 
+[[tool.uv.index]]
+name = "pypi"
+url = "https://pypi.org/simple"
+default = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = [
@@ -42,7 +47,7 @@ markers = [
 ]
 
 [tool.ruff]
-target-version = "py312"
+target-version = "py311"
 
 [tool.setuptools.package-data]
 tonari = ["py.typed"]
