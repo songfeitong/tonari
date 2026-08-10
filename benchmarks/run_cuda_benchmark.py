@@ -28,7 +28,7 @@ from benchmarks.matbench_data import (
     repeat_structure,
     select_scaling_structure,
 )
-from tonari import find_neighbors
+from tonari import _C_cuda, find_neighbors
 
 Backend = Callable[[Tensor, Tensor, Tensor, float, Tensor], tuple[Tensor, Tensor]]
 BACKENDS: dict[str, Backend] = {
@@ -54,6 +54,17 @@ def git_revision(path: Path) -> str:
         capture_output=True,
         text=True,
     ).stdout.strip()
+
+
+def git_worktree_is_clean(path: Path) -> bool:
+    status = subprocess.run(
+        ["git", "status", "--porcelain"],
+        cwd=path,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return not status.stdout
 
 
 def canonical_keys(output: tuple[Tensor, Tensor]) -> np.ndarray:
@@ -258,8 +269,13 @@ def main() -> None:
     parser.add_argument("--repeats", type=int, default=7)
     parser.add_argument("--seed", type=int, default=20_260_809)
     parser.add_argument("--dense-candidate-limit", type=int, default=150_000_000)
+    parser.add_argument("--require-clean", action="store_true")
     args = parser.parse_args()
 
+    repository_root = Path(__file__).resolve().parents[1]
+    worktree_clean = git_worktree_is_clean(repository_root)
+    if args.require_clean and not worktree_clean:
+        raise RuntimeError("--require-clean needs a clean Git worktree")
     device = torch.device("cuda")
     dataset = MatbenchStructureDataset(args.cache, args.manifest, torch.float32)
     batches = load_gpu_batches(dataset, args.batch_size, args.seed, device)
@@ -305,7 +321,6 @@ def main() -> None:
             )
         )
 
-    repository_root = Path(__file__).resolve().parents[1]
     manifest = json.loads(args.manifest.read_text())
     report = {
         "environment": {
@@ -316,6 +331,8 @@ def main() -> None:
             "gpu": torch.cuda.get_device_name(),
             "compute_capability": list(torch.cuda.get_device_capability()),
             "repository_revision": git_revision(repository_root),
+            "repository_worktree_clean": worktree_clean,
+            "cuda_extension_sha256": file_sha256(Path(_C_cuda.__file__)),
             "vesin_version": __import__("vesin").__version__,
             "equiformer_v3_reference_revision": git_revision(
                 repository_root.parent / "references" / "repos" / "equiformer_v3"
@@ -333,6 +350,7 @@ def main() -> None:
         },
         "dataset": {
             "manifest_sha256": file_sha256(args.manifest),
+            "cache_sha256": file_sha256(args.cache),
             "sample_size": len(dataset),
             "sampling": manifest["sampling"],
             "source": manifest["dataset"],
