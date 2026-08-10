@@ -75,9 +75,7 @@ def build_search_metadata(
         raise ValueError("ptr must be nondecreasing")
     atom_counts = atom_counts_tensor.tolist()
     if n_atoms_total >= _INT32_INDEX_LIMIT:
-        raise ValueError(
-            "the current implementation supports fewer than 2^31 atoms"
-        )
+        raise ValueError("the current implementation supports fewer than 2^31 atoms")
     try:
         from . import _C_cpu
     except ImportError as error:
@@ -94,9 +92,7 @@ def build_search_metadata(
     except RuntimeError as error:
         raise ValueError(str(error)) from None
     image_boundaries = image_ptr.tolist()
-    image_counts = tuple(
-        stop - start for start, stop in pairwise(image_boundaries)
-    )
+    image_counts = tuple(stop - start for start, stop in pairwise(image_boundaries))
 
     return SearchMetadata(
         duals=duals.to(device=cells.device, dtype=cells.dtype),

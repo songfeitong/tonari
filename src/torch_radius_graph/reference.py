@@ -99,9 +99,7 @@ def reference_radius_graph_pbc(
             if source.numel() == 0:
                 continue
             shifts = image_shift[None, :] - atom_wrap[source] + atom_wrap[target]
-            if torch.any(
-                (shifts < int32_range.min) | (shifts > int32_range.max)
-            ):
+            if torch.any((shifts < int32_range.min) | (shifts > int32_range.max)):
                 raise ValueError(
                     "a cell shift required by the cutoff graph exceeds the int32 output range"
                 )

@@ -6,6 +6,7 @@ import json
 import os
 import platform
 import statistics
+import subprocess
 import time
 from collections.abc import Callable, Sequence
 from pathlib import Path
@@ -24,7 +25,7 @@ from benchmarks.matbench_data import (
     select_scaling_structure,
 )
 from benchmarks.run_benchmark import canonical_keys, file_sha256, git_revision
-from torch_radius_graph import radius_graph_pbc
+from torch_radius_graph import _C_cpu, radius_graph_pbc
 
 Backend = Callable[[StructureBatch, float], tuple[Tensor, Tensor]]
 
@@ -36,6 +37,17 @@ def cpu_model() -> str:
             if line.startswith("model name"):
                 return line.split(":", maxsplit=1)[1].strip()
     return platform.processor()
+
+
+def git_worktree_is_clean(path: Path) -> bool:
+    status = subprocess.run(
+        ["git", "status", "--porcelain"],
+        cwd=path,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return not status.stdout
 
 
 class VesinCpuBackend:
@@ -189,7 +201,9 @@ def benchmark_workload(
     }
 
 
-def scaling_batches(dataset: MatbenchStructureDataset) -> tuple[str, list[StructureBatch]]:
+def scaling_batches(
+    dataset: MatbenchStructureDataset,
+) -> tuple[str, list[StructureBatch]]:
     structure = select_scaling_structure(dataset)
     source_id = str(structure["source_id"])
     batches = [
@@ -213,14 +227,13 @@ def main() -> None:
         type=Path,
         default=Path("benchmarks/data/matbench_mp_e_form_sample.json"),
     )
-    parser.add_argument(
-        "--output", type=Path, default=Path("runs/cpu-benchmark.json")
-    )
+    parser.add_argument("--output", type=Path, default=Path("runs/cpu-benchmark.json"))
     parser.add_argument("--cutoff", type=float, default=5.0)
     parser.add_argument("--repeats", type=int, default=7)
     parser.add_argument("--warmup-seconds", type=float, default=2.0)
     parser.add_argument("--seed", type=int, default=20_260_809)
     parser.add_argument("--cpu", type=int)
+    parser.add_argument("--require-clean", action="store_true")
     args = parser.parse_args()
 
     if args.repeats < 1 or args.warmup_seconds <= 0:
@@ -230,6 +243,10 @@ def main() -> None:
         if args.cpu not in available_cpus:
             raise ValueError(f"CPU {args.cpu} is outside the process affinity")
         os.sched_setaffinity(0, {args.cpu})
+    repository_root = Path(__file__).resolve().parents[1]
+    worktree_clean = git_worktree_is_clean(repository_root)
+    if args.require_clean and not worktree_clean:
+        raise RuntimeError("--require-clean needs a clean Git worktree")
     torch.set_num_threads(1)
     dataset = MatbenchStructureDataset(args.cache, args.manifest, torch.float64)
     batches = load_single_structure_batches(dataset, args.seed)
@@ -255,7 +272,6 @@ def main() -> None:
             )
         )
 
-    repository_root = Path(__file__).resolve().parents[1]
     manifest = json.loads(args.manifest.read_text())
     report = {
         "environment": {
@@ -266,6 +282,8 @@ def main() -> None:
             "cpu_affinity": sorted(os.sched_getaffinity(0)),
             "torch_num_threads": torch.get_num_threads(),
             "repository_revision": git_revision(repository_root),
+            "repository_worktree_clean": worktree_clean,
+            "cpu_extension_sha256": file_sha256(Path(_C_cpu.__file__)),
             "vesin_version": __import__("vesin").__version__,
         },
         "method": {
@@ -283,6 +301,7 @@ def main() -> None:
         },
         "dataset": {
             "manifest_sha256": file_sha256(args.manifest),
+            "cache_sha256": file_sha256(args.cache),
             "sample_size": len(dataset),
             "sampling": manifest["sampling"],
             "source": manifest["dataset"],
