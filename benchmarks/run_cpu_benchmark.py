@@ -6,7 +6,6 @@ import json
 import os
 import platform
 import statistics
-import subprocess
 import time
 from collections.abc import Callable, Sequence
 from pathlib import Path
@@ -17,12 +16,18 @@ from torch import Tensor
 from torch.utils.data import DataLoader, Dataset
 from vesin import NeighborList
 
+from benchmarks.common import (
+    canonical_keys,
+    cpu_frequency_policy,
+    file_sha256,
+    git_revision,
+    git_worktree_is_clean,
+)
 from benchmarks.matbench_data import (
     MatbenchStructureDataset,
     repeat_structure,
     select_scaling_structure,
 )
-from benchmarks.run_cuda_benchmark import canonical_keys, file_sha256, git_revision
 from benchmarks.structure_data import StructureBatch, collate_structures
 from tonari import _C_cpu, find_neighbors
 
@@ -36,17 +41,6 @@ def cpu_model() -> str:
             if line.startswith("model name"):
                 return line.split(":", maxsplit=1)[1].strip()
     return platform.processor()
-
-
-def git_worktree_is_clean(path: Path) -> bool:
-    status = subprocess.run(
-        ["git", "status", "--porcelain"],
-        cwd=path,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    return not status.stdout
 
 
 class VesinCpuBackend:
@@ -277,6 +271,7 @@ def main() -> None:
             "torch": torch.__version__,
             "cpu": cpu_model(),
             "cpu_affinity": sorted(os.sched_getaffinity(0)),
+            "cpu_frequency_policy": cpu_frequency_policy(args.cpu),
             "torch_num_threads": torch.get_num_threads(),
             "repository_revision": git_revision(repository_root),
             "repository_worktree_clean": worktree_clean,

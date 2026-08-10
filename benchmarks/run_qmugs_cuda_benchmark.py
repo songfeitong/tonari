@@ -9,12 +9,10 @@ import numpy as np
 import torch
 
 from benchmarks.baselines import dense_candidate_count
+from benchmarks.common import file_sha256, git_revision, git_worktree_is_clean
 from benchmarks.qmugs_data import QmugsStructureDataset, select_qmugs
 from benchmarks.run_cuda_benchmark import (
     benchmark_workload,
-    file_sha256,
-    git_revision,
-    git_worktree_is_clean,
     load_gpu_batches,
     validate_dense_baseline,
     validate_external_reference,

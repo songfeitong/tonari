@@ -6,7 +6,6 @@ import hashlib
 import json
 import platform
 import statistics
-import subprocess
 import time
 from collections.abc import Callable, Sequence
 from pathlib import Path
@@ -20,6 +19,12 @@ from benchmarks.baselines import (
     dense_candidate_count,
     torch_dense_batch,
     vesin_gpu_batch,
+)
+from benchmarks.common import (
+    canonical_keys,
+    file_sha256,
+    git_revision,
+    git_worktree_is_clean,
 )
 from benchmarks.matbench_data import (
     MatbenchStructureDataset,
@@ -35,44 +40,6 @@ BACKENDS: dict[str, Backend] = {
     "vesin_gpu_per_structure": vesin_gpu_batch,
     "torch_dense_batch": torch_dense_batch,
 }
-
-
-def file_sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def git_revision(path: Path) -> str:
-    return subprocess.run(
-        ["git", "rev-parse", "HEAD"],
-        cwd=path,
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
-
-
-def git_worktree_is_clean(path: Path) -> bool:
-    status = subprocess.run(
-        ["git", "status", "--porcelain"],
-        cwd=path,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    return not status.stdout
-
-
-def canonical_keys(output: tuple[Tensor, Tensor]) -> np.ndarray:
-    pair_indices, shifts = output
-    keys = torch.cat((pair_indices.T, shifts.to(torch.int64)), dim=1).cpu().numpy()
-    if len(keys) == 0:
-        return keys
-    order = np.lexsort(tuple(keys[:, column] for column in range(4, -1, -1)))
-    return keys[order]
 
 
 def call_backend(

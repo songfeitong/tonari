@@ -8,15 +8,19 @@ from pathlib import Path
 
 import torch
 
+from benchmarks.common import (
+    cpu_frequency_policy,
+    file_sha256,
+    git_revision,
+    git_worktree_is_clean,
+)
 from benchmarks.qmugs_data import QmugsStructureDataset, select_qmugs
 from benchmarks.run_cpu_benchmark import (
     benchmark_workload,
     cpu_model,
-    git_worktree_is_clean,
     load_single_structure_batches,
     validate_external_reference,
 )
-from benchmarks.run_cuda_benchmark import file_sha256, git_revision
 from benchmarks.structure_data import StructureBatch
 from tonari import _C_cpu
 
@@ -105,6 +109,7 @@ def main() -> None:
             "torch": torch.__version__,
             "cpu": cpu_model(),
             "cpu_affinity": sorted(os.sched_getaffinity(0)),
+            "cpu_frequency_policy": cpu_frequency_policy(args.cpu),
             "torch_num_threads": torch.get_num_threads(),
             "repository_revision": git_revision(repository_root),
             "repository_worktree_clean": worktree_clean,
