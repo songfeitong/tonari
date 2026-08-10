@@ -52,6 +52,14 @@ CPU 按 structure 独立选择算法。常见小体系直接进入紧凑的 nati
 
 CPU backend 本身保持单线程。并行度由调用方在 DataLoader workers、进程池、DDP 或更高层 workflow 中决定，避免 backend threads 与外层并行相互叠加。
 
+### CPU 大体系的设计取舍
+
+Cell list 不只有一种周期表示。当前实现把可能进入搜索区域的 periodic source images 放入 Cartesian bins；另一种常见设计是每个物理原子只入表一次，在查询越过周期边界的 neighboring bins 时再生成 cell shift。Vesin 是后一种设计的成熟例子；其 CPU implementation 减少了 image preparation，bin 内访问更连续，并会在重复调用间复用 output capacity。
+
+真实 scaling 确认了这种差异：32,768 原子时当前实现约 24.1 ms，Vesin 约 13.1 ms。但两者都已经使用接近 `O(N + P)` 的 cell list；当前路径没有退化为穷举，绝对时间仍很小。更常见的 Matbench 小结构分布中本项目 CPU 更快，QMugs 自然分子分布上二者基本打平，因此大型单体系的差距目前不是主要 workload 的瓶颈。
+
+项目现阶段选择保留当前设计。它已经在 CPU/CUDA 上形成相近的 periodic-image 数据流和充分验证的公共 shift 语义，继续重构会增加 partial PBC、multiple images、unwrapped representatives 与 half/self policy 的维护成本，却没有对应的真实使用需求。CPU 与 CUDA 并不被要求永远采用相同算法；如果未来 profile 显示数千原子以上的 CPU-only search 成为端到端瓶颈，再从本项目的接口与数据布局出发重新设计这一层。
+
 ## CUDA 路径
 
 CUDA 把整个 heterogeneous batch 作为一次执行单位。`offsets` 把拼接的 positions 划分为独立 structures，kernels 根据这些边界找到每个任务所属的 cell 与 PBC；任何 pair 都不会跨结构产生。

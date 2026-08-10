@@ -22,6 +22,8 @@ CPU backend 没有包在 CUDA 路径外层，而是从公共 periodic geometry �
 
 CPU 与 CUDA 共享 active-cell geometry、image range 和 pair identity，但保留各自的数据布局和调度。独立审查推动 canonical displacement predicate、empty-structure behavior、rank handling、unwrapped representatives 和资源边界在两端形成一致语义。
 
+后续调查比较了大型周期体系的不同 cell-list 表示。每个原子只入表一次、查询时处理 periodic bin wrap 的设计在大型 CPU search 上具有更低常数，但当前实现已在常见小结构 workload 上表现良好，并与 CUDA 保持相近的数据流。考虑到真实需求与重构风险，项目选择暂不改变 CPU periodic-image strategy，等实际 CPU-only profile 出现明确瓶颈后再重新评估。
+
 ## 2026-08-10：统一公共 API 与 NumPy/PyTorch 语义
 
 公共入口收敛为 `find_neighbors(positions, cells, pbc, cutoff, offsets=None)`，返回 `pair_indices` 与施加在 source 上的 `cell_shifts`。单结构与 batch、finite 与 periodic geometry 使用同一模型，旧接口不保留 alias。
