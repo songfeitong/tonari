@@ -1,8 +1,8 @@
 # tonari
 
-`tonari` 是一个同时面向 NumPy 与 PyTorch、CPU 与 CUDA 的周期性 neighbor-search 实验项目。它用一个公共函数返回 strict cutoff 内全部有向 atom-image pairs；periodicity 只由 `pbc` 表达，核心接口不依赖 GNN/PyG 术语。Production implementation 不依赖 Vesin；Vesin 只用于外部 correctness reference 与公平性能 baseline。
+`tonari` 是一个同时面向 NumPy 与 PyTorch、CPU 与 CUDA 的通用 neighbor-search 实验项目。它用一个公共函数返回 strict cutoff 内全部有向 atom-image pairs；finite 与 periodic geometry 使用同一接口，periodicity 只由 `pbc` 表达，核心接口不依赖 GNN/PyG 术语。Production implementation 不依赖 Vesin；Vesin 只用于外部 correctness reference 与公平性能 baseline。
 
-第一次阅读建议从[算法总览](docs/algorithm-overview.md)开始；精确契约与内部结构见[设计文档](docs/design.md)，真实材料测量见[性能方法与结果](docs/benchmark.md)，开发取舍见[工作记录](notes/work-log.md)，独立审查见[终审记录](docs/review.md)。
+第一次阅读建议从[算法总览](docs/algorithm-overview.md)开始；精确契约与内部结构见[设计文档](docs/design.md)，真实晶体与分子测量见[性能方法与结果](docs/benchmark.md)，开发取舍见[工作记录](notes/work-log.md)，独立审查见[终审记录](docs/review.md)。
 
 ## 公共 API
 
@@ -68,9 +68,9 @@ PYTHONPATH=src CUDA_VISIBLE_DEVICES=1 \
   /home/ftsong/projects/elfes-workspace/elfes/.venv/bin/python -m pytest -q
 ```
 
-系统 CUDA toolkit 为 13.2，而 PyTorch wheel 使用 CUDA 13.0 构建，因此 extension build 会出现 minor-version warning；当前机器上的编译、导入、74 项测试与 benchmark 均成功。正式发布工具链仍应优先让 toolkit minor version 与 PyTorch wheel 对齐。
+系统 CUDA toolkit 为 13.2，而 PyTorch wheel 使用 CUDA 13.0 构建，因此 extension build 会出现 minor-version warning；当前机器上的编译、导入、79 项测试与 benchmark 均成功。正式发布工具链仍应优先让 toolkit minor version 与 PyTorch wheel 对齐。
 
-## 真实材料证据
+## 真实结构证据
 
 主要 workload 是从 `matbench_mp_e_form` 确定性抽取的 1,536 个真实晶体，覆盖 1–444 atoms、1,343 个不同化学式及多样 cell shapes。原始 Parquet 与派生 cache 位于 Git ignored `cache/`；仓库只保存固定数据 revision、SHA-256、可重复脚本和 sample manifest。没有下载 OMat24，也没有保留本任务不需要的 energy/force labels。
 
@@ -79,6 +79,12 @@ PYTHONPATH=src CUDA_VISIBLE_DEVICES=1 \
 在 NVIDIA RTX PRO 6000 Blackwell 上，`DataLoader(batch_size=32)` 的完整 epoch 中，`tonari` 为 12.11 ms，逐 structure Vesin GPU 为 494.39 ms。代表性 32-structure batch 中，`tonari` 为 0.225 ms、Vesin 为 9.29 ms、独立 Equiformer/FairChem-style dense baseline 为 42.78 ms，三者得到完全相同的 43,842 个 pair keys。32,768-atom real-derived supercell 中，`tonari` 为 0.254 ms、Vesin 为 1.491 ms。
 
 CPU 与 CUDA 都在全部 1,536 个结构、2,780,158 个 `(source, target, Sx, Sy, Sz)` keys 上与 Vesin 精确一致。正式 JSON 记录 clean implementation revision、data/cache/extension SHA 与全部 timing samples；Nsight summary 与 CSV 保存 kernel、memory、API 和 NVTX 证据。
+
+Finite-molecule workload 来自 QMugs。脚本从 665,911 个 ChEMBL 分子、1,992,984 个 conformers 中为每个分子选择 GFN2-xTB 能量最低的 conformer，再构造互不重叠的 4,096-molecule population sample 与 4,096-molecule size-balanced sample。Population sample 的总原子数中位数为 52；size-balanced sample 按 4–10、11–20、…、81–100 个重原子分为八档，总原子数最高 221。Raw data 位于 ignored cache；仓库提交固定 source SHA、deterministic cache、manifest 和 selection CSV。
+
+固定单核 CPU 上，QMugs population epoch 中 `tonari` 为 154.67 ms，复用 Vesin 为 179.28 ms，前者快 1.16×；size-balanced epoch 为 278.70 对 290.34 ms。小于等于 65 个重原子的六档中 `tonari` 快 1.04–1.35×，66–100 个重原子的两档中 Vesin 约快 1.07×，与 Matbench supercell crossover 结论一致。
+
+同一 Blackwell GPU 上，QMugs population `DataLoader(batch_size=64)` epoch 中 `tonari` 为 6.730 ms，逐结构 Vesin 为 914.764 ms；`batch_size=8/32/64/128` 的 `tonari` 时间分别为 45.471/12.309/6.730/4.049 ms，直接显示了 batch amortization。代表性 64-molecule batch 中，`tonari` 为 0.1128 ms、Vesin 为 14.1688 ms、finite dense PyTorch baseline 为 0.3031 ms。全部 8,192 个分子、15,144,842 个 Vesin keys 以及九个 dense representative batches 的 1,322,646 个 keys 均精确一致。
 
 ## 支持范围与边界
 

@@ -57,3 +57,17 @@ CUDA 最终正式 run 使用 `DataLoader(batch_size=32)`、float32、整 batch H
 最终 Nsight profile 在 32,768 atoms 上测得全部 CUDA kernels 约 0.1356 ms/call，CUDA memory operations 约 0.0061 ms/call，NVTX one-shot range 约 0.3031 ms/call。Raw trace 保持 ignored；仓库提交复现脚本、summary 和完整 CSV aggregates。ELFES 只做只读需求核对：其当前 two-center 用法可由未来 adapter 在 scalar broad cutoff 后做 half-list canonicalization、species filtering 与 onsite addition，本轮没有修改或接入 ELFES。
 
 最终独立 reviewer 在 clean HEAD `715fcf2ffdb1ef00489d241212a6bb00c5b38184` 给出 PASS，无 confirmed blocker。除完整 test/Matbench/performance/provenance 复核外，它又执行 100 组 NumPy/Torch/CPU/CUDA/reference mixed-batch differential、30 组大 unwrapped differential 和 200 组 float32 cutoff crossover，并确认旧 package、native symbol、tracked file、ignored build object、egg-info 与 pycache 均已从项目 workspace 清除。
+
+## 2026-08-10：QMugs finite-molecule benchmark
+
+Matbench 只能说明周期晶体 workflow，且其中大量结构很小。补充数据最终选择 QMugs，而不是 QM9：官方数据包含 665,911 个 ChEMBL 分子、1,992,984 个 conformers，平均约 30.6 个重原子且最大 100 个重原子，更接近常见药物样模型输入。只下载 2.03 GB summary 和 7.18 GB structures archive，不下载 wavefunctions、vibrational spectra 或任何额外 labels；raw data 全部保留在 Git-ignored cache。
+
+抽样没有把同一分子的三个 conformers 当三份独立数据。脚本先为每个 ChEMBL ID 选择 GFN2-xTB 总能量最低的 conformer，再用稳定 hash 取 4,096 个自然分布 population samples，并在 population 外按八个重原子区间各取 512 个组成 4,096 个 size-balanced samples。Population 的总原子数中位数为 52，balanced 为 71，最大分子 221 atoms。Source files、selection table 和 cache 均固定 SHA；NPZ writer 使用固定 ZIP metadata，避免 `np.savez_compressed` 的时间戳让同一抽样产生不同文件 hash。
+
+Benchmark data layer 从 Matbench 文件中拆出真正共享的 `StructureBatch` 与 collate；QMugs dataset 只把 zero cell 与 false PBC 补到同一 batch contract。Dense baseline 同时支持 uniformly finite 与 full-PBC data。Vesin GPU baseline 改为跨 calls 复用同一个 `NeighborList`，避免把 object construction 算成竞争对手开销。原 Matbench CPU/CUDA smoke runs、79 项 CUDA-visible tests 和 Ruff 均通过，production native code与 extension binaries没有变化。
+
+Clean revision `70a09d2fbe737a61677d68b3f5fbf1b685f2610e` 上，CPU population epoch 为 154.674 ms，对 Vesin 179.283 ms，领先 1.16×；size-balanced epoch 为 278.703 对 290.344 ms。逐档结果显示 `tonari` 在 4–65-heavy-atom bins 领先，66–100-heavy-atom bins 则由 Vesin 约领先 1.07×，真实确认了 CPU crossover。
+
+CUDA population epoch 在 batch size 8/32/64/128 下分别为 45.471/12.309/6.730/4.049 ms；bs=64 的逐结构 Vesin 为 914.764 ms。Population representative batch 中 `tonari` 0.1128 ms、Vesin 14.1688 ms、finite dense baseline 0.3031 ms；最大的 81–100-heavy-atom representative batch 为 0.1425/15.9462/0.7740 ms。与周期晶体相比，finite dense 没有 image padding，所以差距合理地缩小；而相对 Vesin 的主要优势仍来自整个 batch 一次进入 native pipeline。
+
+CPU/CUDA 在全部 8,192 个分子、15,144,842 个 keys 上与 Vesin exact match；九个 CUDA representative batches 的 1,322,646 个 keys 又与 dense baseline exact match。本轮不复制分子制造大单体系，改用真实 population 的 batch-size scaling 检查 GPU amortization。

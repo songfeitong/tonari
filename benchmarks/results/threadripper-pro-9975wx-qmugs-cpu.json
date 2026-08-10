@@ -1,0 +1,708 @@
+{
+  "dataset": {
+    "cache_sha256": "fa451cef3debb93a26ea42bc7740489e98124a56684aec755073606462b09c75",
+    "manifest_sha256": "a764a23b001873f5b7f879212fcc324acfa57fa3d9918abdbba295d0664b462f",
+    "sample_size": 8192,
+    "sampling": {
+      "conformer_selection": "minimum GFN2_TOTAL_ENERGY, then conformer ID",
+      "heavy_atom_boundaries": [
+        10,
+        20,
+        30,
+        40,
+        50,
+        65,
+        80
+      ],
+      "population_method": "globally smallest stable hash scores",
+      "population_size": 4096,
+      "samples_are_disjoint": true,
+      "score": "sha256(f'{seed}:{chembl_id}')",
+      "seed": 20260810,
+      "size_balanced_method": "smallest stable hash scores in each heavy-atom bin, excluding population sample",
+      "size_balanced_per_bin": 512,
+      "size_balanced_size": 4096
+    },
+    "source": {
+      "archive_changelog_date": "2021-07-30",
+      "chembl_source": "ChEMBL 27",
+      "conformer_count_observed": 1992984,
+      "doi": "https://doi.org/10.3929/ethz-b-000482129",
+      "license": "CC BY-SA 3.0",
+      "molecule_count_observed": 665911,
+      "name": "QMugs",
+      "page": "https://www.research-collection.ethz.ch/handle/20.500.11850/482129",
+      "release": "original QMugs data collection",
+      "structures_bytes": 7180016346,
+      "structures_sha256": "264102bf1c036d077a72ab558168be4c5c6054e6aeecb8a7768be36df87ad46b",
+      "structures_url": "https://libdrive.ethz.ch/index.php/s/X5vOBNSITAG5vzM/download?path=%2F&files=structures.tar.gz",
+      "summary_bytes": 2026848085,
+      "summary_sha256": "b6d7b54fa4d290ceace81c644f20b2ddfd68c21ecb1f4b5c00e8913cd608bcfd",
+      "summary_url": "https://libdrive.ethz.ch/index.php/s/X5vOBNSITAG5vzM/download?path=%2F&files=summary.csv"
+    },
+    "structures_file_sha256": "80e6d6ee9e8f80c63ca688da5d7c3d2577cb377c54885203d9f296f9ee6f5fdc"
+  },
+  "environment": {
+    "cpu": "AMD Ryzen Threadripper PRO 9975WX 32-Cores",
+    "cpu_affinity": [
+      31
+    ],
+    "cpu_extension_sha256": "f6a193c29c97a2f86faf2e8901d6b97178f3ef26fa52b7288c57a64126764e95",
+    "platform": "Linux-7.0.0-28-generic-x86_64-with-glibc2.39",
+    "python": "3.12.3",
+    "repository_revision": "70a09d2fbe737a61677d68b3f5fbf1b685f2610e",
+    "repository_worktree_clean": true,
+    "torch": "2.12.1+cu130",
+    "torch_num_threads": 1,
+    "vesin_version": "0.6.1"
+  },
+  "method": {
+    "batch_size": 1,
+    "cutoff_angstrom": 5.0,
+    "data_loading_timed": false,
+    "dataloader": "map-style, deterministic shuffle, num_workers=0",
+    "dtype": "float64",
+    "exact_keys_compared": "(source, target, Sx, Sy, Sz)",
+    "output_order_compared": false,
+    "statistic": "median wall time; minimum and maximum retained",
+    "vesin": "one reused NeighborList with full_list=True, sorted=False, n_threads=1",
+    "warmup_seconds_per_backend_and_workload": 2.0
+  },
+  "validation": {
+    "exact_key_match": true,
+    "pairs": 15144842,
+    "structures": 8192
+  },
+  "workloads": [
+    {
+      "backends": {
+        "tonari_cpu": {
+          "atoms": 226648,
+          "atoms_per_second": 1465324.7072260813,
+          "backend": "tonari_cpu",
+          "maximum_ms": 154.82258307747543,
+          "median_ms": 154.67424993403256,
+          "minimum_ms": 154.58929119631648,
+          "pairs": 5320936,
+          "pairs_per_second": 34400916.7800674,
+          "repeats": 11,
+          "samples_ms": [
+            154.7638550400734,
+            154.78571807034314,
+            154.75123492069542,
+            154.59708194248378,
+            154.764766106382,
+            154.82258307747543,
+            154.58929119631648,
+            154.60739890113473,
+            154.6592260710895,
+            154.65117408894002,
+            154.67424993403256
+          ],
+          "structures": 4096,
+          "structures_per_second": 26481.460241422952,
+          "warmup_traversals": 13
+        },
+        "vesin_cpu_reused": {
+          "atoms": 226648,
+          "atoms_per_second": 1264191.5818976585,
+          "backend": "vesin_cpu_reused",
+          "maximum_ms": 179.43980102427304,
+          "median_ms": 179.2829530313611,
+          "minimum_ms": 179.0912840515375,
+          "pairs": 5320936,
+          "pairs_per_second": 29678984.58850817,
+          "repeats": 11,
+          "samples_ms": [
+            179.43980102427304,
+            179.15097484365106,
+            179.12032804451883,
+            179.29626302793622,
+            179.37447200529277,
+            179.24818117171526,
+            179.3425229843706,
+            179.2369440663606,
+            179.2829530313611,
+            179.0912840515375,
+            179.3226939626038
+          ],
+          "structures": 4096,
+          "structures_per_second": 22846.56700898666,
+          "warmup_traversals": 12
+        }
+      },
+      "name": "qmugs_population_single_structure_epoch",
+      "source_id_count": 4096,
+      "source_id_sha256": "7f033ec3a1a0bf46ae16d1c5b31290c4edc77c3e7a46d4648e60b7ccd131a71d",
+      "source_ids": null,
+      "vesin_over_tonari": 1.1591001935217011
+    },
+    {
+      "backends": {
+        "tonari_cpu": {
+          "atoms": 339795,
+          "atoms_per_second": 1219201.2594972476,
+          "backend": "tonari_cpu",
+          "maximum_ms": 278.9991390891373,
+          "median_ms": 278.70296011678874,
+          "minimum_ms": 278.5745959263295,
+          "pairs": 9823906,
+          "pairs_per_second": 35248660.42285074,
+          "repeats": 11,
+          "samples_ms": [
+            278.9991390891373,
+            278.88982300646603,
+            278.7122440058738,
+            278.5745959263295,
+            278.6697808187455,
+            278.59237301163375,
+            278.6140558309853,
+            278.70296011678874,
+            278.78142800182104,
+            278.83855486288667,
+            278.6579818930477
+          ],
+          "structures": 4096,
+          "structures_per_second": 14696.650506631135,
+          "warmup_traversals": 8
+        },
+        "vesin_cpu_reused": {
+          "atoms": 339795,
+          "atoms_per_second": 1170318.8822823358,
+          "backend": "vesin_cpu_reused",
+          "maximum_ms": 290.7332119066268,
+          "median_ms": 290.3439439833164,
+          "minimum_ms": 290.01693008467555,
+          "pairs": 9823906,
+          "pairs_per_second": 33835408.671601206,
+          "repeats": 11,
+          "samples_ms": [
+            290.01693008467555,
+            290.1789948809892,
+            290.16614495776594,
+            290.7332119066268,
+            290.50317499786615,
+            290.0735349394381,
+            290.58371600694954,
+            290.28580500744283,
+            290.523145115003,
+            290.3439439833164,
+            290.5384979676455
+          ],
+          "structures": 4096,
+          "structures_per_second": 14107.406353326116,
+          "warmup_traversals": 7
+        }
+      },
+      "name": "qmugs_size_balanced_single_structure_epoch",
+      "source_id_count": 4096,
+      "source_id_sha256": "bd729f78f85661d0081d1ffcf76ae9fe73fa6d6fc2a6a49256d1934363a70e1d",
+      "source_ids": null,
+      "vesin_over_tonari": 1.0417684256444553
+    },
+    {
+      "backends": {
+        "tonari_cpu": {
+          "atoms": 9096,
+          "atoms_per_second": 937015.761926611,
+          "backend": "tonari_cpu",
+          "maximum_ms": 9.717850014567375,
+          "median_ms": 9.707414079457521,
+          "minimum_ms": 9.697229135781527,
+          "pairs": 138600,
+          "pairs_per_second": 14277746.76814295,
+          "repeats": 11,
+          "samples_ms": [
+            9.697229135781527,
+            9.705732110887766,
+            9.71058988943696,
+            9.707653895020485,
+            9.707414079457521,
+            9.70613188110292,
+            9.707974968478084,
+            9.706011973321438,
+            9.717850014567375,
+            9.706102078780532,
+            9.71224089153111
+          ],
+          "structures": 512,
+          "structures_per_second": 52743.19152445303,
+          "warmup_traversals": 207
+        },
+        "vesin_cpu_reused": {
+          "atoms": 9096,
+          "atoms_per_second": 693931.0249694062,
+          "backend": "vesin_cpu_reused",
+          "maximum_ms": 13.147711055353284,
+          "median_ms": 13.107931008562446,
+          "minimum_ms": 13.06863222271204,
+          "pairs": 138600,
+          "pairs_per_second": 10573751.10606417,
+          "repeats": 11,
+          "samples_ms": [
+            13.114721979945898,
+            13.099960051476955,
+            13.06863222271204,
+            13.101972173899412,
+            13.115642126649618,
+            13.134671142324805,
+            13.073618989437819,
+            13.147711055353284,
+            13.107931008562446,
+            13.100379845127463,
+            13.13550304621458
+          ],
+          "structures": 512,
+          "structures_per_second": 39060.321546211075,
+          "warmup_traversals": 154
+        }
+      },
+      "name": "qmugs_size_balanced_bin_0",
+      "source_id_count": 512,
+      "source_id_sha256": "9ee81f497d6456931e377a8c47713ffe3d07bbf84c7fb669b06dd5cca10e2a23",
+      "source_ids": null,
+      "vesin_over_tonari": 1.3503010071756365
+    },
+    {
+      "backends": {
+        "tonari_cpu": {
+          "atoms": 15846,
+          "atoms_per_second": 1308342.666337502,
+          "backend": "tonari_cpu",
+          "maximum_ms": 12.145987944677472,
+          "median_ms": 12.111505959182978,
+          "minimum_ms": 12.097125174477696,
+          "pairs": 297044,
+          "pairs_per_second": 24525769.21491587,
+          "repeats": 11,
+          "samples_ms": [
+            12.117855018004775,
+            12.110133888199925,
+            12.113358825445175,
+            12.10986403748393,
+            12.100528925657272,
+            12.111505959182978,
+            12.118215905502439,
+            12.11767503991723,
+            12.145987944677472,
+            12.097125174477696,
+            12.100317981094122
+          ],
+          "structures": 512,
+          "structures_per_second": 42273.85114002278,
+          "warmup_traversals": 166
+        },
+        "vesin_cpu_reused": {
+          "atoms": 15846,
+          "atoms_per_second": 1021472.1325527558,
+          "backend": "vesin_cpu_reused",
+          "maximum_ms": 15.532103134319186,
+          "median_ms": 15.512904850766063,
+          "minimum_ms": 15.465012053027749,
+          "pairs": 297044,
+          "pairs_per_second": 19148186.806891378,
+          "repeats": 11,
+          "samples_ms": [
+            15.517460880801082,
+            15.507445903494954,
+            15.510269906371832,
+            15.512904850766063,
+            15.49758086912334,
+            15.468346886336803,
+            15.515527920797467,
+            15.514786820858717,
+            15.513504855334759,
+            15.465012053027749,
+            15.532103134319186
+          ],
+          "structures": 512,
+          "structures_per_second": 33004.77924189139,
+          "warmup_traversals": 130
+        }
+      },
+      "name": "qmugs_size_balanced_bin_1",
+      "source_id_count": 512,
+      "source_id_sha256": "a6ed5b0c28d00e337c796faeae40b912d3affc19811007c313c7ccb677095718",
+      "source_ids": null,
+      "vesin_over_tonari": 1.2808402937707457
+    },
+    {
+      "backends": {
+        "tonari_cpu": {
+          "atoms": 23953,
+          "atoms_per_second": 1504569.459701721,
+          "backend": "tonari_cpu",
+          "maximum_ms": 15.974191017448902,
+          "median_ms": 15.9201689530164,
+          "minimum_ms": 15.912638045847416,
+          "pairs": 515654,
+          "pairs_per_second": 32389982.890369944,
+          "repeats": 11,
+          "samples_ms": [
+            15.918367076665163,
+            15.912638045847416,
+            15.916654141619802,
+            15.922703081741929,
+            15.920160105451941,
+            15.928440960124135,
+            15.9201689530164,
+            15.974191017448902,
+            15.932308044284582,
+            15.923414146527648,
+            15.916604083031416
+          ],
+          "structures": 512,
+          "structures_per_second": 32160.46271311657,
+          "warmup_traversals": 127
+        },
+        "vesin_cpu_reused": {
+          "atoms": 23953,
+          "atoms_per_second": 1249726.544108453,
+          "backend": "vesin_cpu_reused",
+          "maximum_ms": 19.2269051913172,
+          "median_ms": 19.166592974215746,
+          "minimum_ms": 19.123048055917025,
+          "pairs": 515654,
+          "pairs_per_second": 26903790.396848004,
+          "repeats": 11,
+          "samples_ms": [
+            19.18365014716983,
+            19.127334002405405,
+            19.166592974215746,
+            19.131290027871728,
+            19.170058192685246,
+            19.179884111508727,
+            19.2269051913172,
+            19.123048055917025,
+            19.146142061799765,
+            19.16295802220702,
+            19.170629093423486
+          ],
+          "structures": 512,
+          "structures_per_second": 26713.146185593785,
+          "warmup_traversals": 105
+        }
+      },
+      "name": "qmugs_size_balanced_bin_2",
+      "source_id_count": 512,
+      "source_id_sha256": "ebab031a7c43e4f6a852f307c422b46a46144e9044ec8f1d973562d33b68a498",
+      "source_ids": null,
+      "vesin_over_tonari": 1.2039189427436474
+    },
+    {
+      "backends": {
+        "tonari_cpu": {
+          "atoms": 31782,
+          "atoms_per_second": 1531543.960006049,
+          "backend": "tonari_cpu",
+          "maximum_ms": 20.783415995538235,
+          "median_ms": 20.751608069986105,
+          "minimum_ms": 20.74238401837647,
+          "pairs": 766106,
+          "pairs_per_second": 36917910.04418835,
+          "repeats": 11,
+          "samples_ms": [
+            20.74238401837647,
+            20.747972885146737,
+            20.76473692432046,
+            20.75018617324531,
+            20.770746981725097,
+            20.771707873791456,
+            20.751608069986105,
+            20.74251393787563,
+            20.7482420373708,
+            20.769864786416292,
+            20.783415995538235
+          ],
+          "structures": 512,
+          "structures_per_second": 24672.786719624222,
+          "warmup_traversals": 97
+        },
+        "vesin_cpu_reused": {
+          "atoms": 31782,
+          "atoms_per_second": 1336412.7464344685,
+          "backend": "vesin_cpu_reused",
+          "maximum_ms": 23.858121130615473,
+          "median_ms": 23.781575029715896,
+          "minimum_ms": 23.736726958304644,
+          "pairs": 766106,
+          "pairs_per_second": 32214266.6767329,
+          "repeats": 11,
+          "samples_ms": [
+            23.858121130615473,
+            23.817267967388034,
+            23.738701129332185,
+            23.781575029715896,
+            23.774673929437995,
+            23.796597961336374,
+            23.736726958304644,
+            23.79764919169247,
+            23.82101397961378,
+            23.77991215325892,
+            23.7646100576967
+          ],
+          "structures": 512,
+          "structures_per_second": 21529.27210919539,
+          "warmup_traversals": 85
+        }
+      },
+      "name": "qmugs_size_balanced_bin_3",
+      "source_id_count": 512,
+      "source_id_sha256": "e8306088490e4be69f98be7369867a9c8b410df9c3533014d653a4983f3148e0",
+      "source_ids": null,
+      "vesin_over_tonari": 1.146011188603362
+    },
+    {
+      "backends": {
+        "tonari_cpu": {
+          "atoms": 41717,
+          "atoms_per_second": 1477961.530264473,
+          "backend": "tonari_cpu",
+          "maximum_ms": 28.27269909903407,
+          "median_ms": 28.226039139553905,
+          "minimum_ms": 28.20822107605636,
+          "pairs": 1103462,
+          "pairs_per_second": 39093760.00452324,
+          "repeats": 11,
+          "samples_ms": [
+            28.214791091158986,
+            28.220290085300803,
+            28.218017192557454,
+            28.20822107605636,
+            28.226039139553905,
+            28.233369812369347,
+            28.27269909903407,
+            28.226880123838782,
+            28.23154698126018,
+            28.233329998329282,
+            28.224976966157556
+          ],
+          "structures": 512,
+          "structures_per_second": 18139.279034815787,
+          "warmup_traversals": 71
+        },
+        "vesin_cpu_reused": {
+          "atoms": 41717,
+          "atoms_per_second": 1347581.7739542136,
+          "backend": "vesin_cpu_reused",
+          "maximum_ms": 30.978366965427995,
+          "median_ms": 30.95693397335708,
+          "minimum_ms": 30.90162994340062,
+          "pairs": 1103462,
+          "pairs_per_second": 35645067.465327434,
+          "repeats": 11,
+          "samples_ms": [
+            30.9606590308249,
+            30.96833103336394,
+            30.907709151506424,
+            30.96905187703669,
+            30.938296113163233,
+            30.95693397335708,
+            30.90162994340062,
+            30.978366965427995,
+            30.960479052737355,
+            30.942863086238503,
+            30.91755392961204
+          ],
+          "structures": 512,
+          "structures_per_second": 16539.105598786045,
+          "warmup_traversals": 65
+        }
+      },
+      "name": "qmugs_size_balanced_bin_4",
+      "source_id_count": 512,
+      "source_id_sha256": "40d9c74d02a233a29fa821a9ff23376eb30ec1b08ddb405488752a26b2ac8c4a",
+      "source_ids": null,
+      "vesin_over_tonari": 1.0967509050880717
+    },
+    {
+      "backends": {
+        "tonari_cpu": {
+          "atoms": 55512,
+          "atoms_per_second": 1314426.2031332524,
+          "backend": "tonari_cpu",
+          "maximum_ms": 42.255371110513806,
+          "median_ms": 42.23287687636912,
+          "minimum_ms": 42.21277707256377,
+          "pairs": 1658682,
+          "pairs_per_second": 39274662.83804348,
+          "repeats": 11,
+          "samples_ms": [
+            42.240028036758304,
+            42.216151021420956,
+            42.24934196099639,
+            42.236392153427005,
+            42.23287687636912,
+            42.255371110513806,
+            42.221469106152654,
+            42.2411491163075,
+            42.213899083435535,
+            42.218955932185054,
+            42.21277707256377
+          ],
+          "structures": 512,
+          "structures_per_second": 12123.256521188667,
+          "warmup_traversals": 48
+        },
+        "vesin_cpu_reused": {
+          "atoms": 55512,
+          "atoms_per_second": 1266247.6900000926,
+          "backend": "vesin_cpu_reused",
+          "maximum_ms": 43.87067095376551,
+          "median_ms": 43.83976408280432,
+          "minimum_ms": 43.74112514778972,
+          "pairs": 1658682,
+          "pairs_per_second": 37835103.23794375,
+          "repeats": 11,
+          "samples_ms": [
+            43.8086271751672,
+            43.83850307203829,
+            43.83976408280432,
+            43.87067095376551,
+            43.86659502051771,
+            43.77300292253494,
+            43.82239794358611,
+            43.86087600141764,
+            43.74112514778972,
+            43.85445709340274,
+            43.84468193165958
+          ],
+          "structures": 512,
+          "structures_per_second": 11678.894964693172,
+          "warmup_traversals": 44
+        }
+      },
+      "name": "qmugs_size_balanced_bin_5",
+      "source_id_count": 512,
+      "source_id_sha256": "c4023aa2887b9bc5a300bef59bcacfcafb3412d238d177f161ce5784d9c3adcf",
+      "source_ids": null,
+      "vesin_over_tonari": 1.038048253523887
+    },
+    {
+      "backends": {
+        "tonari_cpu": {
+          "atoms": 71480,
+          "atoms_per_second": 1122522.657304631,
+          "backend": "tonari_cpu",
+          "maximum_ms": 63.722789054736495,
+          "median_ms": 63.67800198495388,
+          "minimum_ms": 63.64092603325844,
+          "pairs": 2292736,
+          "pairs_per_second": 36005149.79320076,
+          "repeats": 11,
+          "samples_ms": [
+            63.687726855278015,
+            63.674004981294274,
+            63.68180806748569,
+            63.69069102220237,
+            63.66360909305513,
+            63.652643002569675,
+            63.67800198495388,
+            63.659674022346735,
+            63.67970514111221,
+            63.722789054736495,
+            63.64092603325844
+          ],
+          "structures": 512,
+          "structures_per_second": 8040.453281197133,
+          "warmup_traversals": 32
+        },
+        "vesin_cpu_reused": {
+          "atoms": 71480,
+          "atoms_per_second": 1201118.302759363,
+          "backend": "vesin_cpu_reused",
+          "maximum_ms": 59.5670510083437,
+          "median_ms": 59.5112070441246,
+          "minimum_ms": 59.423153987154365,
+          "pairs": 2292736,
+          "pairs_per_second": 38526121.61437173,
+          "repeats": 11,
+          "samples_ms": [
+            59.447770938277245,
+            59.4970160163939,
+            59.52389701269567,
+            59.5670510083437,
+            59.556445106863976,
+            59.5112070441246,
+            59.55739691853523,
+            59.498167829588056,
+            59.423153987154365,
+            59.46819297969341,
+            59.5114070456475
+          ],
+          "structures": 512,
+          "structures_per_second": 8603.421530677027,
+          "warmup_traversals": 34
+        }
+      },
+      "name": "qmugs_size_balanced_bin_6",
+      "source_id_count": 512,
+      "source_id_sha256": "9289a3dbb7c16e12f072b80e5974412570c7a8c9ff2e564e26e69bb670886af8",
+      "source_ids": null,
+      "vesin_over_tonari": 0.9345646092694017
+    },
+    {
+      "backends": {
+        "tonari_cpu": {
+          "atoms": 90409,
+          "atoms_per_second": 1063349.8896787434,
+          "backend": "tonari_cpu",
+          "maximum_ms": 85.13938100077212,
+          "median_ms": 85.02281410619617,
+          "minimum_ms": 84.97587288729846,
+          "pairs": 3051622,
+          "pairs_per_second": 35891801.889648445,
+          "repeats": 11,
+          "samples_ms": [
+            85.0505658891052,
+            85.0082531105727,
+            85.02121199853718,
+            85.02281410619617,
+            85.050696041435,
+            85.13938100077212,
+            85.05933918058872,
+            85.01281891949475,
+            85.0150331389159,
+            85.05137800239027,
+            84.97587288729846
+          ],
+          "structures": 512,
+          "structures_per_second": 6021.91312275898,
+          "warmup_traversals": 24
+        },
+        "vesin_cpu_reused": {
+          "atoms": 90409,
+          "atoms_per_second": 1140534.8059344876,
+          "backend": "vesin_cpu_reused",
+          "maximum_ms": 79.324787016958,
+          "median_ms": 79.26895306445658,
+          "minimum_ms": 79.2413610033691,
+          "pairs": 3051622,
+          "pairs_per_second": 38497064.51299553,
+          "repeats": 11,
+          "samples_ms": [
+            79.27925908006728,
+            79.26895306445658,
+            79.2413610033691,
+            79.26764106377959,
+            79.26380401477218,
+            79.28289286792278,
+            79.2532388586551,
+            79.324787016958,
+            79.3115571141243,
+            79.25676391460001,
+            79.2968850582838
+          ],
+          "structures": 512,
+          "structures_per_second": 6459.023113168575,
+          "warmup_traversals": 26
+        }
+      },
+      "name": "qmugs_size_balanced_bin_7",
+      "source_id_count": 512,
+      "source_id_sha256": "71142e65ee1f2685709887e3716029b3422cdd33f706dec03a1fac1813f65723",
+      "source_ids": null,
+      "vesin_over_tonari": 0.9323256810277671
+    }
+  ]
+}

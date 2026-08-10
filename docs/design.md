@@ -86,7 +86,7 @@ Neighbor identity 是离散 topology，production 在搜索边界 detach 浮点 
 
 内部 `_reference.find_neighbors_reference` 与 public Torch shapes/signature 一致，独立执行 exhaustive PyTorch enumeration，不调用 production native search。它按原始 positions/output shifts 重建 displacement，并共享 int32/image-resource contract；只用于开发期 correctness，不属于 public surface。
 
-74 项 tests 覆盖 public surface、NumPy/Torch ecosystem、single/batch shapes、invalid 0-D/1-D shape exceptions、单位一致缩放、finite/partial/full PBC、rank-deficient 与近共线 active rows、mixed batch、ordinary/large unwrapped representatives、int32 rejection、nonfinite rejection、multiple images、periodic self-images、empty tiny cell、image/bin resource limits、exact、nextafter 与 float32 1-ulp cutoff、randomized differential、rotation/reflection covariance、CUDA current stream 与 continuous-geometry backward。Tests 比较完整 `(source, target, Sx, Sy, Sz)` sets，不冻结 output order。
+79 项 tests 覆盖 public surface、NumPy/Torch ecosystem、single/batch shapes、invalid 0-D/1-D shape exceptions、单位一致缩放、finite/partial/full PBC、rank-deficient 与近共线 active rows、mixed batch、ordinary/large unwrapped representatives、int32 rejection、nonfinite rejection、multiple images、periodic self-images、empty tiny cell、image/bin resource limits、exact、nextafter 与 float32 1-ulp cutoff、randomized differential、rotation/reflection covariance、CUDA current stream、continuous-geometry backward，以及 QMugs SDF/selection/cache 与 finite dense baseline。Tests 比较完整 `(source, target, Sx, Sy, Sz)` sets，不冻结 output order。
 
 ## ELFES 只读需求核对
 
