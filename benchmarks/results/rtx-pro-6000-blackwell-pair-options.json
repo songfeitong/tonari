@@ -1,0 +1,127 @@
+{
+  "dataset": {
+    "cache_sha256": "25644bf26a8c305c91d3e52f3ea8fb12c3c58dede830bf5625b341527179b58c",
+    "manifest_sha256": "3475c391b8def6bf599a57a7f1c938113eabcbfb0f2b89f7d31da648c6f7b413",
+    "name": "matbench_mp_e_form",
+    "sample_size": 1536,
+    "source_id_sha256": "6dd9343d756dc03e359296e69e8f932ace5df10b8107a9a666703cedb2473f31"
+  },
+  "environment": {
+    "cuda_extension_sha256": "35ccc7f56ebdfcffea40747d3da934557ef2162e5bb8845b61d6843273fc103e",
+    "cuda_runtime": "13.0",
+    "gpu": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+    "platform": "Linux-7.0.0-28-generic-x86_64-with-glibc2.39",
+    "python": "3.12.13",
+    "repository_revision": "f8d08f6548a7f5445091c7143ba92a5f02f1a104",
+    "repository_worktree_clean": true,
+    "torch": "2.12.1+cu130",
+    "vesin_version": "0.6.1"
+  },
+  "method": {
+    "batch_size": 32,
+    "cutoff_angstrom": 5.0,
+    "data_loading_and_h2d_timed": false,
+    "dtype": "float32",
+    "memory": "Torch allocator peak above resident inputs",
+    "statistic": "median synchronized wall time; all samples retained",
+    "validation": "all four modes checked by public reverse/self invariants; default full list also compared exactly with Vesin"
+  },
+  "validation": {
+    "batches": 48,
+    "exact_mode_invariants": true,
+    "full_without_self_matches_vesin": true,
+    "pairs": {
+      "full_with_self": 2855396,
+      "full_without_self": 2780158,
+      "half_with_self": 1465317,
+      "half_without_self": 1390079
+    },
+    "structures": 1536
+  },
+  "workloads": [
+    {
+      "half_list": false,
+      "include_self": false,
+      "maximum_ms": 11.854201089590788,
+      "median_ms": 11.26247807405889,
+      "minimum_ms": 11.243009008467197,
+      "name": "full_without_self",
+      "output_bytes": 77844424,
+      "pairs": 2780158,
+      "repeats": 7,
+      "samples_ms": [
+        11.854201089590788,
+        11.455819942057133,
+        11.253725038841367,
+        11.272853938862681,
+        11.243009008467197,
+        11.258882936090231,
+        11.26247807405889
+      ],
+      "torch_peak_bytes": 4728832
+    },
+    {
+      "half_list": false,
+      "include_self": true,
+      "maximum_ms": 11.352444998919964,
+      "median_ms": 11.280284961685538,
+      "minimum_ms": 11.251691961660981,
+      "name": "full_with_self",
+      "output_bytes": 79951088,
+      "pairs": 2855396,
+      "repeats": 7,
+      "samples_ms": [
+        11.277631158009171,
+        11.280284961685538,
+        11.265954002737999,
+        11.251691961660981,
+        11.352444998919964,
+        11.280456092208624,
+        11.282288003712893
+      ],
+      "torch_peak_bytes": 4847104
+    },
+    {
+      "half_list": true,
+      "include_self": false,
+      "maximum_ms": 10.948305018246174,
+      "median_ms": 10.914122918620706,
+      "minimum_ms": 10.874323081225157,
+      "name": "half_without_self",
+      "output_bytes": 38922212,
+      "pairs": 1390079,
+      "repeats": 7,
+      "samples_ms": [
+        10.914122918620706,
+        10.948305018246174,
+        10.910137090831995,
+        10.902466019615531,
+        10.945210000500083,
+        10.92777494341135,
+        10.874323081225157
+      ],
+      "torch_peak_bytes": 2419200
+    },
+    {
+      "half_list": true,
+      "include_self": true,
+      "maximum_ms": 10.987123940140009,
+      "median_ms": 10.942285880446434,
+      "minimum_ms": 10.89372206479311,
+      "name": "half_with_self",
+      "output_bytes": 41028876,
+      "pairs": 1465317,
+      "repeats": 7,
+      "samples_ms": [
+        10.970077011734247,
+        10.987123940140009,
+        10.959982872009277,
+        10.942285880446434,
+        10.905811097472906,
+        10.916647966951132,
+        10.89372206479311
+      ],
+      "torch_peak_bytes": 2536960
+    }
+  ]
+}
