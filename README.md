@@ -74,7 +74,7 @@ PYTHONPATH=src CUDA_VISIBLE_DEVICES=1 \
 
 主要 workload 是从 `matbench_mp_e_form` 确定性抽取的 1,536 个真实晶体，覆盖 1–444 atoms、1,343 个不同化学式及多样 cell shapes。原始 Parquet 与派生 cache 位于 Git ignored `cache/`；仓库只保存固定数据 revision、SHA-256、可重复脚本和 sample manifest。没有下载 OMat24，也没有保留本任务不需要的 energy/force labels。
 
-在 AMD Ryzen Threadripper PRO 9975WX 的单个固定 core 上，`DataLoader(batch_size=1)` 的完整 epoch 中，`tonari` 为 143.80 ms，复用同一个单线程 Vesin `NeighborList` 为 248.08 ms，前者快 1.73×。单个 64-atom 真实结构为 0.0417 ms 对 0.0453 ms；512-atom real-derived supercell 已接近交叉点，之后 Vesin 的成熟 CPU cell list 更快。
+在 AMD Ryzen Threadripper PRO 9975WX 的单个固定 core 上，`DataLoader(batch_size=1)` 的完整 epoch 中，`tonari` 为 144.00 ms，复用同一个单线程 Vesin `NeighborList` 为 248.46 ms，前者快 1.73×。单个 64-atom 真实结构为 0.0419 ms 对 0.0454 ms；512-atom real-derived supercell 已接近交叉点，之后 Vesin 的成熟 CPU cell list 更快。
 
 在 NVIDIA RTX PRO 6000 Blackwell 上，`DataLoader(batch_size=32)` 的完整 epoch 中，`tonari` 为 12.11 ms，逐 structure Vesin GPU 为 494.39 ms。代表性 32-structure batch 中，`tonari` 为 0.225 ms、Vesin 为 9.29 ms、独立 Equiformer/FairChem-style dense baseline 为 42.78 ms，三者得到完全相同的 43,842 个 pair keys。32,768-atom real-derived supercell 中，`tonari` 为 0.254 ms、Vesin 为 1.491 ms。
 

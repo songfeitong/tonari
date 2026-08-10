@@ -22,6 +22,8 @@ CPU backend 初版审查确认并修复了以下问题：cell-list corner prunin
 
 修复后的 clean revision `01eeac5683c2871d572338de437716d0689f5e50` 重新执行正式 CUDA 流程：全部 1,536 个 Matbench structures、2,780,158 个 Vesin keys 与 43,842 个 dense keys 精确一致；epoch 12.107 ms、median batch 0.2252 ms，相对修复前分别变化约 +0.7% 与 +1.1%。新的 32,768-atom Nsight profile 为全部 kernels 约 0.1356 ms/call、NVTX range 约 0.3031 ms/call，没有确认的性能回归。
 
+CPU 也在 reviewer 停止同核性能调用后，以 clean revision `052f207403d3c5c058dd844ad546115b99790500` 独占 CPU 31 重跑正式流程。全部 1,536 个 structures、2,780,158 个 keys 精确一致；tonari epoch 143.999 ms、Vesin 248.459 ms，相对旧正式结果均只变化约 0.1%。
+
 最终独立 reviewer 的本轮结论将在上述修复的 clean delivery revision 审查完成后追加于此，避免把作者自测误写成独立认证。
 
 ## 已知限制

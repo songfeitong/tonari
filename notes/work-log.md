@@ -50,7 +50,7 @@ API 重构后第一轮共 68 项 CUDA-visible tests 全过，CPU-only 环境为 
 
 ## 2026-08-10：最终真实 benchmark
 
-CPU 正式 run 使用 `DataLoader(batch_size=1)`、float64、固定 CPU 31、单线程、每 backend/workload 至少 2 秒 warmup。全部 Matbench keys 与复用 `NeighborList` 的 Vesin exact match。tonari 完整 epoch 为 143.802 ms，Vesin 为 248.076 ms，即 tonari 在真实小体系分布上快 1.73×；64 atoms 仍领先，约 512 atoms 到交叉区，1,728 atoms 以上 Vesin 明显更快。
+CPU 最终正式 run 使用 `DataLoader(batch_size=1)`、float64、固定 CPU 31、单线程、每 backend/workload 至少 2 秒 warmup，并在 API/documentation 修复后的 clean revision 上独占重跑。全部 Matbench keys 与复用 `NeighborList` 的 Vesin exact match。tonari 完整 epoch 为 143.999 ms，Vesin 为 248.459 ms，即 tonari 在真实小体系分布上快 1.73×；相对旧正式 run 两者都只变化约 0.1%。64 atoms 仍领先，约 512 atoms 到交叉区，1,728 atoms 以上 Vesin 明显更快。
 
 CUDA 最终正式 run 使用 `DataLoader(batch_size=32)`、float32、整 batch H2D 后计时，并在 strict-cutoff reviewer 修复后的 clean revision 上重跑。tonari 完整 epoch 为 12.107 ms，逐结构 Vesin GPU 为 494.393 ms；median 32-structure batch 为 0.2252 ms，对应 Vesin 9.2855 ms 与 dense PyTorch 42.7812 ms。相对修复前正式 run，epoch 与 median batch 分别只变化约 +0.7% 与 +1.1%。64–32,768 atom真实结构/派生 supercells 上，tonari CUDA 均领先逐结构 Vesin；dense baseline 从 4,096 atoms 起因候选规模超过安全限额跳过。
 

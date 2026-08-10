@@ -32,17 +32,17 @@ benchmarks/run_cpu_benchmark.py --cpu 31 --repeats 11 \
 
 ## CPU 结果
 
-硬件为 AMD Ryzen Threadripper PRO 9975WX 32-Cores，软件为 Python 3.12.3、PyTorch 2.12.1+cu130、Vesin 0.6.1。正式 record 是 `benchmarks/results/threadripper-pro-9975wx-cpu.json`；implementation revision 为 `0dcfbb6ba11f3a46a6f4a2721f626daabb73cbf6`，CPU extension SHA-256 为 `f6a193c29c97a2f86faf2e8901d6b97178f3ef26fa52b7288c57a64126764e95`。
+硬件为 AMD Ryzen Threadripper PRO 9975WX 32-Cores，软件为 Python 3.12.3、PyTorch 2.12.1+cu130、Vesin 0.6.1。正式 record 是 `benchmarks/results/threadripper-pro-9975wx-cpu.json`；implementation revision 为 `052f207403d3c5c058dd844ad546115b99790500`，CPU extension SHA-256 为 `f6a193c29c97a2f86faf2e8901d6b97178f3ef26fa52b7288c57a64126764e95`。
 
 | Workload | Atoms | Pairs | tonari CPU | Vesin CPU reused | Vesin / tonari |
 | --- | --: | --: | --: | --: | --: |
-| 1,536-structure DataLoader epoch | 75,238 | 2,780,158 | 143.802 ms | 248.076 ms | 1.73× |
-| 真实结构，1×1×1 | 64 | 744 | 0.0417 ms | 0.0453 ms | 1.09× |
-| 派生 supercell，2×2×2 | 512 | 5,952 | 0.2354 ms | 0.2286 ms | 0.97× |
-| 派生 supercell，3×3×3 | 1,728 | 20,088 | 1.1048 ms | 0.7150 ms | 0.65× |
-| 派生 supercell，4×4×4 | 4,096 | 47,616 | 2.9450 ms | 1.6539 ms | 0.56× |
-| 派生 supercell，6×6×6 | 13,824 | 160,704 | 10.1643 ms | 5.4800 ms | 0.54× |
-| 派生 supercell，8×8×8 | 32,768 | 380,928 | 24.0613 ms | 13.1372 ms | 0.55× |
+| 1,536-structure DataLoader epoch | 75,238 | 2,780,158 | 143.999 ms | 248.459 ms | 1.73× |
+| 真实结构，1×1×1 | 64 | 744 | 0.0419 ms | 0.0454 ms | 1.08× |
+| 派生 supercell，2×2×2 | 512 | 5,952 | 0.2379 ms | 0.2296 ms | 0.97× |
+| 派生 supercell，3×3×3 | 1,728 | 20,088 | 1.1043 ms | 0.7152 ms | 0.65× |
+| 派生 supercell，4×4×4 | 4,096 | 47,616 | 2.9374 ms | 1.6503 ms | 0.56× |
+| 派生 supercell，6×6×6 | 13,824 | 160,704 | 10.1893 ms | 5.4640 ms | 0.54× |
+| 派生 supercell，8×8×8 | 32,768 | 380,928 | 24.0689 ms | 13.0912 ms | 0.54× |
 
 真实样本中大量 structure 很小，固定调用成本占主导，所以完整 epoch 上 tonari 领先 1.73×。单独放大后，约 512 atoms 已到本机交叉区，Vesin 在更大单体系上明显更快。正确结论是“tonari CPU 对常见小材料体系和许多高频 one-shot calls 有优势”，而不是“tonari CPU 的 cell list 全面超过 Vesin”。
 

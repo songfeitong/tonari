@@ -6,7 +6,7 @@
 
 `tonari` 没有发明新的 neighbor-search 数学，而是把 exhaustive search 与 Cartesian cell list 按 CPU、CUDA 和真实调用方式重新组织：小体系不为索引付费，大体系不为 `N²` 付费，CUDA batch 不为逐体系 launch 付费，CPU 不为 Python 小算子付费，NumPy 与 PyTorch 共享同一个 native CPU implementation。
 
-在固定单核的 1,536-structure `matbench_mp_e_form` epoch 中，CPU 为 143.80 ms，公平复用的单线程 Vesin 为 248.08 ms，`tonari` 快 1.73×。在 RTX PRO 6000 Blackwell 的 `batch_size=32` epoch 中，CUDA 为 12.11 ms，逐 structure Vesin GPU 为 494.39 ms；代表性 32-structure batch 相对独立 Equiformer/FairChem-style dense baseline 快约 190×。这些是固定硬件、软件与 workload 的工程证据，不是跨平台保证。
+在固定单核的 1,536-structure `matbench_mp_e_form` epoch 中，CPU 为 144.00 ms，公平复用的单线程 Vesin 为 248.46 ms，`tonari` 快 1.73×。在 RTX PRO 6000 Blackwell 的 `batch_size=32` epoch 中，CUDA 为 12.11 ms，逐 structure Vesin GPU 为 494.39 ms；代表性 32-structure batch 相对独立 Equiformer/FairChem-style dense baseline 快约 190×。这些是固定硬件、软件与 workload 的工程证据，不是跨平台保证。
 
 ## 问题本质
 
@@ -81,7 +81,7 @@ NumPy input 在安全时通过 `torch.from_numpy` 与 native CPU backend 共享�
 
 API 重命名后，CPU 算法对应 object file 的 `.text` bytes 与旧版逐字节相同，但文件名改变了 Ninja 的 link order，使热点 native code 地址整体移动，真实 epoch 从约 144 ms 回退到 165 ms；Vesin 同次测量保持约 248 ms，排除了系统噪声。同进程直接调用旧/新 extension 又把差异定位到 native search 的 117 vs 138 ms。
 
-最终把共享 `periodic_geometry` 文件重命名为更自然的 `geometry`，让链接顺序成为 `bindings → geometry → neighbors`，热点函数地址恢复后正式 epoch 回到 143.80 ms。这个案例很有代表性：高频微调用中，instruction-cache 与 branch-predictor aliasing 足以放大纯布局变化；“源码算法没变”不等于二进制性能没变。
+最终把共享 `periodic_geometry` 文件重命名为更自然的 `geometry`，让链接顺序成为 `bindings → geometry → neighbors`，热点函数地址恢复后正式 epoch 回到约 144.00 ms。这个案例很有代表性：高频微调用中，instruction-cache 与 branch-predictor aliasing 足以放大纯布局变化；“源码算法没变”不等于二进制性能没变。
 
 ## 与 Vesin 和 Equiformer-style dense baseline 的关系
 
@@ -100,11 +100,11 @@ API 重命名后，CPU 算法对应 object file 的 `.text` bytes 与旧版逐�
 
 | Workload | tonari CPU | Vesin CPU reused | Vesin / tonari |
 | --- | --: | --: | --: |
-| 1,536-structure epoch | 143.802 ms | 248.076 ms | 1.73× |
-| 真实结构，64 atoms | 0.0417 ms | 0.0453 ms | 1.09× |
-| 派生 supercell，512 atoms | 0.2354 ms | 0.2286 ms | 0.97× |
-| 派生 supercell，1,728 atoms | 1.1048 ms | 0.7150 ms | 0.65× |
-| 派生 supercell，32,768 atoms | 24.0613 ms | 13.1372 ms | 0.55× |
+| 1,536-structure epoch | 143.999 ms | 248.459 ms | 1.73× |
+| 真实结构，64 atoms | 0.0419 ms | 0.0454 ms | 1.08× |
+| 派生 supercell，512 atoms | 0.2379 ms | 0.2296 ms | 0.97× |
+| 派生 supercell，1,728 atoms | 1.1043 ms | 0.7152 ms | 0.65× |
+| 派生 supercell，32,768 atoms | 24.0689 ms | 13.0912 ms | 0.54× |
 
 CPU 的优势集中在真实数据中占多数的小结构与低固定成本；约 512 atoms 已接近当前单核交叉区，大体系 Vesin 更快。结论不是“我们在所有尺度击败 Vesin”，而是“统一 native frontend 在常见高频小体系 workflow 中值得拥有”。
 
