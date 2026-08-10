@@ -24,7 +24,11 @@ CPU backend 初版审查确认并修复了以下问题：cell-list corner prunin
 
 CPU 也在 reviewer 停止同核性能调用后，以 clean revision `052f207403d3c5c058dd844ad546115b99790500` 独占 CPU 31 重跑正式流程。全部 1,536 个 structures、2,780,158 个 keys 精确一致；tonari epoch 143.999 ms、Vesin 248.459 ms，相对旧正式结果均只变化约 0.1%。
 
-最终独立 reviewer 的本轮结论将在上述修复的 clean delivery revision 审查完成后追加于此，避免把作者自测误写成独立认证。
+## 最终结论
+
+独立 reviewer 在 clean HEAD `715fcf2ffdb1ef00489d241212a6bb00c5b38184` 给出 PASS，无 confirmed blocker。它独立重跑 74 项 GPU-visible tests、50 passed/24 skipped 的 CPU-only matrix和 10 个 docstring examples，并额外完成 100 组 NumPy/Torch/CPU/CUDA/reference mixed-batch differential、30 组 `N≥256` unwrapped differential、200 组任意 float32 cutoff crossover；所有结果一致。
+
+Reviewer 再次验证 CPU/CUDA 对全部 1,536 个 Matbench structures、2,780,158 个 Vesin keys 的 exact match，逐项重算 CPU/CUDA JSON 的 samples、medians、throughput、revision、clean flag 与 data/extension SHA，并确认 Nsight CSV 与 summary 的 0.135588 ms kernels、0.006111 ms memory operations一致。Public surface、docstring、旧 alias/package清理、英文源码、中文 Markdown、Ruff、Prettier、lock、Git status/diff/fsck 和磁盘级 legacy artifact 扫描均通过。
 
 ## 已知限制
 
