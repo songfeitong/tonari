@@ -87,6 +87,8 @@ PYTHONPATH=src CUDA_VISIBLE_DEVICES=1 \
 
 CPU 与 CUDA 都在全部 1,536 个结构、2,780,158 个 `(source, target, Sx, Sy, Sz)` keys 上与 Vesin 精确一致。正式 JSON 都记录 clean implementation revision 与 data/cache/extension SHA；CPU JSON 保存全部 timing samples，CUDA JSON 保存 minimum/median/maximum。Nsight summary 与 CSV 保存 kernel、memory、API 和 NVTX 证据。
 
+Pair-option补充测量在256个确定性Matbench真实晶体上让tonari的四种full/half/self组合同时与Vesin和ASE exact match；完整1,536结构CUDA workload也逐batch验证了reverse/self不变量，并让默认full list与Vesin exact match。CPU half/no-self把505,336个pairs与14.15 MB输出降到252,668个与7.07 MB，wall time从27.59降到24.25 ms；CUDA half/no-self把2,780,158个pairs、77.84 MB输出和4.73 MB峰值allocation分别降到1,390,079个、38.92 MB和2.42 MB。原生`include_self=True`在两端都没有可辨认的不合理额外成本。
+
 Finite-molecule workload 来自 QMugs。脚本从 665,911 个 ChEMBL 分子、1,992,984 个 conformers 中为每个分子选择 GFN2-xTB 能量最低的 conformer，再构造互不重叠的 4,096-molecule population sample 与 4,096-molecule size-balanced sample。Population sample 的总原子数中位数为 52；size-balanced sample 按 4–10、11–20、…、81–100 个重原子分为八档，总原子数最高 221。Raw data 与 deterministic cache 位于 ignored `cache/`；仓库提交固定 source/cache SHA、可重复生成脚本、manifest 和 selection CSV。数据作者、论文、许可与 ChEMBL attribution 见 [`benchmarks/data/QMUGS_ATTRIBUTION.md`](benchmarks/data/QMUGS_ATTRIBUTION.md)。
 
 固定单核和明确 performance policy 的 CPU 上，QMugs population epoch 中 `tonari` 为 169.70 ms，复用 Vesin 为 169.55 ms，二者基本打平；size-balanced epoch 为 303.69 对 281.31 ms。`tonari` 在 4–30 个重原子的三档快 1.03–1.20×，从 31–40 个重原子档开始 Vesin 逐渐占优，真实分子明确给出了 CPU crossover。

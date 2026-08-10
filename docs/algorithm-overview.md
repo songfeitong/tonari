@@ -139,6 +139,8 @@ QMugs population sample 保留真实大小分布，总原子数中位数为 52�
 
 CPU 的趋势说明优势不是无限延伸：4–30-heavy-atom bins 上 `tonari` 领先 1.03–1.20×，31–40 档基本进入 crossover，之后 Vesin 的成熟 cell list 逐渐领先。自然分布 population epoch 恰好打平，刻意强化大分子的 size-balanced epoch 则由 Vesin 领先约 1.08×。CUDA 的主要收益来自一个 native call 处理完整 batch；`batch_size=8/32/64/128` 的 population epoch 时间从 44.065 降到 11.958、6.396、3.844 ms。Finite dense baseline 没有 periodic image padding，因此差距远小于晶体 workload，但随着分子变大仍从 2.51×扩大到 5.68×。
 
+Pair-option benchmark补充回答了“half是否只是语义糖”。在256个真实Matbench晶体上，CPU half/no-self相对full/no-self把输出从14.15 MB减到7.07 MB，时间从27.59降到24.25 ms；相同half模式下tonari为24.25 ms、Vesin为43.03 ms、ASE为527.28 ms。完整1,536结构CUDA epoch中，half把输出从77.84 MB减到38.92 MB、峰值allocation从4.73 MB减到2.42 MB，时间从11.26降到10.91 ms。CPU较明显受益于提前少算/少写，CUDA则主要受候选搜索与launch成本支配，但half仍真实减少输出和显存。
+
 ## 为什么适合在模型入口动态搜索
 
 对于未来 PyG/GNN adapter，推荐 Dataset 只保存 atomic numbers、positions、cell、PBC 与 labels；batch 到达模型后，由模型拥有的 builder 根据自身 cutoff 调用 `find_neighbors`，再把 `pair_indices` 映射为 `edge_index`、把重建的 `displacements` 映射为 `edge_vectors`。这样 Dataset 不携带 ad hoc cutoff，数据增强、结构扰动、MD 和不同模型配置也不会读取 stale connectivity。

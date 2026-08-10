@@ -82,6 +82,46 @@ CUDA 的核心优势不是单个距离公式更神奇，而是整个 batch 一�
 
 CUDA 正式数字相对早期原型显著改善，但不能仅凭 source-level diff 把全部收益归因于某一个 kernel。当前证据能确定的是：同一真实 workload、同一语义和同一验证口径下，最终 package/native boundary 与 batched pipeline 的端到端耗时如表所示。
 
+## Full/half/self补充benchmark
+
+Pair-option CPU benchmark从上述确定性shuffle后的Matbench样本取前256个真实晶体，继续使用`DataLoader(batch_size=1)`、float64、单线程CPU31和5 Å cutoff。每种mode分别创建并复用一个Vesin `NeighborList(full_list=...)`；Vesin不原生返回zero-shift self，因此timed adapter在`include_self=True`时补入每个atom的`(i, i, 0)`。ASE使用`PrimitiveNeighborList`、`skin=0`、`sorted=False`，原生`self_interaction`和`bothways`与请求mode对齐；configuration按atom count复用，但每个structure都显式调用`build`，不会把unchanged-geometry cache hit计作重新构图。Vesin与ASE的one-way方向都在timed adapter内按tonari公开五元key重定向。
+
+三者在全部256个structures和四种mode上exact match。Full/no-self为505,336个pairs；打开self只增加13,332个atoms对应的13,332个zero-shift self pairs；half/no-self恰为252,668个canonical pairs，补reverse后恢复full。ASE在这里是具有原生self/one-way语义的通用原子工具reference，Vesin是成熟高性能native backend，两者角色不同且都保留。
+
+CPU formal record为`benchmarks/results/threadripper-pro-9975wx-pair-options.json`，clean implementation revision为`60dfe2d62d712c3467c1ad359084b6f69715a6f1`，CPU extension SHA-256为`093c202bead1c63ef793cb6d3b07c6b261a05091339ba1d1918929f0d4783f6c`。运行时记录的CPU31 policy为`powersave/balance_performance`，因此表格用于同一次run内的backend/mode比较，不与前文`performance` policy下的QMugs绝对时间混用。
+
+| CPU mode | Pairs | Output | tonari | Vesin E2E | ASE E2E | Vesin/tonari | ASE/tonari |
+| --- | --: | --: | --: | --: | --: | --: | --: |
+| Full，no self | 505,336 | 14.15 MB | 27.591 ms | 44.126 ms | 697.183 ms | 1.60× | 25.27× |
+| Full，with self | 518,668 | 14.52 MB | 27.060 ms | 46.659 ms | 711.293 ms | 1.72× | 26.29× |
+| Half，no self | 252,668 | 7.07 MB | 24.247 ms | 43.031 ms | 527.276 ms | 1.77× | 21.75× |
+| Half，with self | 266,000 | 7.45 MB | 23.603 ms | 45.063 ms | 527.898 ms | 1.91× | 22.37× |
+
+Half/no-self相对full/no-self把pair count和output bytes精确减半，tonari CPU wall time下降约12%。这说明native half path确实少写、少分配并在exhaustive/cell-list acceptance中提前排除reverse candidates；它不是Python后处理。Self mode的约2%上下波动不值得过度解读，可靠结论只是没有不合理额外成本。
+
+CUDA补充benchmark使用完整1,536个Matbench structures、真实`batch_size=32`、float32和同一5 Å cutoff。四种mode在全部48个batches上满足canonical half、reverse展开和self差集不变量；默认full/no-self的2,780,158个keys再次与逐structure Vesin exact match。Formal record为`benchmarks/results/rtx-pro-6000-blackwell-pair-options.json`，clean revision为`f8d08f6548a7f5445091c7143ba92a5f02f1a104`，CUDA extension SHA-256为`35ccc7f56ebdfcffea40747d3da934557ef2162e5bb8845b61d6843273fc103e`。
+
+| CUDA mode       |     Pairs |   Output | Peak allocation |     Epoch |
+| --------------- | --------: | -------: | --------------: | --------: |
+| Full，no self   | 2,780,158 | 77.84 MB |         4.73 MB | 11.262 ms |
+| Full，with self | 2,855,396 | 79.95 MB |         4.85 MB | 11.280 ms |
+| Half，no self   | 1,390,079 | 38.92 MB |         2.42 MB | 10.914 ms |
+| Half，with self | 1,465,317 | 41.03 MB |         2.54 MB | 10.942 ms |
+
+CUDA half/no-self同样把pair output精确减半，Torch allocator peak约减49%，而wall time只下降约3%；这符合工程预期：GPU epoch的主要成本仍是候选搜索、metadata、launch和必要同步，不是最终写出的几十MB。`include_self`增加的75,238个pairs对epoch时间影响低于0.3%。当前默认11.262 ms也没有显示出相对前文历史12.107 ms记录的回归，但这里不把不同run之间的亚毫秒差异包装成优化结论。
+
+复现命令为：
+
+```bash
+PYTHONPATH=src:. CUDA_VISIBLE_DEVICES='' .venv/bin/python \
+  -m benchmarks.run_pair_options_cpu_benchmark --cpu 31 --require-clean \
+  --output benchmarks/results/threadripper-pro-9975wx-pair-options.json
+
+PYTHONPATH=src:. CUDA_VISIBLE_DEVICES=1 .venv/bin/python \
+  -m benchmarks.run_pair_options_cuda_benchmark --require-clean \
+  --output benchmarks/results/rtx-pro-6000-blackwell-pair-options.json
+```
+
 ## 有限分子：QMugs 数据集与抽样
 
 有限分子 workload 使用 [QMugs 原始数据集](https://doi.org/10.3929/ethz-b-000482129)，即从 ChEMBL 27 提取并经过几何优化与 sanity checks 的药物样分子。官方 `summary.csv` 为 2,026,848,085 bytes，SHA-256 为 `b6d7b54fa4d290ceace81c644f20b2ddfd68c21ecb1f4b5c00e8913cd608bcfd`；`structures.tar.gz` 为 7,180,016,346 bytes，SHA-256 为 `264102bf1c036d077a72ab558168be4c5c6054e6aeecb8a7768be36df87ad46b`。数据集页面标注 CC BY-SA 3.0，ChEMBL attribution 固定为 ChEMBL 27。
