@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 import torch
 
-from tonari._reference import find_neighbors_reference
+from tests.reference import find_neighbors_reference
 
 
 def pair_keys(pair_indices: torch.Tensor, shifts: torch.Tensor) -> set[tuple[int, ...]]:

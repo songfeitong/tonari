@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+from importlib.metadata import version
 
 import pytest
 import torch
@@ -17,6 +18,10 @@ def pair_keys(output: tuple[torch.Tensor, torch.Tensor]) -> set[tuple[int, ...]]
 
 def test_public_surface_contains_only_find_neighbors() -> None:
     assert tonari.__all__ == ["find_neighbors"]
+
+
+def test_version_matches_distribution_metadata() -> None:
+    assert tonari.__version__ == version(tonari.__name__)
 
 
 def test_pair_options_are_keyword_only_and_default_to_existing_behavior() -> None:

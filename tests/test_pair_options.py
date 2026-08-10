@@ -10,8 +10,8 @@ from ase.neighborlist import NeighborList as AseNeighborList
 from ase.neighborlist import PrimitiveNeighborList
 from vesin import NeighborList as VesinNeighborList
 
+from tests.reference import find_neighbors_reference
 from tonari import find_neighbors
-from tonari._reference import find_neighbors_reference
 
 PairKey = tuple[int, int, int, int, int]
 

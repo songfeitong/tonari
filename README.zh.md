@@ -176,3 +176,7 @@ pair_indices, cell_shifts = find_neighbors(
 ```
 
 使用 `help(find_neighbors)` 查看完整的 dtype、shape、validation 与 geometry contract。
+
+## 许可证
+
+本项目使用 [MIT License](LICENSE)。

@@ -6,10 +6,22 @@ from math import ceil
 import torch
 from torch import Tensor
 
-from ._pairs import canonical_half_mask
-from ._torch_frontend import normalize_torch_inputs, validate_torch_inputs
+from tonari._torch_frontend import normalize_torch_inputs, validate_torch_inputs
 
 _MAXIMUM_IMAGE_SHIFTS = 2**24
+
+
+def _canonical_half_mask(pair_indices: Tensor, cell_shifts: Tensor) -> Tensor:
+    source, target = pair_indices
+    same_atom = source == target
+    shift_is_canonical = (cell_shifts[:, 0] < 0) | (
+        (cell_shifts[:, 0] == 0)
+        & (
+            (cell_shifts[:, 1] < 0)
+            | ((cell_shifts[:, 1] == 0) & (cell_shifts[:, 2] <= 0))
+        )
+    )
+    return (source < target) | (same_atom & shift_is_canonical)
 
 
 @torch.no_grad()
@@ -119,7 +131,7 @@ def find_neighbors_reference(
             selected_shifts = shifts[source, target]
             selected_pairs = torch.stack((source + start, target + start))
             if half_list:
-                keep = canonical_half_mask(selected_pairs, selected_shifts)
+                keep = _canonical_half_mask(selected_pairs, selected_shifts)
                 selected_pairs = selected_pairs[:, keep]
                 selected_shifts = selected_shifts[keep]
                 if selected_pairs.shape[1] == 0:

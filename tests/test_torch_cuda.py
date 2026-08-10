@@ -5,8 +5,8 @@ import pytest
 import torch
 from ase.neighborlist import primitive_neighbor_list
 
+from tests.reference import find_neighbors_reference
 from tonari import find_neighbors
-from tonari._reference import find_neighbors_reference
 
 pytestmark = [
     pytest.mark.cuda,
