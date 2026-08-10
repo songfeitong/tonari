@@ -21,6 +21,11 @@ pair_indices, cell_shifts = find_neighbors(
 )
 ```
 
+### Options
+
+- `half_list=True` returns only one direction for each neighbor pair. The default returns both directions.
+- `include_self=True` adds one self pair for each atom. By default, self pairs within the same cell are omitted.
+
 ## Install from source
 
 The project currently builds compiled extensions from source and requires Python 3.11–3.14 and a C++20 compiler.
@@ -103,11 +108,6 @@ Here, `B` is the number of structures and `N_total` is the total number of atoms
 | `batch_ptr` | `(B + 1,)`     |
 
 `batch_ptr=None` denotes a single structure with `N` atoms and is equivalent to boundaries `[0, N]`. Returned pairs never cross structure boundaries.
-
-## Options
-
-- `half_list=True` returns only one direction for each neighbor pair. The default returns both directions.
-- `include_self=True` adds one self pair for each atom. By default, self pairs within the same cell are omitted.
 
 ## License
 
