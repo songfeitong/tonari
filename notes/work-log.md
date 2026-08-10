@@ -35,3 +35,39 @@ GPT-5.6 high reasoning 独立审查确认了三个 correctness 边界：极端�
 第一版 error flag 修复把 finite 检查重复放到每个 `N^2 × images` candidate，并增加多个 D2H/zero-fill launches，导致 Matbench epoch 从约 34.1 ms 回退到 40–41 ms。最终实现改为 O(N) per-atom wrap preparation，用 cumsum sentinel 将 error 与原 count 一次返回，并只对四个 8-byte status slots 使用 `cudaMemsetAsync`；独立复测恢复到 34.60 ms epoch、0.845 ms median batch 和 0.396 ms 的 32,768-atom case。该过程说明边界验证也必须进入真实 workload profile，不能只看功能测试。
 
 在最终边界修复 commit `a20ee8960c27161a568e3f54a026d0f9a43779de` 上又完整跑了一次正式 benchmark：1,536 个结构的 epoch 为 36.584 ms，逐结构 Vesin 为 539.100 ms，即 14.74×；median batch 为 0.918 ms，对 Vesin 为 9.970 ms、对 dense baseline 为 43.215 ms。最终 Nsight trace 的 32,768-atom case 中，全部 kernels 平均每次约 0.136 ms，20-call NVTX range 为 9.476 ms。Raw trace 保持 ignored，但完整 kernel、memory operation、CUDA API 与 NVTX CSV summaries 已提交，避免性能结论只能依赖手写摘录。
+
+## 2026-08-10：从 CUDA prototype 重构为 CPU/CUDA system
+
+CPU 任务没有把一个 `if device == cpu` patch 塞进旧 CUDA metadata。先把原 `SearchMetadata` 拆成真正公共的 duals/image shifts/counts 和独立 `CudaSearchSchedule`，再把 native build 拆成始终存在的 `_C_cpu` 与可选 `_C_cuda`。公开函数、edge semantics、dtype 和 batched shapes 保持一套；CPU 可以处理 batch，但内部按 structure 顺序搜索，CUDA 保留整个 batch pipeline。这样最终目录结构表现得像 CPU/CUDA 从第一天就是共同需求，而不是一套主实现加一套附属 fallback。
+
+旧 Python metadata 使用 PBC pattern grouping、`torch.linalg.svdvals/inv`、Python `product` 和 device tensor construction。它在单次 CUDA batch 中尚可接受，但 CPU `batch_size=1` 的 1,536 次调用会把小算子 dispatcher 变成主要成本。新 `_C_cpu.build_periodic_metadata_cpu` 在一个 C++ call 中完成 finite/rank check、active Gram dual、repeat range 和 image enumeration；rank 仅为 0–3，因此使用小型 symmetric Jacobi 与 pivoted Gauss-Jordan，比引入通用 LAPACK dependency 更直接。CPU/CUDA 都复用同一结果。
+
+## CPU prototype 与 hybrid search
+
+第一版 CPU exhaustive reference 很容易正确，但真实晶体的 `N² × images` 很快放大，因此 production 直接设计为 per-structure hybrid。候选数不超过 threshold 时直接遍历；否则把相关 periodic source images 插入 cutoff-sized Cartesian bins，每个 target 扫描相邻 27 bins。Cell list 使用 dense bin heads 与 int32 linked nodes，并对 target-to-bin AABB minimum distance 做严格 pruning。病态稀疏 finite coordinates 若需要过大 dense grid，就回退 exhaustive，优先避免空 grid OOM。
+
+初始 Python metadata + native hybrid 在真实 epoch 为约 285.7 ms，Vesin 约 232.7 ms；native metadata 后降到约 136.7 ms。随后发现临时 profiler 即使环境变量未开启，也为每个 cell-list structure 调用了多个 `steady_clock::now()`；删除这些开发计时点后短 protocol 降到约 117 ms。这个优化非常朴素，却比许多内循环算术改写更有价值，说明高频 API 的 instrumentation 本身也必须接受 benchmark。
+
+## CPU crossover sweep
+
+Exhaustive 的成本是 `N² × image_count`，所以没有沿用 CUDA 的 256-atom threshold。对完整 Matbench epoch 扫描 candidate limits 2,048、8,192、16,384、32,768、131,072，quick-run medians 分别约为 138.8、115.4、115.0、117.0、162.2 ms；最终选择 16,384。131,072 会让 64-atom periodic structure 误走 exhaustive，单次从约 0.033 ms 退到 0.173 ms；2,048 又让太多很小 structures 过早支付 cell-list setup。该 sweep 只冻结 performance choice，不冻结算法输出。
+
+## 被否决的 CPU 优化
+
+临时 profiler 把 32,768-atom case 分成 bin layout、image insertion 和 query，显示 query 为主要热点。将 bin edge 从 cutoff 缩小到 cutoff/2 后，visited nodes 从约 2.22 million 降到 1.14 million，但邻近 bins 从最多 27 增加到最多 125，query 从约 19 ms 退到 35.7 ms，立即撤销。
+
+另一个方案利用 full directed radius graph 的 reverse symmetry：只对 `(source,target,S)` 与 `(target,source,-S)` 中 canonical 的一半计算距离，命中后同时 append 两条 edges。它能少做距离算术，却仍需遍历 linked nodes，并增加 branch 和 paired vector writes；32,768-atom wall time从约 18.5 ms 退到 20.9 ms，完整 epoch也没有收益，因此撤销。还短暂尝试把 linked nodes 排序为 contiguous bins，cache locality 的理论优势同样没有转化为端到端改善。
+
+保留的低成本优化包括：native periodic metadata、cutoff-sized bins、只插入 target bounds 附近的 periodic images、corner-bin AABB pruning、紧凑 int32 nodes、预留合理 output capacity，以及 pybind `gil_scoped_release`。CPU implementation 不启动内部线程，以便 DDP/DataLoader workers 能由调用方控制并行层级。
+
+## CPU correctness 与真实数据
+
+CPU tests 新增 mixed finite/partial/full batch、float32/float64、ASE triclinic partial PBC、small-cell multiple images、periodic self-images、strict cutoff、unwrapped representative relabel、continuous geometry backward、tiny-cell empty structure、cell-list path、sparse bounds fallback、NaN/Inf、dependent active rows、int32 wrap/shift errors、O(3) rotation/reflection 和 40 组 deterministic randomized differential。与既有 CUDA/reference tests 合计 44 项。
+
+Formal benchmark 仍使用原来固定 revision 与 SHA-256 的 `matbench_mp_e_form` 1,536-structure sample，但 DataLoader 改为真实单 structure workflow：`batch_size=1`、deterministic shuffle、float64。Vesin baseline 使用一个跨重复复用的 `NeighborList(full_list=True, sorted=False, n_threads=1)`；计时前对全部 1,536 structures、2,780,158 keys 做 exact comparison，全部一致。
+
+## CPU timing protocol 修正
+
+第一次 formal run 未固定 affinity，完整 epoch 出现约 115/137 ms 两个平台。固定到 CPU 31 后迁移消失，但 0.5 秒 warmup 仍在累计约 1.2 秒处出现 frequency plateau change。最终 protocol 对每个 backend/workload warmup 至少 2 秒、固定 affinity、保存所有 samples，然后报告 median。正式 revision `9e342ef815c596a09e81eca4cbb6ce6d102ba247` 上，本实现 epoch 为 123.103 ms，复用 Vesin 为 248.713 ms，即 2.02×；64 atoms 为 0.0348 对 0.0457 ms，512 atoms 为 0.1643 对 0.2297 ms。从 1,728 atoms 起 Vesin 领先，32,768 atoms 为本实现 20.108 对 Vesin 13.095 ms。
+
+这个结果符合任务目标但也限定了结论：ELFES 当前 two-center 使用 scalar broad cutoff、单 Geometry 和 single-thread Vesin，CPU backend 在其常见小/中 structure 区间具有明确潜力；不过 ELFES 还需要 half-list canonicalization、onsite 和 species post-filter adapter，而且大体系 Vesin 仍更成熟。本轮保持 ELFES 完全只读，没有为了“去依赖”提前接入未冻结的 adapter。

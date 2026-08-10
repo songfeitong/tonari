@@ -1,0 +1,547 @@
+{
+  "dataset": {
+    "manifest_sha256": "3475c391b8def6bf599a57a7f1c938113eabcbfb0f2b89f7d31da648c6f7b413",
+    "sample_size": 1536,
+    "sampling": {
+      "anisotropy_boundaries": [
+        1.2,
+        1.5,
+        2.0,
+        3.0,
+        6.0
+      ],
+      "atom_count_boundaries": [
+        4,
+        8,
+        16,
+        32,
+        64,
+        128,
+        256
+      ],
+      "maximum_atoms": 444,
+      "method": "round-robin over fixed atom-count, cell-anisotropy, cell-skew, and element-count strata; stable hash order within each stratum",
+      "minimum_atoms": 1,
+      "sample_size": 1536,
+      "score": "sha256(f'{seed}:{configuration_id}')",
+      "seed": 20260809,
+      "skew_boundaries": [
+        0.05,
+        0.2,
+        0.4,
+        0.7
+      ],
+      "unique_formulas": 1343
+    },
+    "source": {
+      "colabfit_id": "DS_5drebe4tktiu_0",
+      "configuration_count_observed": 132741,
+      "download_url_used": "https://huggingface.co/datasets/colabfit/Matbench_mp_e_form/resolve/9880d5b9b62877ec5aa14d1a4c2a9ff4ee870b8d/co/co_0.parquet?download=true",
+      "hf_commit": "9880d5b9b62877ec5aa14d1a4c2a9ff4ee870b8d",
+      "hf_repository": "colabfit/Matbench_mp_e_form",
+      "name": "matbench_mp_e_form",
+      "page": "https://materials.colabfit.org/id/DS_5drebe4tktiu_0",
+      "parquet_bytes": 128655162,
+      "parquet_path": "co/co_0.parquet",
+      "parquet_sha256": "4b815791cc31862895b23cda7339d96217c37815c8f183949dc59b3035ee2afd"
+    },
+    "supercell_source_id": "CO_8661596785617876616983344"
+  },
+  "environment": {
+    "cpu": "AMD Ryzen Threadripper PRO 9975WX 32-Cores",
+    "cpu_affinity": [
+      31
+    ],
+    "platform": "Linux-7.0.0-28-generic-x86_64-with-glibc2.39",
+    "python": "3.12.3",
+    "repository_revision": "9e342ef815c596a09e81eca4cbb6ce6d102ba247",
+    "torch": "2.12.1+cu130",
+    "torch_num_threads": 1,
+    "vesin_version": "0.6.1"
+  },
+  "method": {
+    "batch_size": 1,
+    "cpu_backend": "single-threaded hybrid exhaustive/cell-list; exhaustive candidate limit 16384",
+    "cutoff_angstrom": 5.0,
+    "data_loading_timed": false,
+    "dataloader": "map-style, deterministic shuffle, num_workers=0",
+    "dtype": "float64",
+    "exact_keys_compared": "(source, target, Sx, Sy, Sz)",
+    "output_order_compared": false,
+    "statistic": "median wall time; minimum and maximum retained",
+    "vesin": "one reused NeighborList with full_list=True, sorted=False, n_threads=1",
+    "warmup_seconds_per_backend_and_workload": 2.0
+  },
+  "validation": {
+    "edges": 2780158,
+    "exact_key_match": true,
+    "structures": 1536
+  },
+  "workloads": [
+    {
+      "backends": {
+        "torch_radius_graph_cpu": {
+          "atoms": 75238,
+          "atoms_per_second": 611177.2855474995,
+          "backend": "torch_radius_graph_cpu",
+          "edges": 2780158,
+          "edges_per_second": 22583925.93946098,
+          "maximum_ms": 123.28187515959144,
+          "median_ms": 123.10339696705341,
+          "minimum_ms": 123.03529493510723,
+          "repeats": 11,
+          "samples_ms": [
+            123.28187515959144,
+            123.09006601572037,
+            123.09146788902581,
+            123.16365796141326,
+            123.15330188721418,
+            123.03529493510723,
+            123.0931009631604,
+            123.11275093816221,
+            123.03967005573213,
+            123.10339696705341,
+            123.11075814068317
+          ],
+          "structures": 1536,
+          "structures_per_second": 12477.31612484329,
+          "warmup_traversals": 16
+        },
+        "vesin_cpu_reused": {
+          "atoms": 75238,
+          "atoms_per_second": 302509.3604731548,
+          "backend": "vesin_cpu_reused",
+          "edges": 2780158,
+          "edges_per_second": 11178178.827112963,
+          "maximum_ms": 248.86630498804152,
+          "median_ms": 248.71296505443752,
+          "minimum_ms": 248.57560801319778,
+          "repeats": 11,
+          "samples_ms": [
+            248.86630498804152,
+            248.81861289031804,
+            248.6908109858632,
+            248.57560801319778,
+            248.76367091201246,
+            248.71296505443752,
+            248.70456289499998,
+            248.79111303016543,
+            248.6923150718212,
+            248.75348689965904,
+            248.69322613812983
+          ],
+          "structures": 1536,
+          "structures_per_second": 6175.793850006191,
+          "warmup_traversals": 9
+        }
+      },
+      "name": "matbench_single_structure_epoch",
+      "source_id_count": 1536,
+      "source_id_sha256": "6dd9343d756dc03e359296e69e8f932ace5df10b8107a9a666703cedb2473f31",
+      "source_ids": null,
+      "vesin_over_torch_radius_graph": 2.020358261283411
+    },
+    {
+      "backends": {
+        "torch_radius_graph_cpu": {
+          "atoms": 64,
+          "atoms_per_second": 1841357.8975348338,
+          "backend": "torch_radius_graph_cpu",
+          "edges": 744,
+          "edges_per_second": 21405785.558842443,
+          "maximum_ms": 0.03545382060110569,
+          "median_ms": 0.03475695848464966,
+          "minimum_ms": 0.0346119049936533,
+          "repeats": 12,
+          "samples_ms": [
+            0.03545382060110569,
+            0.03511202521622181,
+            0.03476184792816639,
+            0.03485288470983505,
+            0.03476208075881004,
+            0.0348920002579689,
+            0.034632859751582146,
+            0.03468198701739311,
+            0.034721801057457924,
+            0.03475206904113293,
+            0.0346119049936533,
+            0.03470294177532196
+          ],
+          "structures": 1,
+          "structures_per_second": 28771.217148981777,
+          "warmup_traversals": 57666
+        },
+        "vesin_cpu_reused": {
+          "atoms": 64,
+          "atoms_per_second": 1399400.3168835004,
+          "backend": "vesin_cpu_reused",
+          "edges": 744,
+          "edges_per_second": 16268028.683770692,
+          "maximum_ms": 0.048413174226880074,
+          "median_ms": 0.04573387559503317,
+          "minimum_ms": 0.045508844777941704,
+          "repeats": 12,
+          "samples_ms": [
+            0.046170083805918694,
+            0.04594912752509117,
+            0.04583899863064289,
+            0.04610908217728138,
+            0.04572886973619461,
+            0.04573888145387173,
+            0.04563899710774422,
+            0.045617809519171715,
+            0.048413174226880074,
+            0.045618973672389984,
+            0.045598018914461136,
+            0.045508844777941704
+          ],
+          "structures": 1,
+          "structures_per_second": 21865.629951304694,
+          "warmup_traversals": 43220
+        }
+      },
+      "name": "matbench_supercell_1x1x1",
+      "source_id_count": 1,
+      "source_id_sha256": "0f9ab247146e5fd763fbc342f793146dedbc07785f17893fff08ce41dfc2a427",
+      "source_ids": [
+        "CO_8661596785617876616983344__1x1x1"
+      ],
+      "vesin_over_torch_radius_graph": 1.3158192658092176
+    },
+    {
+      "backends": {
+        "torch_radius_graph_cpu": {
+          "atoms": 512,
+          "atoms_per_second": 3115825.2287811926,
+          "backend": "torch_radius_graph_cpu",
+          "edges": 5952,
+          "edges_per_second": 36221468.28458136,
+          "maximum_ms": 0.16701198183000088,
+          "median_ms": 0.1643224386498332,
+          "minimum_ms": 0.16391696408391,
+          "repeats": 12,
+          "samples_ms": [
+            0.16476796008646488,
+            0.1643782015889883,
+            0.16427808441221714,
+            0.16701198183000088,
+            0.16432791016995907,
+            0.16431696712970734,
+            0.16391696408391,
+            0.16428809612989426,
+            0.16403710469603539,
+            0.16683200374245644,
+            0.16460800543427467,
+            0.16417796723544598
+          ],
+          "structures": 1,
+          "structures_per_second": 6085.596149963267,
+          "warmup_traversals": 12138
+        },
+        "vesin_cpu_reused": {
+          "atoms": 512,
+          "atoms_per_second": 2229178.4672679673,
+          "backend": "vesin_cpu_reused",
+          "edges": 5952,
+          "edges_per_second": 25914199.68199012,
+          "maximum_ms": 0.2774680033326149,
+          "median_ms": 0.2296810271218419,
+          "minimum_ms": 0.22893515415489674,
+          "repeats": 12,
+          "samples_ms": [
+            0.22959592752158642,
+            0.2297661267220974,
+            0.23273099213838577,
+            0.22902502678334713,
+            0.22893515415489674,
+            0.2290050033479929,
+            0.22906484082341194,
+            0.23255101405084133,
+            0.22923597134649754,
+            0.2774680033326149,
+            0.23018685169517994,
+            0.23197894915938377
+          ],
+          "structures": 1,
+          "structures_per_second": 4353.864193882749,
+          "warmup_traversals": 8673
+        }
+      },
+      "name": "matbench_supercell_2x2x2",
+      "source_id_count": 1,
+      "source_id_sha256": "c12d4b597dbce4e7a4981767d76c3b6cf1f5a1ffe1f37b9654c725ced46737be",
+      "source_ids": [
+        "CO_8661596785617876616983344__2x2x2"
+      ],
+      "vesin_over_torch_radius_graph": 1.3977459743722898
+    },
+    {
+      "backends": {
+        "torch_radius_graph_cpu": {
+          "atoms": 1728,
+          "atoms_per_second": 2026954.6268447847,
+          "backend": "torch_radius_graph_cpu",
+          "edges": 20088,
+          "edges_per_second": 23563347.53707062,
+          "maximum_ms": 0.8590652141720057,
+          "median_ms": 0.8525104494765401,
+          "minimum_ms": 0.8508830796927214,
+          "repeats": 12,
+          "samples_ms": [
+            0.8551999926567078,
+            0.8590652141720057,
+            0.8577229455113411,
+            0.8527659811079502,
+            0.8528260514140129,
+            0.8518239483237267,
+            0.85225491784513,
+            0.8547089528292418,
+            0.8508830796927214,
+            0.8518840186297894,
+            0.8520148694515228,
+            0.8519550319761038
+          ],
+          "structures": 1,
+          "structures_per_second": 1173.0061497944355,
+          "warmup_traversals": 2339
+        },
+        "vesin_cpu_reused": {
+          "atoms": 1728,
+          "atoms_per_second": 2416739.631159928,
+          "backend": "vesin_cpu_reused",
+          "edges": 20088,
+          "edges_per_second": 28094598.212234166,
+          "maximum_ms": 0.7265259046107531,
+          "median_ms": 0.7150128949433565,
+          "minimum_ms": 0.7121239323168993,
+          "repeats": 12,
+          "samples_ms": [
+            0.7156690116971731,
+            0.7134259212762117,
+            0.7170410826802254,
+            0.7156790234148502,
+            0.7265259046107531,
+            0.7121239323168993,
+            0.714596826583147,
+            0.715428963303566,
+            0.7137658540159464,
+            0.7155081257224083,
+            0.7142771501094103,
+            0.7138371001929045
+          ],
+          "structures": 1,
+          "structures_per_second": 1398.5761754397734,
+          "warmup_traversals": 2794
+        }
+      },
+      "name": "matbench_supercell_3x3x3",
+      "source_id_count": 1,
+      "source_id_sha256": "a551727782c0e4e3c2b30d47a22395d605aac42890405de296698263a9d7e56c",
+      "source_ids": [
+        "CO_8661596785617876616983344__3x3x3"
+      ],
+      "vesin_over_torch_radius_graph": 0.8387145229508799
+    },
+    {
+      "backends": {
+        "torch_radius_graph_cpu": {
+          "atoms": 4096,
+          "atoms_per_second": 1687827.3069682824,
+          "backend": "torch_radius_graph_cpu",
+          "edges": 47616,
+          "edges_per_second": 19620992.44350628,
+          "maximum_ms": 2.4352918844670057,
+          "median_ms": 2.426788560114801,
+          "minimum_ms": 2.4206589441746473,
+          "repeats": 12,
+          "samples_ms": [
+            2.4352918844670057,
+            2.4298029020428658,
+            2.4334988556802273,
+            2.428821986541152,
+            2.426047110930085,
+            2.4229828268289566,
+            2.4206589441746473,
+            2.4351608008146286,
+            2.425095997750759,
+            2.4275300092995167,
+            2.4246149696409702,
+            2.4242138024419546
+          ],
+          "structures": 1,
+          "structures_per_second": 412.06721361530333,
+          "warmup_traversals": 824
+        },
+        "vesin_cpu_reused": {
+          "atoms": 4096,
+          "atoms_per_second": 2482797.3746326896,
+          "backend": "vesin_cpu_reused",
+          "edges": 47616,
+          "edges_per_second": 28862519.480105016,
+          "maximum_ms": 1.6980599611997604,
+          "median_ms": 1.649752026423812,
+          "minimum_ms": 1.6481149941682816,
+          "repeats": 12,
+          "samples_ms": [
+            1.6485759988427162,
+            1.6499180346727371,
+            1.6481149941682816,
+            1.648354809731245,
+            1.6980599611997604,
+            1.6513201408088207,
+            1.649637008085847,
+            1.649357145652175,
+            1.6496069729328156,
+            1.6501680947840214,
+            1.6502980142831802,
+            1.649867044761777
+          ],
+          "structures": 1,
+          "structures_per_second": 606.151702791184,
+          "warmup_traversals": 1210
+        }
+      },
+      "name": "matbench_supercell_4x4x4",
+      "source_id_count": 1,
+      "source_id_sha256": "63083d6bc670bce73c1035901e22f11aa422875b0cdfc2cd759de1f78126a820",
+      "source_ids": [
+        "CO_8661596785617876616983344__4x4x4"
+      ],
+      "vesin_over_torch_radius_graph": 0.6798087206846604
+    },
+    {
+      "backends": {
+        "torch_radius_graph_cpu": {
+          "atoms": 13824,
+          "atoms_per_second": 1633005.4292642435,
+          "backend": "torch_radius_graph_cpu",
+          "edges": 160704,
+          "edges_per_second": 18983688.11519683,
+          "maximum_ms": 8.497901959344745,
+          "median_ms": 8.465372957289219,
+          "minimum_ms": 8.459884906187654,
+          "repeats": 12,
+          "samples_ms": [
+            8.459884906187654,
+            8.473634952679276,
+            8.497901959344745,
+            8.463439997285604,
+            8.464812068268657,
+            8.465933846309781,
+            8.464010898023844,
+            8.461106102913618,
+            8.471883134916425,
+            8.475066861137748,
+            8.460656041279435,
+            8.468066109344363
+          ],
+          "structures": 1,
+          "structures_per_second": 118.12828626043428,
+          "warmup_traversals": 237
+        },
+        "vesin_cpu_reused": {
+          "atoms": 13824,
+          "atoms_per_second": 2520485.082858017,
+          "backend": "vesin_cpu_reused",
+          "edges": 160704,
+          "edges_per_second": 29300639.088224452,
+          "maximum_ms": 5.595286143943667,
+          "median_ms": 5.4846585262566805,
+          "minimum_ms": 5.4722800850868225,
+          "repeats": 12,
+          "samples_ms": [
+            5.4913589265197515,
+            5.56435901671648,
+            5.478900158777833,
+            5.532081006094813,
+            5.595286143943667,
+            5.4780589416623116,
+            5.490096984431148,
+            5.568744847550988,
+            5.479220068082213,
+            5.478078965097666,
+            5.47742797061801,
+            5.4722800850868225
+          ],
+          "structures": 1,
+          "structures_per_second": 182.32675657248387,
+          "warmup_traversals": 365
+        }
+      },
+      "name": "matbench_supercell_6x6x6",
+      "source_id_count": 1,
+      "source_id_sha256": "8d71ae47e723d4581ba949f21ebe0bc334e97a0dda67f9ef3a2a0a617910cbf3",
+      "source_ids": [
+        "CO_8661596785617876616983344__6x6x6"
+      ],
+      "vesin_over_torch_radius_graph": 0.6478933124303808
+    },
+    {
+      "backends": {
+        "torch_radius_graph_cpu": {
+          "atoms": 32768,
+          "atoms_per_second": 1629629.2915139883,
+          "backend": "torch_radius_graph_cpu",
+          "edges": 380928,
+          "edges_per_second": 18944440.51385011,
+          "maximum_ms": 20.144591107964516,
+          "median_ms": 20.10764053557068,
+          "minimum_ms": 20.075607113540173,
+          "repeats": 12,
+          "samples_ms": [
+            20.127475960180163,
+            20.105773117393255,
+            20.12838702648878,
+            20.127855939790606,
+            20.079812966287136,
+            20.075607113540173,
+            20.09180188179016,
+            20.08200716227293,
+            20.076498854905367,
+            20.144591107964516,
+            20.13238286599517,
+            20.109507953748107
+          ],
+          "structures": 1,
+          "structures_per_second": 49.73233921856654,
+          "warmup_traversals": 100
+        },
+        "vesin_cpu_reused": {
+          "atoms": 32768,
+          "atoms_per_second": 2502308.411020968,
+          "backend": "vesin_cpu_reused",
+          "edges": 380928,
+          "edges_per_second": 29089335.278118756,
+          "maximum_ms": 13.24013201519847,
+          "median_ms": 13.095108442939818,
+          "minimum_ms": 13.084206962957978,
+          "repeats": 12,
+          "samples_ms": [
+            13.090826803818345,
+            13.090436113998294,
+            13.134222012013197,
+            13.1277518812567,
+            13.118447968736291,
+            13.24013201519847,
+            13.0967958830297,
+            13.110966887325048,
+            13.092359062284231,
+            13.093421002849936,
+            13.084206962957978,
+            13.0853489972651
+          ],
+          "structures": 1,
+          "structures_per_second": 76.364392426177,
+          "warmup_traversals": 152
+        }
+      },
+      "name": "matbench_supercell_8x8x8",
+      "source_id_count": 1,
+      "source_id_sha256": "2492df5d6dcbcb1034db87ee815b9e08609588c7f581e9c8ae3c7ba810d28288",
+      "source_ids": [
+        "CO_8661596785617876616983344__8x8x8"
+      ],
+      "vesin_over_torch_radius_graph": 0.6512503751881976
+    }
+  ]
+}

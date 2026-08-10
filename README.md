@@ -1,8 +1,8 @@
 # torch-radius-graph
 
-这是一个私有 CUDA 实验仓库，用于为整个 PyTorch batch 构造完整的有向周期 cutoff graph。实现独立于 Vesin：小结构使用融合的 exhaustive 路径，大结构使用 Cartesian cell-list 路径。
+这是一个私有实验仓库，为 PyTorch CPU 和 CUDA tensors 构造完整的有向周期 cutoff graph。CPU 与 CUDA 共用一个公开 API、几何约定和 periodic metadata；CPU 对每个 structure 在 exhaustive 与 Cartesian cell list 之间切换，CUDA 则保留面向整个 heterogeneous batch 的 fused exhaustive 与 batched cell-list pipeline。Production implementation 不依赖 Vesin，Vesin 只作为开发期外部正确性参考和性能 baseline。
 
-第一次阅读建议从[算法总览：为什么这个 Radius Graph Builder 快](docs/algorithm-overview.md)开始；它集中介绍问题、整体架构、核心优化、真实性能、模型集成位置和已知边界。
+第一次阅读建议从[算法总览：一个接口，两套为硬件而生的搜索路径](docs/algorithm-overview.md)开始；具体实现见[当前设计](docs/design.md)，真实材料测量见[性能方法与结果](docs/benchmark.md)，完整实验过程见[工作记录](notes/work-log.md)。
 
 ## API
 
@@ -11,10 +11,10 @@ import torch
 from torch_radius_graph import radius_graph_pbc
 
 edge_index, cell_shifts = radius_graph_pbc(
-    positions=positions,  # float32/float64 [n_atoms_total, 3]，CUDA
-    ptr=ptr,              # int64 [batch_size + 1]，CUDA
-    cells=cells,          # 同浮点 dtype [batch_size, 3, 3]，CUDA
-    pbc=pbc,              # bool [batch_size, 3]，CUDA
+    positions=positions,  # float32/float64 [n_atoms_total, 3]，CPU 或 CUDA
+    ptr=ptr,              # int64 [batch_size + 1]，与 positions 同 device
+    cells=cells,          # 同浮点 dtype [batch_size, 3, 3]，同 device
+    pbc=pbc,              # bool [batch_size, 3]，同 device
     cutoff=5.0,
 )
 
@@ -34,40 +34,39 @@ Cell vectors 按行保存。返回的 `edge_index` 为 int64，`cell_shifts` 为
 
 ## 构建与测试
 
-需要 Python 3.12、支持 CUDA 的 PyTorch 2.12.1、兼容的 CUDA toolkit、C++20 host compiler 和 Ninja。独立环境可用以下命令建立：
+CPU build 需要 Python 3.12、PyTorch 2.12.1、C++20 compiler 和 Ninja；如果 PyTorch 与本机 CUDA toolkit 都可用，`setup.py` 会同时构建可选 `_C_cuda` extension，否则只构建始终可用的 `_C_cpu`。CPU-only 安装不需要 CUDA toolkit。
+
+本机执行复用了 ELFES 已有的 Python/PyTorch 环境，没有重复下载 wheel：
 
 ```bash
-TORCH_CUDA_ARCH_LIST=12.0 uv sync --frozen --all-groups
-CUDA_VISIBLE_DEVICES=0 uv run --frozen python -m pytest -q
-```
-
-请按目标 GPU 设置 `TORCH_CUDA_ARCH_LIST`。本机执行时复用了已经配置好的 ELFES Python/PyTorch 环境，没有再下载一份 PyTorch wheel；已验证的命令是：
-
-```bash
-VIRTUAL_ENV=/home/ftsong/projects/elfes-workspace/elfes/.venv \
-CUDA_VISIBLE_DEVICES=1 TORCH_CUDA_ARCH_LIST=12.0 MAX_JOBS=8 \
-uv sync --active --frozen --all-groups --inexact --no-build-isolation
+cd /home/ftsong/projects/elfes-workspace/torch-radius-graph
+/home/ftsong/projects/elfes-workspace/elfes/.venv/bin/python setup.py build_ext --inplace
 
 CUDA_VISIBLE_DEVICES=1 \
 /home/ftsong/projects/elfes-workspace/elfes/.venv/bin/python -m pytest -q
 ```
 
-本机系统 CUDA toolkit 是 13.2，而 PyTorch wheel 使用 CUDA 13.0 构建。PyTorch 会对此给出 minor-version warning；编译、导入、测试、sanitizer 检查和 benchmark 均已成功。Production build 仍应优先使用与 wheel minor version 一致的 toolkit。
+系统 CUDA toolkit 为 13.2，而 PyTorch wheel 使用 CUDA 13.0 构建，因此 CUDA extension build 会给出 minor-version warning；当前机器上的编译、导入、测试、sanitizer 与 benchmark 均成功。Production toolchain 仍应优先让 toolkit minor version 与 PyTorch wheel 对齐。
 
 ## 真实材料 benchmark
 
-主要 workload 是从 `matbench_mp_e_form` 确定性抽取的 1,536 个多样化结构；完整原始数据和派生 tensor cache 均被 Git 忽略。数据准备和 benchmark 复现命令为：
+主要 workload 是从 `matbench_mp_e_form` 确定性抽取的 1,536 个多样化真实晶体；完整原始数据和派生 tensor cache 均被 Git 忽略。CPU benchmark 使用真实 PyTorch `DataLoader(batch_size=1)` 的确定性顺序，固定到一个物理 core，双方均为单线程，并特意复用 Vesin `NeighborList`，从而不给本实现一次性调用上的不公平优势：
 
 ```bash
-uv run --group data python scripts/prepare_matbench.py
-CUDA_VISIBLE_DEVICES=1 uv run --all-groups python benchmarks/run_benchmark.py \
-  --output runs/reproduced-benchmark.json
+PYTHONPATH=. CUDA_VISIBLE_DEVICES='' \
+/home/ftsong/projects/elfes-workspace/elfes/.venv/bin/python \
+benchmarks/run_cpu_benchmark.py --cpu 31 --repeats 11 \
+  --output runs/reproduced-cpu-benchmark.json
 ```
 
-已提交的 manifest 保存每个 source configuration ID、固定的源 revision 与 SHA-256，以及完整抽样方法。正式结果将所有样本与逐结构 Vesin GPU 做了 exact key 对比，并在代表性 batch 上与独立的 Equiformer/FairChem-style dense PyTorch 实现对比。详见[性能方法与结果](docs/benchmark.md)、[当前设计](docs/design.md)和[工作记录](notes/work-log.md)。
+AMD Ryzen Threadripper PRO 9975WX 上，完整 1,536-structure epoch 为 123.10 ms，Vesin 为 248.71 ms，本实现快 2.02×；64-atom 与 512-atom real-derived single structures 分别快 1.32× 和 1.40×。到 1,728 atoms 后 Vesin 开始领先，32,768 atoms 时本实现为 20.11 ms、Vesin 为 13.10 ms。换言之，CPU backend 已在 ELFES 常见的小/中型体系区间形成真实优势，但当前 single-thread cell list 还没有超过 Vesin 的大体系成熟度。
+
+CUDA 的既有正式结果保持不变：RTX PRO 6000 Blackwell 上，32-structure DataLoader workload 相对逐 structure Vesin GPU 的最大价值来自 batch-first execution。CPU 与 CUDA 的完整方法、全部 samples、版本和结果分别见[性能文档](docs/benchmark.md)、`benchmarks/results/threadripper-pro-9975wx-cpu.json` 与 `benchmarks/results/rtx-pro-6000-blackwell.json`。
 
 ## 支持范围与限制
 
-当前实现支持 CUDA、float32/float64、同一 batch 内混合 finite/partial/full PBC、不同 cell、active rows 线性独立的 rank-deficient cell、empty structures、有限的 positions/cells、未 wrap 的 atom representatives，以及当前 PyTorch CUDA stream。对每个 atom 和 active axis，由 representative 计算出的整数 periodic wrap 必须能由 int32 表示；超出时直接报错，不进行截断或 int64 输出。暂不提供 production CPU backend、edge sorting、neighbor cap、per-edge/species cutoff、Verlet skin、CUDA Graph capture、`torch.compile`/export 或 multi-GPU dispatch。
+当前统一 API 支持 CPU/CUDA、float32/float64、同一 batch 内 mixed finite/partial/full PBC、不同 cell、active rows 线性独立的 rank-deficient cell、empty structures、有限 positions/cells、未 wrap atom representatives，以及 CUDA current stream。CPU extension 始终构建，CUDA extension 可选；CPU native search 会释放 Python GIL，但当前每个调用内部是单线程的，batched CPU 输入按 structure 顺序处理。
 
-One-shot API 每次调用都会重建 periodic search metadata，并为精确大小的输出 tensors 执行同步分配。对于 `ptr/cells/pbc/cutoff` 不变的重复构图，可复用 metadata object 可能提升性能，但安全的 ownership 与 mutation invalidation contract 尚未确定，因此没有加入隐式 cache。总 atom 数、cell-list node 数、representative wraps 和返回 shifts 均必须小于各自的 `2^31` indexing bound；超出时会直接报错。
+对每个 atom 和 active axis，由 representative 计算出的整数 periodic wrap 必须能由 int32 表示；返回 cell shift、cell-list node 和总 atom indexing 也受明确的 int32 bounds 约束，超出时直接报错，不静默截断。暂不提供 edge sorting、neighbor cap、per-edge/species cutoff、Verlet skin、prepared metadata cache、CUDA Graph capture、`torch.compile`/export 或跨 device dispatch。
+
+ELFES 当前 two-center 路径以一个 scalar broad cutoff 调 Vesin half-list，再做 species cutoff 过滤并显式加入 onsite。新 CPU backend 已满足其 geometry、uniform cutoff、periodic images 和 strict-boundary 需求，但公开 API 返回 Torch full directed graph 且排除 onsite，因此还需要一个明确的 adapter/canonicalization design；本任务刻意没有修改或接入 ELFES。
