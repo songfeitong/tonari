@@ -22,7 +22,20 @@ results = neighbor_list(
 )
 ```
 
-### Returns
+### Inputs
+
+Array inputs may be either NumPy arrays or PyTorch tensors, but they cannot be mixed in one call. PyTorch tensors must also share a device.
+
+| Argument    | Single structure | Batch          |
+| ----------- | ---------------- | -------------- |
+| `positions` | `(N, 3)`         | `(N_total, 3)` |
+| `cell`      | `(3, 3)`         | `(B, 3, 3)`    |
+| `pbc`       | `(3,)`           | `(B, 3)`       |
+| `batch_ptr` | `None`           | `(B + 1,)`     |
+
+For a Batch, concatenate all positions and use `batch_ptr` to mark structure boundaries. Here, `B` is the number of structures and `N_total` is their total number of atoms. `batch_ptr` starts at zero and ends at `N_total`; returned pairs never cross its boundaries.
+
+### Outputs
 
 `quantities` selects the returned arrays. Results are always returned as a tuple in the requested order.
 
@@ -34,21 +47,6 @@ results = neighbor_list(
 | `S` | `(E, 3)` | Integer cell shifts applied to the target atoms |
 | `d` | `(E,)` | Distances |
 | `D` | `(E, 3)` | Displacement vectors from source atoms to shifted target atoms |
-
-### Batched input
-
-For a batch, concatenate all atomic positions and use `batch_ptr` to mark structure boundaries. `cell` and `pbc` then contain one entry per structure.
-
-Here, `B` is the number of structures and `N_total` is the total number of atoms across the batch.
-
-| Argument    | Shape          |
-| ----------- | -------------- |
-| `positions` | `(N_total, 3)` |
-| `cell`      | `(B, 3, 3)`    |
-| `pbc`       | `(B, 3)`       |
-| `batch_ptr` | `(B + 1,)`     |
-
-`batch_ptr=None` denotes a single structure with `N` atoms and is equivalent to boundaries `[0, N]`. Returned pairs never cross structure boundaries.
 
 ### Options
 
@@ -94,7 +92,7 @@ edge_lengths = torch.linalg.vector_norm(edge_vectors, dim=1)
 ### NumPy with ASE
 
 ```python
-from ase.neighborlist import neighbor_list as ase_neighbor_list
+from ase.neighborlist import primitive_neighbor_list
 
 from tonari import neighbor_list
 
@@ -102,14 +100,20 @@ cutoff = 5.0
 
 source, target, cell_shifts = neighbor_list(
     "ijS",
-    atoms.positions,
-    atoms.cell.array,
-    atoms.pbc,
+    positions,
+    cell,
+    pbc,
     cutoff,
 )
 
 # Equivalent ASE search
-ase_source, ase_target, ase_cell_shifts = ase_neighbor_list("ijS", atoms, cutoff)
+ase_source, ase_target, ase_cell_shifts = primitive_neighbor_list(
+    "ijS",
+    pbc,
+    cell,
+    positions,
+    cutoff,
+)
 ```
 
 ## License
