@@ -62,17 +62,17 @@ For a Batch, concatenate all positions and use `batch_ptr` to mark structure bou
 
 ## Install from source
 
-The project currently builds compiled extensions from source and requires Python 3.11–3.14 and a C++20 compiler.
+The project currently builds compiled extensions from source and requires Python 3.11–3.14, PyTorch, and a C++20 compiler. NumPy and Torch CPU support are always built. CUDA support is built by default and requires a CUDA-enabled PyTorch installation and a local CUDA toolkit containing `nvcc`.
 
 ```bash
-# NumPy
+# NumPy, Torch CPU, and Torch CUDA (default)
 python -m pip install .
 
-# NumPy and PyTorch
-python -m pip install ".[torch]"
+# NumPy and Torch CPU only
+BUILD_CUDA=0 python -m pip install .
 ```
 
-The CUDA extension is built when both a CUDA-enabled PyTorch installation and a CUDA toolkit are available.
+The default build fails instead of silently falling back when CUDA prerequisites are unavailable. Reinstall tonari after changing the PyTorch major/minor version or CUDA runtime. See [Source builds](docs/source-builds.md) for editable installs, build metadata, and CI behavior.
 
 ## Examples
 

@@ -15,10 +15,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
-    name: Python ${{ matrix.python-version }}
+  cpu:
+    name: CPU / Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      BUILD_CUDA: "0"
     strategy:
       fail-fast: false
       matrix:
@@ -59,6 +61,34 @@ jobs:
       - name: Check Markdown formatting
         if: matrix.python-version == '3.12'
         run: npx --yes prettier@3.8.3 --check --prose-wrap never '**/*.md'
+
+      - name: Run tests
+        run: uv run pytest -q -m "not cuda"
+
+  cuda:
+    name: CUDA
+    if: vars.TONARI_CUDA_RUNNER == 'true'
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - cuda
+    timeout-minutes: 45
+    env:
+      BUILD_CUDA: "1"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v8.2.0
+        with:
+          version: "0.11.29"
+          enable-cache: true
+
+      - name: Install project
+        run: uv sync --locked --group dev --python 3.12
 
       - name: Run tests
         run: uv run pytest -q

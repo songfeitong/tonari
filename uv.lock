@@ -1192,10 +1192,6 @@ source = { editable = "." }
 dependencies = [
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "numpy", version = "2.5.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
-]
-
-[package.optional-dependencies]
-torch = [
     { name = "torch" },
 ]
 
@@ -1207,16 +1203,14 @@ dev = [
     { name = "ase" },
     { name = "pytest" },
     { name = "ruff" },
-    { name = "torch" },
     { name = "vesin" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "numpy", specifier = ">=2.0" },
-    { name = "torch", marker = "extra == 'torch'", specifier = "==2.12.1" },
+    { name = "torch", specifier = "==2.12.1" },
 ]
-provides-extras = ["torch"]
 
 [package.metadata.requires-dev]
 data = [{ name = "pyarrow", specifier = "==25.0.0" }]
@@ -1224,7 +1218,6 @@ dev = [
     { name = "ase", specifier = "==3.29.0" },
     { name = "pytest", specifier = "==9.1.1" },
     { name = "ruff" },
-    { name = "torch", specifier = "==2.12.1" },
     { name = "vesin", specifier = "==0.6.1" },
 ]
 

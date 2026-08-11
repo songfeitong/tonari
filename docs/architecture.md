@@ -81,4 +81,6 @@ csrc/
 
 当前包名只出现在 distribution metadata、Python import path 和用户文档中；native namespace、算法对象、错误信息与源码注释使用中性术语。因此以后即使更换项目名，也不需要重命名整个算法实现。
 
-正式 wheel 如何组合 NumPy、Torch 和不同 CUDA 版本尚未决定，但运行时边界已经清楚：NumPy CPU、Torch CPU 和 Torch CUDA 是三个 provider，共享一个公共契约。未来增加新 provider 或 prepared search 时，应继续遵守这一边界，而不是扩大公共 API 对内部实现的了解。
+当前源码构建保持一个 `tonari` distribution。NumPy CPU 与 Torch CPU providers 始终构建；Torch CUDA 默认构建，并可通过 `BUILD_CUDA=0` 明确关闭。构建不会因环境探测失败而静默降级。每次构建记录 Torch、CUDA 和 provider 信息，provider loader 在导入 native extension 前检查兼容性。安装命令和精确行为见[源码构建](source-builds.md)。
+
+正式 wheel 的构建与发布策略尚未决定，但不需要为此提前改变公共 API 或 framework-neutral core。未来增加新 provider 或 prepared search 时，应继续遵守现有边界，而不是扩大公共 API 对内部实现的了解。

@@ -4,6 +4,7 @@ cache/
 dist/
 *.egg-info/
 *.so
+src/tonari/_build_info.py
 __pycache__/
 .pytest_cache/
 .ruff_cache/

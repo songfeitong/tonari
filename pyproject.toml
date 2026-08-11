@@ -8,10 +8,8 @@ license = "MIT"
 license-files = ["LICENSE"]
 dependencies = [
   "numpy>=2.0",
+  "torch==2.12.1",
 ]
-
-[project.optional-dependencies]
-torch = ["torch==2.12.1"]
 
 [build-system]
 requires = [
@@ -30,7 +28,6 @@ dev = [
   "ase==3.29.0",
   "pytest==9.1.1",
   "ruff",
-  "torch==2.12.1",
   "vesin==0.6.1",
 ]
 

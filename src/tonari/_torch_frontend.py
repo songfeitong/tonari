@@ -138,15 +138,15 @@ def neighbor_list_torch(
         try:
             backend = load_torch_cuda()
         except ImportError as error:
-            raise RuntimeError(
-                "the CUDA extension is not built; install with a CUDA toolkit"
-            ) from error
+            raise RuntimeError(f"the CUDA provider is unavailable: {error}") from error
         arguments += (sorted,)
     else:
         try:
             backend = load_torch_cpu()
         except ImportError as error:
-            raise RuntimeError("the Torch CPU extension is not built") from error
+            raise RuntimeError(
+                f"the Torch CPU provider is unavailable: {error}"
+            ) from error
     pair_indices, cell_shifts = backend.neighbor_list(*arguments)
     return _select_torch_quantities(
         quantities, positions, cell, batch_ptr, pair_indices, cell_shifts
