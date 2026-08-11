@@ -1,6 +1,6 @@
 # Benchmark
 
-本文回答三个问题：结果是否与独立实现一致、常见真实 workload 中的端到端成本是多少、体系变大后性能如何变化。这里保留足以理解结论的结果；完整 samples、环境、revision 和 binary/data hashes 位于 `benchmarks/results/*.json`。
+本文回答三个问题：结果是否与独立实现一致、常见真实 workload 中的端到端成本是多少、体系变大后性能如何变化。这里保留足以理解结论的结果；完整统计、环境、revision 和 binary/data hashes 位于 `benchmarks/results/*.json`。
 
 ## 统一测量口径
 
@@ -8,7 +8,7 @@
 
 CPU 固定为单核、单线程，Vesin 复用同一个 `NeighborList` 且关闭 sorting。CUDA 以真实 PyTorch batch 调用本项目；Vesin 的公开接口一次处理一个 structure，因此 baseline 在 batch 内逐结构调用并拼接。Dense PyTorch baseline 直接构造 `N²` 或 `N² × images` candidates，只在内存可控的 representative workloads 上运行。
 
-计时排除数据读取和 H2D，包含公开 one-shot API 的输入处理、native geometry/search、必要分配与同步。每项均 warmup 并重复测量，表中报告 median。CPU frequency policy、软件版本和原始 samples 由正式 JSON 记录。
+计时排除数据读取和 H2D，包含公开 one-shot API 的输入处理、native geometry/search、必要分配与同步。每项均 warmup 并重复测量，表中报告 median。CPU frequency policy、软件版本和计时统计由正式 JSON 记录。
 
 ## 周期晶体：matbench_mp_e_form
 
@@ -24,14 +24,14 @@ CPU 与 CUDA 在全部 1,536 个 structures、2,780,158 个 pair keys 上与 Ves
 
 | Workload | Atoms | Pairs | tonari | Vesin reused | Vesin / tonari |
 | --- | --: | --: | --: | --: | --: |
-| 1,536-structure epoch | 75,238 | 2,780,158 | 143.999 ms | 248.459 ms | 1.73× |
-| 真实结构，1×1×1 | 64 | 744 | 0.0419 ms | 0.0454 ms | 1.08× |
-| 派生 supercell，2×2×2 | 512 | 5,952 | 0.2379 ms | 0.2296 ms | 0.97× |
-| 派生 supercell，3×3×3 | 1,728 | 20,088 | 1.1043 ms | 0.7152 ms | 0.65× |
-| 派生 supercell，4×4×4 | 4,096 | 47,616 | 2.9374 ms | 1.6503 ms | 0.56× |
-| 派生 supercell，8×8×8 | 32,768 | 380,928 | 24.0689 ms | 13.0912 ms | 0.54× |
+| 1,536-structure epoch | 75,238 | 2,780,158 | 126.457 ms | 247.577 ms | 1.96× |
+| 真实结构，1×1×1 | 64 | 744 | 0.0361 ms | 0.0450 ms | 1.24× |
+| 派生 supercell，2×2×2 | 512 | 5,952 | 0.2285 ms | 0.2298 ms | 1.01× |
+| 派生 supercell，3×3×3 | 1,728 | 20,088 | 1.1557 ms | 0.7194 ms | 0.62× |
+| 派生 supercell，4×4×4 | 4,096 | 47,616 | 3.0518 ms | 1.6634 ms | 0.55× |
+| 派生 supercell，8×8×8 | 32,768 | 380,928 | 24.9314 ms | 13.2429 ms | 0.53× |
 
-真实 epoch 由大量小结构组成，本项目的低固定成本占优。约 512 atoms 进入当前机器的 crossover，之后 Vesin 的成熟 CPU cell list 更快；32,768 原子时 Vesin 约快 1.84×。这说明本项目适合常见小结构与 one-shot calls，但不能解释为所有尺度上的 CPU cell-list 优势。
+真实 epoch 由大量小结构组成，本项目的低固定成本占优。约 512 atoms 进入当前机器的 crossover，之后 Vesin 的成熟 CPU cell list 更快；32,768 原子时 Vesin 约快 1.88×。这说明本项目适合常见小结构与 one-shot calls，但不能解释为所有尺度上的 CPU cell-list 优势。
 
 ### CUDA
 
@@ -39,12 +39,12 @@ CPU 与 CUDA 在全部 1,536 个 structures、2,780,158 个 pair keys 上与 Ves
 
 | Workload | Atoms | tonari | Vesin/structure | Dense PyTorch |
 | --- | --: | --: | --: | --: |
-| 1,536-structure epoch | 75,238 | 12.107 ms | 494.393 ms | — |
-| Median 32-structure batch | 1,126 | 0.2252 ms | 9.2855 ms | 42.7812 ms |
-| 真实结构，1×1×1 | 64 | 0.0969 ms | 0.3733 ms | 0.6898 ms |
-| 派生 supercell，2×2×2 | 512 | 0.1444 ms | 0.6293 ms | 6.6022 ms |
-| 派生 supercell，3×3×3 | 1,728 | 0.1442 ms | 0.8262 ms | 73.1652 ms |
-| 派生 supercell，8×8×8 | 32,768 | 0.2539 ms | 1.4912 ms | skipped |
+| 1,536-structure epoch | 75,238 | 10.706 ms | 456.085 ms | — |
+| Median 32-structure batch | 1,126 | 0.1943 ms | 8.9252 ms | 42.7491 ms |
+| 真实结构，1×1×1 | 64 | 0.0773 ms | 0.2876 ms | 0.6895 ms |
+| 派生 supercell，2×2×2 | 512 | 0.1175 ms | 0.2762 ms | 6.6082 ms |
+| 派生 supercell，3×3×3 | 1,728 | 0.1204 ms | 0.2874 ms | 73.1263 ms |
+| 派生 supercell，8×8×8 | 32,768 | 0.2119 ms | 0.6132 ms | skipped |
 
 CUDA 的主要优势来自整个 batch 一次进入 native pipeline。Vesin baseline 的单结构 API 需要逐结构调用；dense baseline 则会 materialize 大量 candidate tensors。二者与本项目代表了不同的执行模型，因此表格既是性能比较，也是 batching strategy 的比较。
 
@@ -62,23 +62,23 @@ CPU 与 CUDA 在全部 8,192 个分子、15,144,842 个 pair keys 上与 Vesin e
 
 | Workload | Structures | Atoms | Pairs | tonari | Vesin reused |
 | --- | --: | --: | --: | --: | --: |
-| Population epoch | 4,096 | 226,648 | 5,320,936 | 169.700 ms | 169.554 ms |
-| Size-balanced epoch | 4,096 | 339,795 | 9,823,906 | 303.687 ms | 281.308 ms |
-| 4–10 heavy atoms | 512 | 9,096 | 138,600 | 9.917 ms | 11.868 ms |
-| 31–40 heavy atoms | 512 | 31,782 | 766,106 | 22.943 ms | 22.666 ms |
-| 81–100 heavy atoms | 512 | 90,409 | 3,051,622 | 92.743 ms | 77.884 ms |
+| Population epoch | 4,096 | 226,648 | 5,320,936 | 133.910 ms | 174.752 ms |
+| Size-balanced epoch | 4,096 | 339,795 | 9,823,906 | 247.193 ms | 286.736 ms |
+| 4–10 heavy atoms | 512 | 9,096 | 138,600 | 5.127 ms | 12.359 ms |
+| 31–40 heavy atoms | 512 | 31,782 | 766,106 | 18.769 ms | 23.257 ms |
+| 81–100 heavy atoms | 512 | 90,409 | 3,051,622 | 74.421 ms | 79.295 ms |
 
-自然分布的 population epoch 中二者基本打平。4–30-heavy-atom bins 由本项目领先，31–40 附近进入 crossover，之后 Vesin 逐渐占优。Finite molecules 因而给出了与晶体 scaling 一致的 CPU 结论，而不依赖人工随机点或手工晶体。
+本项目在两个 epoch 和所有 size bins 中均不慢于 Vesin；优势随分子变大而收窄，50 个以上 heavy atoms 时基本接近。QMugs 最大结构仍只有 221 atoms，因此它没有进入晶体 supercell workload 中 Vesin 明显占优的大体系区间。
 
 ### CUDA
 
 | Workload | Atoms | Pairs | tonari | Vesin/structure | Dense PyTorch |
 | --- | --: | --: | --: | --: | --: |
-| Population epoch，bs=8 | 226,648 | 5,320,936 | 44.065 ms | 908.543 ms | — |
-| Population epoch，bs=64 | 226,648 | 5,320,936 | 6.396 ms | 905.611 ms | — |
-| Population epoch，bs=128 | 226,648 | 5,320,936 | 3.844 ms | 904.720 ms | — |
-| Population representative batch | 3,494 | 80,992 | 0.1054 ms | 13.9742 ms | 0.2981 ms |
-| 81–100-heavy-atom batch | 11,409 | 384,320 | 0.1362 ms | 15.8172 ms | 0.7736 ms |
+| Population epoch，bs=8 | 226,648 | 5,320,936 | 37.522 ms | 906.184 ms | — |
+| Population epoch，bs=64 | 226,648 | 5,320,936 | 5.015 ms | 903.370 ms | — |
+| Population epoch，bs=128 | 226,648 | 5,320,936 | 2.848 ms | 900.984 ms | — |
+| Population representative batch | 3,494 | 80,992 | 0.0828 ms | 13.9544 ms | 0.2989 ms |
+| 81–100-heavy-atom batch | 11,409 | 384,320 | 0.1192 ms | 16.4433 ms | 0.7914 ms |
 
 这些分子最多 221 atoms，因此 CUDA 主要展示 batch amortization，而不是单个巨大分子的 scaling。随着 batch size 增大，native calls 从数百次降到数十次；Vesin 仍需逐结构执行，因此总时间基本不随 batch size 改变。
 
@@ -88,8 +88,8 @@ CPU 与 CUDA 在全部 8,192 个分子、15,144,842 个 pair keys 上与 Vesin e
 
 | CPU mode      |   Pairs |   Output |    tonari |     Vesin |        ASE |
 | ------------- | ------: | -------: | --------: | --------: | ---------: |
-| Full，no self | 505,336 | 14.15 MB | 27.591 ms | 44.126 ms | 697.183 ms |
-| Half，no self | 252,668 |  7.07 MB | 24.247 ms | 43.031 ms | 527.276 ms |
+| Full，no self | 505,336 | 14.15 MB | 23.099 ms | 44.532 ms | 703.616 ms |
+| Half，no self | 252,668 |  7.07 MB | 21.375 ms | 43.301 ms | 532.243 ms |
 
 Half list 把 pair count 和 output bytes 精确减半，说明它是 native candidate policy，而不是 Python 后处理。ASE 在这里主要承担独立 correctness reference 的角色，没有参与 32,768-atom scaling benchmark。
 

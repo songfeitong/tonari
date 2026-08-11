@@ -28,6 +28,8 @@ CPU 与 CUDA 共享 active-cell geometry、image range 和 pair identity，但�
 
 公共入口收敛为 `neighbor_list(quantities, positions, cell, pbc, cutoff, batch_ptr=None)`。`quantities` 采用 `i/j/P/S/d/D` 字符串协议，native pair indices 使用 `(E, 2)` edge-first 布局；PyG adapter 在边界转置为 `(2, E)`。`batch_ptr` 专指拼接 structures 的边界，可直接接收 PyG `Batch.ptr`，并与内部 image、bin 和 pair offsets 区分。单结构与 batch、finite 与 periodic geometry 使用同一模型，旧接口不保留 alias。
 
+迁移后重新运行 Matbench、QMugs 与 pair-option benchmark。CPU、CUDA、Vesin 和可运行的独立 dense/ASE references 仍在对应 workload 上 exact match；edge-first output 没有引入性能回归。
+
 NumPy 与 PyTorch 使用同一个 public function。随后项目进一步拆出 NumPy frontend、Torch frontend、独立 bindings 与 framework-neutral C++ core，使 NumPy CPU 不再借道 Tensor 或 LibTorch。CUDA 所需 metadata 和 schedule 也从 Python 收回 native provider。
 
 这次重构确立了当前依赖方向：public API 只做 dispatch，frontend 处理数组生态，binding/provider 处理 native ownership，core 负责共享物理语义与 CPU search。
@@ -36,7 +38,7 @@ NumPy 与 PyTorch 使用同一个 public function。随后项目进一步拆出 
 
 周期晶体不能代表有限分子，因此项目选择 QMugs 而不是更小的 QM9。准备脚本从每个 ChEMBL 分子的 conformers 中确定性选择一个最低能结构，再构造自然分布和 size-balanced 两组互不重叠的 4,096-molecule samples。
 
-结果显示 CPU 在自然分子分布上与 Vesin 基本打平，小分子区间领先、大分子区间逐渐落后；CUDA 的主要收益仍来自 batch amortization。这个趋势与 Matbench supercell scaling 一致，也明确了项目并不追求所有尺度上的 CPU 优势。
+更新后的结果显示 CPU 在 QMugs 两个 epoch 中领先 Vesin，优势随分子变大而收窄；CUDA 的主要收益仍来自 batch amortization。QMugs 最大结构尚未进入 Matbench supercell 中 Vesin 明显占优的大体系区间，项目仍不追求所有尺度上的 CPU 优势。
 
 ## 2026-08-10：原生 half list 与 zero-shift self
 

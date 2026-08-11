@@ -33,7 +33,7 @@ Array inputs may be either NumPy arrays or PyTorch tensors, but they cannot be m
 | `pbc`       | `(3,)`           | `(B, 3)`       |
 | `batch_ptr` | `None`           | `(B + 1,)`     |
 
-For a Batch, concatenate all positions and use `batch_ptr` to mark structure boundaries. Here, `B` is the number of structures and `N_total` is their total number of atoms. `batch_ptr` starts at zero and ends at `N_total`; returned pairs never cross its boundaries.
+For a Batch, concatenate all positions and use `batch_ptr` to mark structure boundaries. Here, `N` is the number of atoms in one structure, `B` is the number of structures, and `N_total` is their total number of atoms. `batch_ptr` starts at zero and ends at `N_total`; returned pairs never cross its boundaries.
 
 ### Outputs
 
