@@ -4,7 +4,7 @@
 
 ## 最终结论
 
-当前公开 API、NumPy/Torch CPU、Torch CUDA、exhaustive/cell-list paths、full/half/self policy 和真实数据 benchmark 均完成独立复核，未留下已确认的 correctness blocker。
+当前 `neighbor_list` API、NumPy/Torch CPU、Torch CUDA、exhaustive/cell-list paths、full/half/self policy 和真实数据 benchmark 均完成独立复核，未留下已确认的 correctness blocker。
 
 审查重点始终是核心代码和公共语义，而不是把毫秒级波动、文档措辞或大型数据下载过程当作发布级安全审计。Reviewer 的职责是寻找能够改变 pair identity、破坏 API 一致性、造成资源失控或推翻主要性能结论的问题。
 
@@ -19,6 +19,8 @@ Full/half/self 四种组合在 NumPy、Torch CPU、Torch CUDA、内部 reference
 - Half pairs 补 reverse 后恢复 full pairs。
 - Exhaustive 与 cell-list crossover 不改变 strict-cutoff identity。
 - 用原始 positions 和 output shift 重建的 displacement 满足公共公式。
+
+本次 API 迁移还独立检查了 `i/j/P/S/d/D` 的任意选择、顺序与重复，确认 edge-first `P` 在三条执行路径中均为 `(E, 2)`，Batch displacement 使用所属 structure 的 cell，Torch `d/D` 在固定 neighbor identity 下保留梯度。完整测试为 127 passed；额外 144 组随机 differential 在 NumPy CPU、Torch CPU、Torch CUDA 与 exhaustive reference 间 exact match。
 
 ## 真实数据证据
 
