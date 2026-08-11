@@ -40,7 +40,7 @@ def git_worktree_is_clean(path: Path) -> bool:
 
 def canonical_keys(output: tuple[Tensor, Tensor]) -> np.ndarray:
     pair_indices, shifts = output
-    keys = torch.cat((pair_indices.T, shifts.to(torch.int64)), dim=1).cpu().numpy()
+    keys = torch.cat((pair_indices, shifts.to(torch.int64)), dim=1).cpu().numpy()
     if len(keys) == 0:
         return keys
     order = np.lexsort(tuple(keys[:, column] for column in range(4, -1, -1)))

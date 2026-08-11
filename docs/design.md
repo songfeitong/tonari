@@ -5,9 +5,10 @@
 ## 公共接口
 
 ```python
-pair_indices, cell_shifts = find_neighbors(
+results = neighbor_list(
+    quantities,
     positions,
-    cells,
+    cell,
     pbc,
     cutoff,
     batch_ptr=None,
@@ -20,34 +21,45 @@ pair_indices, cell_shifts = find_neighbors(
 单结构输入：
 
 - `positions`: `(N, 3)`
-- `cells`: `(3, 3)`
+- `cell`: `(3, 3)`
 - `pbc`: `(3,)`
 - `batch_ptr=None`
 
 Batch 输入：
 
 - `positions`: `(N_total, 3)`，按 structure 拼接
-- `cells`: `(B, 3, 3)`
+- `cell`: `(B, 3, 3)`
 - `pbc`: `(B, 3)`
 - `batch_ptr`: `(B + 1,)`
 
 `batch_ptr` 从零开始、非递减，最后一个值等于 `N_total`。相邻的相同值表示 empty structure；`batch_ptr=None` 等价于单结构边界 `[0, N]`。
 
-NumPy 与 Torch 使用同一个函数，所有 array 参数必须属于同一生态。NumPy 只走 CPU；Torch 根据 `positions.device` 选择 CPU 或 CUDA。`positions` 和 `cells` 必须使用相同的 `float32` 或 `float64` dtype，`pbc` 为 bool，`batch_ptr` 为 int64；Torch arrays 还必须位于同一 device。
+NumPy 与 Torch 使用同一个函数，所有 array 参数必须属于同一生态。NumPy 只走 CPU；Torch 根据 `positions.device` 选择 CPU 或 CUDA。`positions` 和 `cell` 必须使用相同的 `float32` 或 `float64` dtype，`pbc` 为 bool，`batch_ptr` 为 int64；Torch arrays 还必须位于同一 device。
 
-函数与具体长度单位无关，但 `positions`、`cells` 和 `cutoff` 必须使用同一单位。`cutoff` 必须有限且为正数。
+函数与具体长度单位无关，但 `positions`、`cell` 和 `cutoff` 必须使用同一单位。`cutoff` 必须有限且为正数。
 
-## 输出与方向
+## Quantities、输出与方向
 
-`pair_indices` 是 int64、形状 `(2, P)`；`source, target = pair_indices`。`cell_shifts` 是 int32、形状 `(P, 3)`，表示施加在 target image 上的整数晶胞平移。
+`quantities` 是必填字符串。每个字符选择一个返回 array，tuple 中的顺序与字符串一致；重复字符会产生重复位置，空字符串返回空 tuple，未知字符报错。设找到 `E` 个 pairs：
+
+| 字符 | dtype | shape | 含义 |
+| --- | --- | --- | --- |
+| `i` | int64 | `(E,)` | source atom indices |
+| `j` | int64 | `(E,)` | target atom indices |
+| `P` | int64 | `(E, 2)` | 每行一个 `(source, target)` pair |
+| `S` | int32 | `(E, 3)` | 施加在 target image 上的整数 cell shifts |
+| `d` | input float | `(E,)` | distances |
+| `D` | input float | `(E, 3)` | source 指向 shifted target 的 displacement vectors |
+
+所有返回值都属于输入的 array 生态；Torch 结果还保持输入 device。`P` 采用 edge-first 布局，使它与 `S`、`d`、`D` 在第一维逐 pair 对齐。PyG/GNN adapter 应使用 `edge_index = P.T.contiguous()`，核心 API 不返回 `(2, E)` graph layout。
 
 Cell vectors 按行存储。单结构中 pair `k` 的 displacement 为：
 
 ```text
-positions[target[k]] - positions[source[k]] + cell_shifts[k] @ cells
+positions[target[k]] - positions[source[k]] + S[k] @ cell
 ```
 
-Batch 中先由 `batch_ptr` 确定 pair 所属 structure `b`，再使用 `cells[b]`。Pairs 不会跨 structure 产生，inactive PBC axes 上的 shift 必须为零。
+Batch 中先由 `batch_ptr` 确定 pair 所属 structure `b`，再使用 `cell[b]`。Pairs 不会跨 structure 产生，inactive PBC axes 上的 shift 必须为零。
 
 结果只包含 squared distance 严格小于 `cutoff**2` 的 atom-image pairs。输出顺序没有保证，调用者不能把 backend 当前遍历顺序当作接口契约。
 
@@ -67,11 +79,11 @@ Batch 中先由 `batch_ptr` 确定 pair 所属 structure `b`，再使用 `cells[
 
 输入 positions 不要求 wrap。内部搜索可以把 representatives 移入 active periodic cell，但返回 shift 必须补偿这次变换，使原始 positions 按公共 displacement 公式得到相同的物理 vectors。Representative wraps 与最终 output shifts 必须可由 int32 表示，差值计算使用更宽的 intermediate 并在输出前检查。
 
-Positions 和 cells 必须有限。非空 structure 的 active rows、periodic image 数、atom indexing 和 backend allocations 还必须落在当前实现可安全表示的范围内；超限必须报错或选择安全 fallback，不能静默截断。
+Positions 和 cell 必须有限。非空 structure 的 active rows、periodic image 数、atom indexing 和 backend allocations 还必须落在当前实现可安全表示的范围内；超限必须报错或选择安全 fallback，不能静默截断。
 
 ## 共享 geometry 与 pair policy
 
-Framework-neutral C++ core 根据 cells、pbc、atom counts 和 cutoff 建立 active duals 与必要的 periodic image ranges。它不要求求逆完整 cell，因此 rank-1、rank-2 和 full-periodic geometry 使用同一条路径。Empty structure 在几何准备阶段直接短路。
+Framework-neutral C++ core 根据 cell、pbc、atom counts 和 cutoff 建立 active duals 与必要的 periodic image ranges。它不要求求逆完整 cell，因此 rank-1、rank-2 和 full-periodic geometry 使用同一条路径。Empty structure 在几何准备阶段直接短路。
 
 Pair 方向、zero-shift self 和 canonical half rule 属于共享 policy。CPU 与 CUDA 可以采用不同的 broad phase 和数据布局，但最终 acceptance 必须服从同一个公共 displacement、strict cutoff 和 pair identity。
 
@@ -87,7 +99,7 @@ CPU core 不创建内部 thread pool，并在 native search 期间释放 Python 
 
 CUDA provider 一次接收完整 batch。小结构使用 fused exhaustive path，大结构使用 batched cell list；选择依据是内部性能策略。
 
-所有 CUDA tasks 都携带 structure segmentation，geometry、image insertion、query 和 output 只在所属 structure 内执行。Kernels 使用 PyTorch current stream 和当前 device；不同 cells、PBC patterns 与 atom counts 可以存在于同一 batch。
+所有 CUDA tasks 都携带 structure segmentation，geometry、image insertion、query 和 output 只在所属 structure 内执行。Kernels 使用 PyTorch current stream 和当前 device；不同 cell、PBC patterns 与 atom counts 可以存在于同一 batch。
 
 正常 well-wrapped input 使用 batched cell list。大规模未 wrap representatives 为保持原始坐标公式的浮点语义，可能回退到 exhaustive path，因此这类输入不保证 cell-list complexity。
 
@@ -95,7 +107,7 @@ CUDA provider 一次接收完整 batch。小结构使用 fused exhaustive path�
 
 NumPy CPU 与 Torch CPU 通过不同的 binding 调用同一个 C++ search core。NumPy 路径不导入或链接 LibTorch；Torch CUDA 使用独立 provider。Frontend 只在 dtype、device 或 contiguous-memory 要求需要时整理输入，不实现第二套 search。
 
-返回 arrays 由对应 provider 创建。Neighbor identity 是离散结果，不参与 autograd。Torch 输入可以设置 `requires_grad=True`，但搜索会 detach geometry；调用方应使用原始浮点 tensors 和返回的整数 arrays 重建 displacements，从而在固定 neighbor identity 下对连续几何求导。
+Native provider 生成 edge-first `P` 与 `S`；frontend 按 `quantities` 选择 `i/j/P/S`，并在需要时用原始 positions 与 cell 计算 `d/D`。Neighbor identity 是离散结果，不参与 autograd；Torch 的 `d/D` 在固定 neighbor identity 下保持对原始浮点 tensors 的梯度。
 
 ## Reference 与验证原则
 
@@ -105,4 +117,4 @@ NumPy CPU 与 Torch CPU 通过不同的 binding 调用同一个 C++ search core�
 
 ## 暂不支持
 
-当前不提供 pair sorting、neighbor cap、species-dependent cutoff、Verlet skin、prepared metadata/workspace、CUDA Graph capture、`torch.compile`/export contract 或 GNN/PyG adapter。未来 adapter 应在边界把 `pair_indices` 映射为 `edge_index`，把按公共公式重建的 displacements 映射为 `edge_vectors`，而不是把 graph 专属术语引入核心 API。
+当前不提供 pair sorting、neighbor cap、species-dependent cutoff、Verlet skin、prepared metadata/workspace、CUDA Graph capture、`torch.compile`/export contract 或 GNN/PyG adapter。未来 adapter 应在边界把 `P` 转置为 `edge_index`，把 `D` 映射为 `edge_vectors`，而不是把 graph 专属术语引入核心 API。

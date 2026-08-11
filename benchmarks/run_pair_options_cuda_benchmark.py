@@ -22,7 +22,7 @@ from benchmarks.matbench_data import MatbenchStructureDataset
 from benchmarks.pair_option_backends import PairOptions
 from benchmarks.run_cuda_benchmark import load_gpu_batches
 from benchmarks.structure_data import StructureBatch
-from tonari import find_neighbors
+from tonari import neighbor_list
 from tonari._extensions import load_torch_cuda
 
 CUDA_EXTENSION = load_torch_cuda()
@@ -31,9 +31,10 @@ CUDA_EXTENSION = load_torch_cuda()
 def call_production(
     batch: StructureBatch, cutoff: float, options: PairOptions
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    return find_neighbors(
+    return neighbor_list(
+        "PS",
         batch.positions,
-        batch.cells,
+        batch.cell,
         batch.pbc,
         cutoff,
         batch.batch_ptr,
@@ -76,7 +77,7 @@ def validate_modes(batches: list[StructureBatch], cutoff: float) -> dict[str, ob
         vesin = key_set(
             vesin_gpu_batch(
                 batch.positions,
-                batch.cells,
+                batch.cell,
                 batch.pbc,
                 cutoff,
                 batch.batch_ptr,
@@ -115,7 +116,7 @@ def measure_mode(
         current_bytes = 0
         for batch in batches:
             pair_indices, cell_shifts = call_production(batch, cutoff, options)
-            current_pairs += pair_indices.shape[1]
+            current_pairs += pair_indices.shape[0]
             current_bytes += pair_indices.numel() * pair_indices.element_size()
             current_bytes += cell_shifts.numel() * cell_shifts.element_size()
         torch.cuda.synchronize()

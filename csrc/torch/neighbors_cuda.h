@@ -6,10 +6,10 @@
 #include <vector>
 
 
-std::vector<torch::Tensor> find_neighbors_cuda_exhaustive(
+std::vector<torch::Tensor> neighbor_list_cuda_exhaustive(
     const torch::Tensor& positions,
     const torch::Tensor& batch_ptr,
-    const torch::Tensor& cells,
+    const torch::Tensor& cell,
     const torch::Tensor& duals,
     const torch::Tensor& image_shifts,
     const torch::Tensor& image_offsets,
@@ -19,10 +19,10 @@ std::vector<torch::Tensor> find_neighbors_cuda_exhaustive(
     bool half_list,
     bool include_self);
 
-std::vector<torch::Tensor> find_neighbors_cuda_cell(
+std::vector<torch::Tensor> neighbor_list_cuda_cell(
     const torch::Tensor& positions,
     const torch::Tensor& batch_ptr,
-    const torch::Tensor& cells,
+    const torch::Tensor& cell,
     const torch::Tensor& duals,
     const torch::Tensor& image_shifts,
     const torch::Tensor& image_offsets,

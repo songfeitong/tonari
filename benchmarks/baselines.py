@@ -15,7 +15,7 @@ def vesin_gpu_neighbor_list(cutoff: float) -> NeighborList:
 
 def vesin_gpu_batch(
     positions: Tensor,
-    cells: Tensor,
+    cell: Tensor,
     pbc: Tensor,
     cutoff: float,
     batch_ptr: Tensor,
@@ -28,22 +28,25 @@ def vesin_gpu_batch(
     cell_shifts = []
     for batch_index, (start, stop) in enumerate(pairwise(batch_ptr_cpu)):
         first, second, shifts = neighbor_list.compute(
-            positions[start:stop], cells[batch_index], pbc[batch_index], "ijS"
+            positions[start:stop], cell[batch_index], pbc[batch_index], "ijS"
         )
         pair_indices.append(
-            torch.stack((first.to(torch.int64) + start, second.to(torch.int64) + start))
+            torch.stack(
+                (first.to(torch.int64) + start, second.to(torch.int64) + start),
+                dim=1,
+            )
         )
         cell_shifts.append(shifts)
     if not pair_indices:
         return (
-            torch.empty((2, 0), dtype=torch.int64, device=positions.device),
+            torch.empty((0, 2), dtype=torch.int64, device=positions.device),
             torch.empty((0, 3), dtype=torch.int32, device=positions.device),
         )
-    return torch.cat(pair_indices, dim=1), torch.cat(cell_shifts, dim=0)
+    return torch.cat(pair_indices, dim=0), torch.cat(cell_shifts, dim=0)
 
 
 def dense_candidate_count(
-    batch_ptr: Tensor, cells: Tensor, pbc: Tensor, cutoff: float
+    batch_ptr: Tensor, cell: Tensor, pbc: Tensor, cutoff: float
 ) -> int:
     counts = (batch_ptr[1:] - batch_ptr[:-1]).to(torch.int64)
     if not torch.any(pbc):
@@ -52,7 +55,7 @@ def dense_candidate_count(
         raise ValueError(
             "the dense baseline requires uniformly finite or full-PBC data"
         )
-    reciprocal_norms = torch.linalg.vector_norm(torch.linalg.inv(cells), dim=1)
+    reciprocal_norms = torch.linalg.vector_norm(torch.linalg.inv(cell), dim=1)
     maximum_repeats = torch.ceil(cutoff * reciprocal_norms).to(torch.int64).amax(dim=0)
     n_images = int(torch.prod(2 * maximum_repeats + 1).cpu())
     return int(torch.sum(counts * counts).cpu()) * n_images
@@ -61,7 +64,7 @@ def dense_candidate_count(
 @torch.no_grad()
 def torch_dense_batch(
     positions: Tensor,
-    cells: Tensor,
+    cell: Tensor,
     pbc: Tensor,
     cutoff: float,
     batch_ptr: Tensor,
@@ -95,7 +98,7 @@ def torch_dense_batch(
         source = source[mask]
         target = target[mask]
         return (
-            torch.stack((source, target)),
+            torch.stack((source, target), dim=1),
             torch.zeros((source.shape[0], 3), dtype=torch.int32, device=device),
         )
     if not torch.all(pbc):
@@ -103,14 +106,14 @@ def torch_dense_batch(
             "the dense baseline requires uniformly finite or full-PBC data"
         )
 
-    reciprocal = torch.linalg.inv(cells)
+    reciprocal = torch.linalg.inv(cell)
     atom_batch = torch.repeat_interleave(
         torch.arange(len(counts), device=device), counts
     )
     fractional = torch.einsum("ai,aij->aj", positions, reciprocal[atom_batch])
     atom_wraps = torch.floor(fractional).to(torch.int64)
     wrapped_positions = positions - torch.einsum(
-        "ai,aij->aj", atom_wraps.to(positions.dtype), cells[atom_batch]
+        "ai,aij->aj", atom_wraps.to(positions.dtype), cell[atom_batch]
     )
 
     reciprocal_norms = torch.linalg.vector_norm(reciprocal, dim=1)
@@ -133,11 +136,11 @@ def torch_dense_batch(
         wrapped_positions[target]
         - wrapped_positions[source]
         + torch.einsum(
-            "ei,eij->ej", wrapped_shifts.to(positions.dtype), cells[pair_structure]
+            "ei,eij->ej", wrapped_shifts.to(positions.dtype), cell[pair_structure]
         )
     )
     mask = torch.sum(displacements * displacements, dim=1) < cutoff * cutoff
     mask &= ~((source == target) & torch.all(output_shifts == 0, dim=1))
-    return torch.stack((source[mask], target[mask])), output_shifts[mask].to(
+    return torch.stack((source[mask], target[mask]), dim=1), output_shifts[mask].to(
         torch.int32
     )

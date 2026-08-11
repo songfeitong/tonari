@@ -7,17 +7,18 @@ import pytest
 import torch
 
 import tonari
-from tonari import find_neighbors
+from tonari import neighbor_list
 
 
 def pair_keys(output: tuple[torch.Tensor, torch.Tensor]) -> set[tuple[int, ...]]:
     pair_indices, cell_shifts = output
-    rows = torch.cat((pair_indices.T, cell_shifts.to(torch.int64)), dim=1)
+    rows = torch.cat((pair_indices, cell_shifts.to(torch.int64)), dim=1)
     return {tuple(row) for row in rows.cpu().tolist()}
 
 
-def test_public_surface_contains_only_find_neighbors() -> None:
-    assert tonari.__all__ == ["find_neighbors"]
+def test_public_surface_contains_only_neighbor_list() -> None:
+    assert tonari.__all__ == ["neighbor_list"]
+    assert not hasattr(tonari, "find_neighbors")
 
 
 def test_version_matches_distribution_metadata() -> None:
@@ -25,7 +26,14 @@ def test_version_matches_distribution_metadata() -> None:
 
 
 def test_pair_options_are_keyword_only_and_default_to_existing_behavior() -> None:
-    signature = inspect.signature(find_neighbors)
+    signature = inspect.signature(neighbor_list)
+    assert tuple(signature.parameters)[:5] == (
+        "quantities",
+        "positions",
+        "cell",
+        "pbc",
+        "cutoff",
+    )
     assert signature.parameters["half_list"].kind is inspect.Parameter.KEYWORD_ONLY
     assert signature.parameters["include_self"].kind is inspect.Parameter.KEYWORD_ONLY
     assert signature.parameters["half_list"].default is False
@@ -37,7 +45,8 @@ def test_invalid_torch_positions_shape_raises_value_error(
     positions: torch.Tensor,
 ) -> None:
     with pytest.raises(ValueError, match="positions must have shape"):
-        find_neighbors(
+        neighbor_list(
+            "PS",
             positions,
             torch.eye(3),
             torch.zeros(3, dtype=torch.bool),
@@ -55,8 +64,9 @@ def test_single_structure_default_matches_explicit_batch() -> None:
         dtype=torch.float64,
     )
     pbc = torch.tensor([True, False, True])
-    single = find_neighbors(positions, cell, pbc, 1.3)
-    batched = find_neighbors(
+    single = neighbor_list("PS", positions, cell, pbc, 1.3)
+    batched = neighbor_list(
+        "PS",
         positions,
         cell[None],
         pbc[None],
@@ -71,7 +81,7 @@ def test_cell_shift_translates_the_target_image() -> None:
     cell = torch.diag(torch.tensor([1.0, 4.0, 4.0]))
     pbc = torch.tensor([True, False, False])
 
-    output = find_neighbors(positions, cell, pbc, 0.3)
+    output = neighbor_list("PS", positions, cell, pbc, 0.3)
 
     assert pair_keys(output) == {
         (0, 1, 1, 0, 0),
@@ -95,21 +105,21 @@ def test_neighbor_identity_is_independent_of_length_unit(
     )
     pbc = torch.tensor([True, True, True])
     options = {"half_list": half_list, "include_self": include_self}
-    baseline = find_neighbors(positions, cell, pbc, 1.25, **options)
-    scaled = find_neighbors(
-        positions * scale, cell * scale, pbc, 1.25 * scale, **options
+    baseline = neighbor_list("PS", positions, cell, pbc, 1.25, **options)
+    scaled = neighbor_list(
+        "PS", positions * scale, cell * scale, pbc, 1.25 * scale, **options
     )
     assert pair_keys(scaled) == pair_keys(baseline)
 
 
 @pytest.mark.parametrize(
-    ("cells", "pbc", "batch_ptr", "message"),
+    ("cell", "pbc", "batch_ptr", "message"),
     [
         (
             torch.zeros((1, 3, 3)),
             torch.zeros(3, dtype=torch.bool),
             None,
-            "single-structure cells",
+            "single-structure cell",
         ),
         (
             torch.zeros((3, 3)),
@@ -121,25 +131,25 @@ def test_neighbor_identity_is_independent_of_length_unit(
             torch.zeros((3, 3)),
             torch.zeros(3, dtype=torch.bool),
             torch.tensor([0, 2]),
-            "batched cells",
+            "batched cell",
         ),
     ],
 )
 def test_single_and_batch_shapes_are_unambiguous(
-    cells: torch.Tensor,
+    cell: torch.Tensor,
     pbc: torch.Tensor,
     batch_ptr: torch.Tensor | None,
     message: str,
 ) -> None:
     with pytest.raises(ValueError, match=message):
-        find_neighbors(torch.zeros((2, 3)), cells, pbc, 1.0, batch_ptr)
+        neighbor_list("PS", torch.zeros((2, 3)), cell, pbc, 1.0, batch_ptr)
 
 
 def test_batch_ptr_defines_structure_boundaries() -> None:
     positions = torch.tensor([[0.0, 0.0, 0.0], [0.4, 0.0, 0.0], [0.0, 0.0, 0.0]])
-    cells = torch.zeros((2, 3, 3))
+    cell = torch.zeros((2, 3, 3))
     pbc = torch.zeros((2, 3), dtype=torch.bool)
-    pair_indices, _ = find_neighbors(
-        positions, cells, pbc, 0.6, batch_ptr=torch.tensor([0, 2, 3])
+    pair_indices, _ = neighbor_list(
+        "PS", positions, cell, pbc, 0.6, batch_ptr=torch.tensor([0, 2, 3])
     )
     assert torch.all(pair_indices < 2)

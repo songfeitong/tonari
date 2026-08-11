@@ -9,9 +9,10 @@
 The entire public API is one function:
 
 ```python
-pair_indices, cell_shifts = find_neighbors(
+results = neighbor_list(
+    quantities,
     positions,
-    cells,
+    cell,
     pbc,
     cutoff,
     batch_ptr=None,
@@ -20,6 +21,34 @@ pair_indices, cell_shifts = find_neighbors(
     include_self=False,
 )
 ```
+
+### Returns
+
+`quantities` selects the returned arrays. Results are always returned as a tuple in the requested order.
+
+| Quantity | Shape | Meaning |
+| --- | --- | --- |
+| `i` | `(E,)` | Source atom indices |
+| `j` | `(E,)` | Target atom indices |
+| `P` | `(E, 2)` | Source and target indices together |
+| `S` | `(E, 3)` | Integer cell shifts applied to the target atoms |
+| `d` | `(E,)` | Distances |
+| `D` | `(E, 3)` | Displacement vectors from source atoms to shifted target atoms |
+
+### Batched input
+
+For a batch, concatenate all atomic positions and use `batch_ptr` to mark structure boundaries. `cell` and `pbc` then contain one entry per structure.
+
+Here, `B` is the number of structures and `N_total` is the total number of atoms across the batch.
+
+| Argument    | Shape          |
+| ----------- | -------------- |
+| `positions` | `(N_total, 3)` |
+| `cell`      | `(B, 3, 3)`    |
+| `pbc`       | `(B, 3)`       |
+| `batch_ptr` | `(B + 1,)`     |
+
+`batch_ptr=None` denotes a single structure with `N` atoms and is equivalent to boundaries `[0, N]`. Returned pairs never cross structure boundaries.
 
 ### Options
 
@@ -47,9 +76,10 @@ The CUDA extension is built when both a CUDA-enabled PyTorch installation and a 
 ```python
 import torch
 
-from tonari import find_neighbors
+from tonari import neighbor_list
 
-edge_index, cell_shifts = find_neighbors(
+pairs, edge_vectors = neighbor_list(
+    "PD",
     batch.pos,
     batch.cell,
     batch.pbc,
@@ -57,57 +87,30 @@ edge_index, cell_shifts = find_neighbors(
     batch_ptr=batch.ptr,
 )
 
-source, target = edge_index
-edge_cells = batch.cell[batch.batch[source]]
-edge_vectors = (
-    batch.pos[target]
-    - batch.pos[source]
-    + torch.einsum(
-        "ni,nij->nj",
-        cell_shifts.to(batch.pos.dtype),
-        edge_cells,
-    )
-)
+edge_index = pairs.T.contiguous()
 edge_lengths = torch.linalg.vector_norm(edge_vectors, dim=1)
 ```
 
 ### NumPy with ASE
 
 ```python
-import numpy as np
-from ase.neighborlist import neighbor_list
+from ase.neighborlist import neighbor_list as ase_neighbor_list
 
-from tonari import find_neighbors
+from tonari import neighbor_list
 
 cutoff = 5.0
 
-# tonari
-pair_indices, cell_shifts = find_neighbors(
+source, target, cell_shifts = neighbor_list(
+    "ijS",
     atoms.positions,
     atoms.cell.array,
     atoms.pbc,
     cutoff,
 )
 
-# Equivalent ASE search with the same source-target and cell-shift convention
-source, target, ase_cell_shifts = neighbor_list("ijS", atoms, cutoff)
-ase_pair_indices = np.stack((source, target))
+# Equivalent ASE search
+ase_source, ase_target, ase_cell_shifts = ase_neighbor_list("ijS", atoms, cutoff)
 ```
-
-## Batches
-
-For a batch, concatenate all atomic positions and use `batch_ptr` to mark structure boundaries. `cells` and `pbc` then contain one entry per structure.
-
-Here, `B` is the number of structures and `N_total` is the total number of atoms across the batch.
-
-| Argument    | Shape          |
-| ----------- | -------------- |
-| `positions` | `(N_total, 3)` |
-| `cells`     | `(B, 3, 3)`    |
-| `pbc`       | `(B, 3)`       |
-| `batch_ptr` | `(B + 1,)`     |
-
-`batch_ptr=None` denotes a single structure with `N` atoms and is equivalent to boundaries `[0, N]`. Returned pairs never cross structure boundaries.
 
 ## License
 

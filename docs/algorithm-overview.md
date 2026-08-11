@@ -22,7 +22,7 @@ Cell list 把空间划分为与 cutoff 同量级的 bins，每个 source 只查�
 
 ```mermaid
 flowchart LR
-    A["positions / cells / pbc / batch_ptr"] --> B["统一 periodic geometry"]
+    A["positions / cell / pbc / batch_ptr"] --> B["统一 periodic geometry"]
     B --> C{"执行设备"}
     C -- "CPU" --> D{"逐 structure 选择"}
     D -- "小候选空间" --> E["CPU exhaustive"]
@@ -30,7 +30,7 @@ flowchart LR
     C -- "CUDA" --> G{"整 batch 选择"}
     G -- "小结构" --> H["fused exhaustive"]
     G -- "大结构" --> I["batched cell list"]
-    E --> J["pair_indices / cell_shifts"]
+    E --> J["edge-first P / S"]
     F --> J
     H --> J
     I --> J
@@ -38,7 +38,7 @@ flowchart LR
 
 ## 统一的周期几何
 
-CPU 与 CUDA 首先从 `cells` 和 `pbc` 得到 active periodic directions、dual vectors 和必须考虑的 image shifts。算法不要求完整 `3×3` cell 可逆，因此 finite system、wire、slab 和 full-periodic crystal 使用同一套输入模型。
+CPU 与 CUDA 首先从 `cell` 和 `pbc` 得到 active periodic directions、dual vectors 和必须考虑的 image shifts。算法不要求完整 `3×3` cell 可逆，因此 finite system、wire、slab 和 full-periodic crystal 使用同一套输入模型。
 
 原子坐标不要求预先 wrap。搜索内部可以使用 wrapped representatives 提高数值稳定性和空间局部性，但返回的 cell shift 会补偿这次变换，保证调用者始终能用原始 positions 重建相同的物理 displacement。
 
@@ -90,7 +90,7 @@ CUDA 把整个 heterogeneous batch 作为一次执行单位。`batch_ptr` 把拼
 
 ## 在模型中的位置
 
-对于 GNN/PyG workflow，推荐 Dataset 只保存 atomic numbers、positions、cell、PBC 和 labels。Batch 到达模型后，由模型根据自身 cutoff 调用 `find_neighbors`，再在 adapter 边界把 `pair_indices` 映射为 `edge_index`，把重建的 displacements 映射为 `edge_vectors`。
+对于 GNN/PyG workflow，推荐 Dataset 只保存 atomic numbers、positions、cell、PBC 和 labels。Batch 到达模型后，由模型根据自身 cutoff 调用 `neighbor_list("PD", ...)`，再在 adapter 边界把 edge-first `P` 转置为 `edge_index`，把 `D` 映射为 `edge_vectors`。
 
 这样 Dataset 不需要携带模型特定的 cutoff，数据增强、结构扰动、MD 和不同模型配置也不会读取过期 connectivity。GPU 训练通常应先把 graph-free batch 一次传到 CUDA，再执行 neighbor search。
 

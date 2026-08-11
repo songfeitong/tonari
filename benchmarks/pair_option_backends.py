@@ -9,13 +9,13 @@ from torch import Tensor
 from vesin import NeighborList as VesinNeighborList
 
 from benchmarks.structure_data import StructureBatch
-from tonari import find_neighbors
+from tonari import neighbor_list
 
 
 def _canonicalize_half_pairs(
     pair_indices: Tensor, cell_shifts: Tensor
 ) -> tuple[Tensor, Tensor]:
-    source, target = pair_indices
+    source, target = pair_indices.unbind(dim=1)
     same_atom = source == target
     shift_is_canonical = (cell_shifts[:, 0] < 0) | (
         (cell_shifts[:, 0] == 0)
@@ -30,7 +30,8 @@ def _canonicalize_half_pairs(
             (
                 torch.where(canonical, source, target),
                 torch.where(canonical, target, source),
-            )
+            ),
+            dim=1,
         ),
         torch.where(canonical[:, None], cell_shifts, -cell_shifts),
     )
@@ -54,7 +55,7 @@ def _require_single_structure(batch: StructureBatch) -> None:
 
 
 def _empty_output() -> tuple[Tensor, Tensor]:
-    return torch.empty((2, 0), dtype=torch.int64), torch.empty(
+    return torch.empty((0, 2), dtype=torch.int64), torch.empty(
         (0, 3), dtype=torch.int32
     )
 
@@ -65,7 +66,7 @@ def _append_zero_shift_self_pairs(
     pair_indices, cell_shifts = output
     atoms = torch.arange(n_atoms, dtype=torch.int64)
     return (
-        torch.cat((pair_indices, torch.stack((atoms, atoms))), dim=1),
+        torch.cat((pair_indices, torch.stack((atoms, atoms), dim=1)), dim=0),
         torch.cat((cell_shifts, torch.zeros((n_atoms, 3), dtype=torch.int32))),
     )
 
@@ -75,9 +76,10 @@ class NativeCpuBackend:
         self.options = options
 
     def __call__(self, batch: StructureBatch, cutoff: float) -> tuple[Tensor, Tensor]:
-        return find_neighbors(
+        return neighbor_list(
+            "PS",
             batch.positions,
-            batch.cells,
+            batch.cell,
             batch.pbc,
             cutoff,
             batch.batch_ptr,
@@ -102,12 +104,12 @@ class VesinCpuBackend:
         _require_single_structure(batch)
         first, second, cell_shifts = self.neighbor_list.compute(
             batch.positions,
-            batch.cells[0],
+            batch.cell[0],
             batch.pbc[0],
             "ijS",
         )
         output = (
-            torch.stack((first.to(torch.int64), second.to(torch.int64))),
+            torch.stack((first.to(torch.int64), second.to(torch.int64)), dim=1),
             cell_shifts.to(torch.int32),
         )
         if self.options.half_list:
@@ -147,7 +149,7 @@ class AseCpuBackend:
         neighbor_list = self._neighbor_list(n_atoms)
         neighbor_list.build(
             batch.pbc[0].numpy(),
-            batch.cells[0].numpy(),
+            batch.cell[0].numpy(),
             batch.positions.numpy(),
         )
         pair_indices = []
@@ -159,11 +161,12 @@ class AseCpuBackend:
                     (
                         torch.full((len(targets),), source, dtype=torch.int64),
                         torch.from_numpy(targets).to(torch.int64),
-                    )
+                    ),
+                    dim=1,
                 )
             )
             cell_shifts.append(torch.from_numpy(shifts).to(torch.int32))
-        output = torch.cat(pair_indices, dim=1), torch.cat(cell_shifts, dim=0)
+        output = torch.cat(pair_indices, dim=0), torch.cat(cell_shifts, dim=0)
         if self.options.half_list:
             output = _canonicalize_half_pairs(*output)
         return output

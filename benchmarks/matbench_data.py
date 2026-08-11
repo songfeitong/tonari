@@ -23,20 +23,20 @@ class MatbenchStructureDataset(Dataset[dict[str, object]]):
             raise ValueError("Matbench cache and manifest select different source rows")
         self.positions = torch.from_numpy(cache["positions"]).to(dtype)
         self.batch_ptr = torch.from_numpy(cache["batch_ptr"])
-        self.cells = torch.from_numpy(cache["cells"]).to(dtype)
+        self.cell = torch.from_numpy(cache["cell"]).to(dtype)
         self.pbc = torch.from_numpy(cache["pbc"])
         self.atomic_numbers = torch.from_numpy(cache["atomic_numbers"])
         self.source_ids = tuple(entry["configuration_id"] for entry in entries)
 
     def __len__(self) -> int:
-        return len(self.cells)
+        return len(self.cell)
 
     def __getitem__(self, index: int) -> dict[str, object]:
         start = int(self.batch_ptr[index])
         stop = int(self.batch_ptr[index + 1])
         return {
             "positions": self.positions[start:stop],
-            "cell": self.cells[index],
+            "cell": self.cell[index],
             "pbc": self.pbc[index],
             "atomic_numbers": self.atomic_numbers[start:stop],
             "source_id": self.source_ids[index],

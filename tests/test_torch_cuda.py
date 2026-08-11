@@ -5,8 +5,8 @@ import pytest
 import torch
 from ase.neighborlist import primitive_neighbor_list
 
-from tests.reference import find_neighbors_reference
-from tonari import find_neighbors
+from tests.reference import neighbor_list_reference
+from tonari import neighbor_list
 
 pytestmark = [
     pytest.mark.cuda,
@@ -15,21 +15,22 @@ pytestmark = [
 
 
 def pair_keys(pair_indices: torch.Tensor, shifts: torch.Tensor) -> set[tuple[int, ...]]:
-    rows = torch.cat((pair_indices.T, shifts.to(torch.int64)), dim=1).cpu().tolist()
+    rows = torch.cat((pair_indices, shifts.to(torch.int64)), dim=1).cpu().tolist()
     assert len(rows) == len({tuple(row) for row in rows})
     return {tuple(row) for row in rows}
 
 
 def cuda_neighbors(
     positions: torch.Tensor,
-    cells: torch.Tensor,
+    cell: torch.Tensor,
     pbc: torch.Tensor,
     cutoff: float,
     batch_ptr: torch.Tensor | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    return find_neighbors(
+    return neighbor_list(
+        "PS",
         positions.cuda(),
-        cells.cuda(),
+        cell.cuda(),
         pbc.cuda(),
         cutoff,
         None if batch_ptr is None else batch_ptr.cuda(),
@@ -55,7 +56,7 @@ def test_cuda_matches_reference_for_mixed_boundary_conditions(
         )
     )
     batch_ptr = torch.tensor([0, 7, 12, 16])
-    cells = torch.stack(
+    cell = torch.stack(
         (
             torch.zeros((3, 3), dtype=dtype),
             torch.tensor(
@@ -67,8 +68,8 @@ def test_cuda_matches_reference_for_mixed_boundary_conditions(
         )
     )
     pbc = torch.tensor([[False, False, False], [True, True, False], [True, True, True]])
-    expected = find_neighbors_reference(positions, cells, pbc, 1.35, batch_ptr)
-    actual = cuda_neighbors(positions, cells, pbc, 1.35, batch_ptr)
+    expected = neighbor_list_reference("PS", positions, cell, pbc, 1.35, batch_ptr)
+    actual = cuda_neighbors(positions, cell, pbc, 1.35, batch_ptr)
     assert pair_keys(*actual) == pair_keys(*expected)
 
 
@@ -123,13 +124,13 @@ def test_cuda_relabels_unwrapped_representatives() -> None:
         translated, cell[None], pbc, 1.0, batch_ptr
     )
     first_displacements = (
-        positions.cuda()[first_pairs[1]]
-        - positions.cuda()[first_pairs[0]]
+        positions.cuda()[first_pairs[:, 1]]
+        - positions.cuda()[first_pairs[:, 0]]
         + first_shifts.to(dtype) @ cell.cuda()
     )
     second_displacements = (
-        translated.cuda()[second_pairs[1]]
-        - translated.cuda()[second_pairs[0]]
+        translated.cuda()[second_pairs[:, 1]]
+        - translated.cuda()[second_pairs[:, 0]]
         + second_shifts.to(dtype) @ cell.cuda()
     )
     assert pair_keys(first_pairs, first_shifts) != pair_keys(
@@ -188,9 +189,10 @@ def test_cuda_paths_use_the_same_float32_cutoff_rounding(n_atoms: int) -> None:
     pbc = torch.zeros(3, dtype=torch.bool)
     expected = {(0, 1, 0, 0, 0), (1, 0, 0, 0, 0)}
 
-    cpu = find_neighbors(positions, cell, pbc, cutoff)
-    cuda = find_neighbors(positions.cuda(), cell.cuda(), pbc.cuda(), cutoff)
-    reference = find_neighbors_reference(
+    cpu = neighbor_list("PS", positions, cell, pbc, cutoff)
+    cuda = neighbor_list("PS", positions.cuda(), cell.cuda(), pbc.cuda(), cutoff)
+    reference = neighbor_list_reference(
+        "PS",
         positions,
         cell[None],
         pbc[None],
@@ -210,7 +212,7 @@ def test_cuda_allows_continuous_geometry_backward() -> None:
         dtype=torch.float64,
         requires_grad=True,
     )
-    cells = torch.tensor(
+    cell = torch.tensor(
         [[[2.0, 0.0, 0.0], [0.1, 2.5, 0.0], [0.0, 0.0, 3.0]]],
         device="cuda",
         dtype=torch.float64,
@@ -218,29 +220,29 @@ def test_cuda_allows_continuous_geometry_backward() -> None:
     )
     batch_ptr = torch.tensor([0, 2], device="cuda")
     pbc = torch.ones((1, 3), device="cuda", dtype=torch.bool)
-    pair_indices, shifts = find_neighbors(positions, cells, pbc, 0.8, batch_ptr)
+    pair_indices, shifts = neighbor_list("PS", positions, cell, pbc, 0.8, batch_ptr)
     displacements = (
-        positions[pair_indices[1]]
-        - positions[pair_indices[0]]
-        + shifts.to(positions.dtype) @ cells[0]
+        positions[pair_indices[:, 1]]
+        - positions[pair_indices[:, 0]]
+        + shifts.to(positions.dtype) @ cell[0]
     )
     torch.sum(displacements.square()).backward()
     assert pair_indices.grad_fn is None
     assert shifts.grad_fn is None
     assert positions.grad is not None and torch.all(torch.isfinite(positions.grad))
-    assert cells.grad is not None and torch.all(torch.isfinite(cells.grad))
-    assert torch.count_nonzero(cells.grad) > 0
+    assert cell.grad is not None and torch.all(torch.isfinite(cell.grad))
+    assert torch.count_nonzero(cell.grad) > 0
 
 
 def test_nondefault_stream_and_empty_structure() -> None:
     positions = torch.tensor([[0.0, 0.0, 0.0], [0.3, 0.0, 0.0]], device="cuda")
     batch_ptr = torch.tensor([0, 0, 2], device="cuda")
-    cells = torch.zeros((2, 3, 3), device="cuda")
+    cell = torch.zeros((2, 3, 3), device="cuda")
     pbc = torch.zeros((2, 3), dtype=torch.bool, device="cuda")
     stream = torch.cuda.Stream()
     with torch.cuda.stream(stream):
         positions = positions + 0.0
-        pair_indices, shifts = find_neighbors(positions, cells, pbc, 0.5, batch_ptr)
+        pair_indices, shifts = neighbor_list("PS", positions, cell, pbc, 0.5, batch_ptr)
     torch.cuda.current_stream().wait_stream(stream)
     assert pair_keys(pair_indices, shifts) == {(0, 1, 0, 0, 0), (1, 0, 0, 0, 0)}
 
@@ -253,7 +255,7 @@ def test_empty_periodic_structure_does_not_enumerate_tiny_cell_images() -> None:
         1.0,
         torch.tensor([0, 0]),
     )
-    assert pair_indices.shape == (2, 0)
+    assert pair_indices.shape == (0, 2)
     assert shifts.shape == (0, 3)
 
 
@@ -268,7 +270,7 @@ def test_cell_list_path_matches_reference(dtype: torch.dtype) -> None:
     positions[:5] += 3 * cell[0] - 2 * cell[1]
     batch_ptr = torch.tensor([0, n_atoms])
     pbc = torch.tensor([[True, True, True]])
-    expected = find_neighbors_reference(positions, cell[None], pbc, 1.2, batch_ptr)
+    expected = neighbor_list_reference("PS", positions, cell[None], pbc, 1.2, batch_ptr)
     actual = cuda_neighbors(positions, cell[None], pbc, 1.2, batch_ptr)
     assert pair_keys(*actual) == pair_keys(*expected)
 
@@ -276,7 +278,7 @@ def test_cell_list_path_matches_reference(dtype: torch.dtype) -> None:
 def test_cell_list_path_handles_mixed_finite_and_partial_pbc_batch() -> None:
     generator = torch.Generator().manual_seed(5801)
     counts = (256, 257)
-    cells = torch.tensor(
+    cell = torch.tensor(
         [
             [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]],
             [[2.1, 0.3, 0.2], [0.4, 4.0, 0.1], [0.2, 0.5, 5.0]],
@@ -287,24 +289,28 @@ def test_cell_list_path_handles_mixed_finite_and_partial_pbc_batch() -> None:
         (
             torch.rand((counts[0], 3), generator=generator, dtype=torch.float64) * 8,
             torch.rand((counts[1], 3), generator=generator, dtype=torch.float64)
-            @ cells[1],
+            @ cell[1],
         )
     )
-    positions[-3:] += 4 * cells[1, 0]
+    positions[-3:] += 4 * cell[1, 0]
     batch_ptr = torch.tensor([0, counts[0], sum(counts)])
     pbc = torch.tensor([[False, False, False], [True, False, False]])
-    expected = find_neighbors_reference(positions, cells, pbc, 0.55, batch_ptr)
-    actual = cuda_neighbors(positions, cells, pbc, 0.55, batch_ptr)
+    expected = neighbor_list_reference("PS", positions, cell, pbc, 0.55, batch_ptr)
+    actual = cuda_neighbors(positions, cell, pbc, 0.55, batch_ptr)
     assert pair_keys(*actual) == pair_keys(*expected)
     pair_indices, shifts = actual
-    source_batch = torch.bucketize(pair_indices[0], batch_ptr[1:].cuda(), right=True)
-    target_batch = torch.bucketize(pair_indices[1], batch_ptr[1:].cuda(), right=True)
+    source_batch = torch.bucketize(
+        pair_indices[:, 0].contiguous(), batch_ptr[1:].cuda(), right=True
+    )
+    target_batch = torch.bucketize(
+        pair_indices[:, 1].contiguous(), batch_ptr[1:].cuda(), right=True
+    )
     assert torch.equal(source_batch, target_batch)
     displacements = (
-        positions.cuda()[pair_indices[1]]
-        - positions.cuda()[pair_indices[0]]
+        positions.cuda()[pair_indices[:, 1]]
+        - positions.cuda()[pair_indices[:, 0]]
         + torch.einsum(
-            "ei,eij->ej", shifts.to(torch.float64), cells.cuda()[source_batch]
+            "ei,eij->ej", shifts.to(torch.float64), cell.cuda()[source_batch]
         )
     )
     assert torch.all(torch.sum(displacements.square(), dim=1) < 0.55**2)
@@ -335,7 +341,7 @@ def test_cell_list_large_common_translation_uses_public_vector_formula() -> None
         torch.ones(3, dtype=torch.bool),
         1.4481067657470703,
     )
-    expected = find_neighbors(*arguments)
+    expected = neighbor_list("PS", *arguments)
     actual = cuda_neighbors(*arguments)
     expected_keys = pair_keys(*expected)
     assert (52, 23, 0, -1, 0) in expected_keys
@@ -396,7 +402,7 @@ def test_rejects_nonfinite_positions(n_atoms: int, value: float) -> None:
 def test_rejects_nonfinite_inactive_cell_row() -> None:
     cell = torch.eye(3, dtype=torch.float64)
     cell[2, 0] = torch.nan
-    with pytest.raises(ValueError, match="cells must contain only finite values"):
+    with pytest.raises(ValueError, match="cell must contain only finite values"):
         cuda_neighbors(
             torch.zeros((1, 3), dtype=torch.float64),
             cell[None],
@@ -431,6 +437,6 @@ def test_batched_sparse_bin_counts_saturate_before_cumsum() -> None:
         1.0,
         torch.tensor([0, n_atoms, 2 * n_atoms]),
     )
-    expected = find_neighbors(*arguments)
+    expected = neighbor_list("PS", *arguments)
     actual = cuda_neighbors(*arguments)
     assert pair_keys(*actual) == pair_keys(*expected)

@@ -39,27 +39,27 @@ torch::Tensor tensor_from_vector(
 }
 
 
-std::vector<torch::Tensor> find_neighbors(
+std::vector<torch::Tensor> neighbor_list(
     const torch::Tensor& positions,
     const torch::Tensor& batch_ptr,
-    const torch::Tensor& cells,
+    const torch::Tensor& cell,
     const torch::Tensor& pbc,
     double cutoff,
     bool half_list,
     bool include_self) {
     TORCH_CHECK(positions.is_cuda(), "positions must be a CUDA tensor");
     TORCH_CHECK(
-        batch_ptr.is_cuda() && cells.is_cuda() && pbc.is_cuda(),
+        batch_ptr.is_cuda() && cell.is_cuda() && pbc.is_cuda(),
         "all inputs must be CUDA tensors");
     TORCH_CHECK(
         positions.is_contiguous() && batch_ptr.is_contiguous() &&
-            cells.is_contiguous() && pbc.is_contiguous(),
+            cell.is_contiguous() && pbc.is_contiguous(),
         "all inputs must be contiguous");
     TORCH_CHECK(positions.dim() == 2 && positions.size(1) == 3);
     TORCH_CHECK(batch_ptr.dim() == 1 && batch_ptr.numel() > 0);
-    TORCH_CHECK(cells.sizes() == torch::IntArrayRef({batch_ptr.numel() - 1, 3, 3}));
+    TORCH_CHECK(cell.sizes() == torch::IntArrayRef({batch_ptr.numel() - 1, 3, 3}));
     TORCH_CHECK(pbc.sizes() == torch::IntArrayRef({batch_ptr.numel() - 1, 3}));
-    TORCH_CHECK(positions.scalar_type() == cells.scalar_type());
+    TORCH_CHECK(positions.scalar_type() == cell.scalar_type());
     TORCH_CHECK(
         positions.scalar_type() == torch::kFloat32 ||
             positions.scalar_type() == torch::kFloat64);
@@ -73,7 +73,7 @@ std::vector<torch::Tensor> find_neighbors(
         "the current implementation supports fewer than 2^31 atoms");
 
     const auto batch_ptr_cpu = batch_ptr.to(torch::kCPU).contiguous();
-    const auto cells_cpu = cells.to(torch::kCPU, torch::kFloat64).contiguous();
+    const auto cell_cpu = cell.to(torch::kCPU, torch::kFloat64).contiguous();
     const auto pbc_cpu = pbc.to(torch::kCPU).contiguous();
     const int64_t* batch_ptr_data = batch_ptr_cpu.data_ptr<int64_t>();
     const int64_t batch_size = batch_ptr.numel() - 1;
@@ -103,8 +103,8 @@ std::vector<torch::Tensor> find_neighbors(
     const neighbor_search::PeriodicMetadata metadata =
         neighbor_search::build_periodic_metadata(
             std::span(
-                cells_cpu.data_ptr<double>(),
-                static_cast<size_t>(cells_cpu.numel())),
+                cell_cpu.data_ptr<double>(),
+                static_cast<size_t>(cell_cpu.numel())),
             pbc_values,
             atom_counts,
             cutoff);
@@ -167,10 +167,10 @@ std::vector<torch::Tensor> find_neighbors(
 
     if (maximum_atoms >= kCellListMinimumAtoms &&
         total_nodes < kInt32IndexLimit) {
-        return find_neighbors_cuda_cell(
+        return neighbor_list_cuda_cell(
             positions,
             batch_ptr,
-            cells,
+            cell,
             duals,
             image_shifts,
             image_offsets,
@@ -185,10 +185,10 @@ std::vector<torch::Tensor> find_neighbors(
     neighbor_search::require_input(
         total_blocks < kInt32IndexLimit,
         "the exhaustive CUDA path requires fewer than 2^31 thread blocks");
-    return find_neighbors_cuda_exhaustive(
+    return neighbor_list_cuda_exhaustive(
         positions,
         batch_ptr,
-        cells,
+        cell,
         duals,
         image_shifts,
         image_offsets,
@@ -204,7 +204,7 @@ std::vector<torch::Tensor> find_neighbors(
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, module) {
     module.def(
-        "find_neighbors",
-        &find_neighbors,
+        "neighbor_list",
+        &neighbor_list,
         "Find batched neighbor pairs on CUDA");
 }

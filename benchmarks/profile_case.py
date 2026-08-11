@@ -11,7 +11,7 @@ from benchmarks.matbench_data import (
     repeat_structure,
     select_scaling_structure,
 )
-from tonari import find_neighbors
+from tonari import neighbor_list
 
 
 def main() -> None:
@@ -37,14 +37,14 @@ def main() -> None:
     structure = repeat_structure(structure, (args.factor, args.factor, args.factor))
     batch = collate_structures([structure]).to(torch.device("cuda"))
     for _ in range(3):
-        find_neighbors(
-            batch.positions, batch.cells, batch.pbc, args.cutoff, batch.batch_ptr
+        neighbor_list(
+            "PS", batch.positions, batch.cell, batch.pbc, args.cutoff, batch.batch_ptr
         )
     torch.cuda.synchronize()
-    torch.cuda.nvtx.range_push("profile_find_neighbors")
+    torch.cuda.nvtx.range_push("profile_neighbor_list")
     for _ in range(args.iterations):
-        find_neighbors(
-            batch.positions, batch.cells, batch.pbc, args.cutoff, batch.batch_ptr
+        neighbor_list(
+            "PS", batch.positions, batch.cell, batch.pbc, args.cutoff, batch.batch_ptr
         )
     torch.cuda.nvtx.range_pop()
     torch.cuda.synchronize()

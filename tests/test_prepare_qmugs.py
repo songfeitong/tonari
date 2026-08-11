@@ -146,13 +146,13 @@ def test_dense_baseline_supports_finite_batches() -> None:
         dtype=torch.float64,
     )
     batch_ptr = torch.tensor([0, 2, 3])
-    cells = torch.zeros((2, 3, 3), dtype=torch.float64)
+    cell = torch.zeros((2, 3, 3), dtype=torch.float64)
     pbc = torch.zeros((2, 3), dtype=torch.bool)
 
-    pair_indices, cell_shifts = torch_dense_batch(positions, cells, pbc, 1.0, batch_ptr)
+    pair_indices, cell_shifts = torch_dense_batch(positions, cell, pbc, 1.0, batch_ptr)
 
-    assert dense_candidate_count(batch_ptr, cells, pbc, 1.0) == 5
-    assert set(map(tuple, pair_indices.T.tolist())) == {(0, 1), (1, 0)}
+    assert dense_candidate_count(batch_ptr, cell, pbc, 1.0) == 5
+    assert set(map(tuple, pair_indices.tolist())) == {(0, 1), (1, 0)}
     assert torch.count_nonzero(cell_shifts) == 0
 
 

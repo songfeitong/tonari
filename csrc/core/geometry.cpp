@@ -128,7 +128,7 @@ neighbor_search::PeriodicMetadata neighbor_search::build_periodic_metadata(
     const int64_t batch_size = static_cast<int64_t>(atom_counts.size());
     require_input(
         cells.size() == static_cast<size_t>(9 * batch_size),
-        "cells must have shape (B, 3, 3)");
+        "cell must have shape (B, 3, 3)");
     require_input(
         pbc.size() == static_cast<size_t>(3 * batch_size),
         "pbc must have shape (B, 3)");
@@ -141,7 +141,7 @@ neighbor_search::PeriodicMetadata neighbor_search::build_periodic_metadata(
         for (int index = 0; index < 9; ++index) {
             require_input(
                 std::isfinite(cell[index]),
-                "cells must contain only finite values");
+                "cell must contain only finite values");
         }
         if (atom_counts[batch] == 0) {
             metadata.image_offsets.push_back(

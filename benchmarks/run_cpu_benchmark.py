@@ -29,7 +29,7 @@ from benchmarks.matbench_data import (
     select_scaling_structure,
 )
 from benchmarks.structure_data import StructureBatch, collate_structures
-from tonari import find_neighbors
+from tonari import neighbor_list
 from tonari._extensions import load_torch_cpu
 
 CPU_EXTENSION = load_torch_cpu()
@@ -60,17 +60,21 @@ class VesinCpuBackend:
             raise ValueError("the CPU Vesin baseline accepts one structure per call")
         first, second, shifts = self.neighbor_list.compute(
             batch.positions,
-            batch.cells[0],
+            batch.cell[0],
             batch.pbc[0],
             "ijS",
         )
-        return torch.stack((first.to(torch.int64), second.to(torch.int64))), shifts
+        return (
+            torch.stack((first.to(torch.int64), second.to(torch.int64)), dim=1),
+            shifts,
+        )
 
 
 def production_cpu(batch: StructureBatch, cutoff: float) -> tuple[Tensor, Tensor]:
-    return find_neighbors(
+    return neighbor_list(
+        "PS",
         batch.positions,
-        batch.cells,
+        batch.cell,
         batch.pbc,
         cutoff,
         batch.batch_ptr,
@@ -134,7 +138,7 @@ def measure_backend(
         start = time.perf_counter()
         current_pairs = 0
         for batch in batches:
-            current_pairs += backend(batch, cutoff)[0].shape[1]
+            current_pairs += backend(batch, cutoff)[0].shape[0]
         elapsed_ms.append((time.perf_counter() - start) * 1000)
         if repeat == 0:
             pair_count = current_pairs

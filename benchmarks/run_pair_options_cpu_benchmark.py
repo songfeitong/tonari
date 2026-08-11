@@ -90,7 +90,7 @@ def measure_backend(
         current_bytes = 0
         for batch in batches:
             pair_indices, cell_shifts = backend(batch, cutoff)
-            current_pairs += pair_indices.shape[1]
+            current_pairs += pair_indices.shape[0]
             current_bytes += pair_indices.numel() * pair_indices.element_size()
             current_bytes += cell_shifts.numel() * cell_shifts.element_size()
         samples_ms.append((time.perf_counter() - start) * 1000)
@@ -220,7 +220,7 @@ def main() -> None:
             "data_loading_timed": False,
             "warmup_seconds_per_backend_and_mode": args.warmup_seconds,
             "statistic": "median wall time; all samples retained",
-            "native": "public one-shot find_neighbors output",
+            "native": "public one-shot neighbor_list output",
             "vesin": (
                 "one NeighborList reused per mode; full_list matches the requested "
                 "mode; sorted=False; n_threads=1; zero-shift self pairs are added "

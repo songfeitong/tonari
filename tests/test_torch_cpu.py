@@ -5,12 +5,12 @@ import pytest
 import torch
 from ase.neighborlist import primitive_neighbor_list
 
-from tests.reference import find_neighbors_reference
-from tonari import find_neighbors
+from tests.reference import neighbor_list_reference
+from tonari import neighbor_list
 
 
 def pair_keys(pair_indices: torch.Tensor, shifts: torch.Tensor) -> set[tuple[int, ...]]:
-    rows = torch.cat((pair_indices.T, shifts.to(torch.int64)), dim=1).tolist()
+    rows = torch.cat((pair_indices, shifts.to(torch.int64)), dim=1).tolist()
     assert len(rows) == len({tuple(row) for row in rows})
     return {tuple(row) for row in rows}
 
@@ -36,10 +36,10 @@ def test_cpu_matches_reference_for_mixed_batch(dtype: torch.dtype) -> None:
         )
     )
     batch_ptr = torch.tensor([0, 7, 12, 16])
-    cells = torch.stack((torch.zeros((3, 3), dtype=dtype), partial_cell, periodic_cell))
+    cell = torch.stack((torch.zeros((3, 3), dtype=dtype), partial_cell, periodic_cell))
     pbc = torch.tensor([[False, False, False], [True, True, False], [True, True, True]])
-    expected = find_neighbors_reference(positions, cells, pbc, 1.35, batch_ptr)
-    actual = find_neighbors(positions, cells, pbc, 1.35, batch_ptr)
+    expected = neighbor_list_reference("PS", positions, cell, pbc, 1.35, batch_ptr)
+    actual = neighbor_list("PS", positions, cell, pbc, 1.35, batch_ptr)
     assert pair_keys(*actual) == pair_keys(*expected)
 
 
@@ -64,8 +64,13 @@ def test_cpu_matches_ase_for_partial_triclinic_multiple_images() -> None:
         (int(i), int(j), int(shift[0]), int(shift[1]), int(shift[2]))
         for i, j, shift in zip(first, second, shifts, strict=True)
     }
-    actual = find_neighbors(
-        positions, cell[None], pbc[None], cutoff, torch.tensor([0, len(positions)])
+    actual = neighbor_list(
+        "PS",
+        positions,
+        cell[None],
+        pbc[None],
+        cutoff,
+        torch.tensor([0, len(positions)]),
     )
     assert pair_keys(*actual) == expected
 
@@ -76,14 +81,17 @@ def test_cpu_strict_cutoff_and_periodic_self_images() -> None:
         torch.zeros(3, dtype=torch.bool),
         1.0,
     )
-    boundary = find_neighbors(torch.tensor([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]]), *common)
+    boundary = neighbor_list(
+        "PS", torch.tensor([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]]), *common
+    )
     assert pair_keys(*boundary) == set()
     just_inside = torch.nextafter(torch.tensor(1.0), torch.tensor(0.0))
-    inside = find_neighbors(
-        torch.tensor([[0.0, 0.0, 0.0], [just_inside, 0.0, 0.0]]), *common
+    inside = neighbor_list(
+        "PS", torch.tensor([[0.0, 0.0, 0.0], [just_inside, 0.0, 0.0]]), *common
     )
     assert pair_keys(*inside) == {(0, 1, 0, 0, 0), (1, 0, 0, 0, 0)}
-    periodic = find_neighbors(
+    periodic = neighbor_list(
+        "PS",
         torch.zeros((1, 3)),
         torch.diag(torch.tensor([0.4, 8.0, 8.0]))[None],
         torch.tensor([[True, False, False]]),
@@ -111,16 +119,16 @@ def test_cpu_relabels_unwrapped_representatives() -> None:
         torch.ones(3, dtype=torch.bool),
         1.0,
     )
-    first_pairs, first_shifts = find_neighbors(positions, *common)
-    second_pairs, second_shifts = find_neighbors(translated, *common)
+    first_pairs, first_shifts = neighbor_list("PS", positions, *common)
+    second_pairs, second_shifts = neighbor_list("PS", translated, *common)
     first_displacements = (
-        positions[first_pairs[1]]
-        - positions[first_pairs[0]]
+        positions[first_pairs[:, 1]]
+        - positions[first_pairs[:, 0]]
         + first_shifts.to(positions.dtype) @ cell
     )
     second_displacements = (
-        translated[second_pairs[1]]
-        - translated[second_pairs[0]]
+        translated[second_pairs[:, 1]]
+        - translated[second_pairs[:, 0]]
         + second_shifts.to(positions.dtype) @ cell
     )
     assert pair_keys(first_pairs, first_shifts) != pair_keys(
@@ -142,8 +150,8 @@ def test_cpu_rotation_and_reflection_covariance() -> None:
         [[0.0, 1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, -1.0]], dtype=torch.float64
     )
     common = (torch.ones(3, dtype=torch.bool), 1.3)
-    first = find_neighbors(positions, cell, *common)
-    second = find_neighbors(positions @ orthogonal, cell @ orthogonal, *common)
+    first = neighbor_list("PS", positions, cell, *common)
+    second = neighbor_list("PS", positions @ orthogonal, cell @ orthogonal, *common)
     assert pair_keys(*first) == pair_keys(*second)
 
 
@@ -176,8 +184,8 @@ def test_cpu_randomized_differential() -> None:
             pbc,
             cutoff,
         )
-        assert pair_keys(*find_neighbors(*arguments)) == pair_keys(
-            *find_neighbors_reference(*arguments)
+        assert pair_keys(*neighbor_list("PS", *arguments)) == pair_keys(
+            *neighbor_list_reference("PS", *arguments)
         )
 
 
@@ -185,40 +193,42 @@ def test_cpu_allows_continuous_geometry_backward() -> None:
     positions = torch.tensor(
         [[0.1, 0.0, 0.0], [1.8, 0.2, 0.0]], dtype=torch.float64, requires_grad=True
     )
-    cells = torch.tensor(
+    cell = torch.tensor(
         [[[2.0, 0.0, 0.0], [0.1, 2.5, 0.0], [0.0, 0.0, 3.0]]],
         dtype=torch.float64,
         requires_grad=True,
     )
-    pair_indices, shifts = find_neighbors(
+    pair_indices, shifts = neighbor_list(
+        "PS",
         positions,
-        cells,
+        cell,
         torch.ones((1, 3), dtype=torch.bool),
         0.8,
         torch.tensor([0, 2]),
     )
     displacements = (
-        positions[pair_indices[1]]
-        - positions[pair_indices[0]]
-        + shifts.to(positions.dtype) @ cells[0]
+        positions[pair_indices[:, 1]]
+        - positions[pair_indices[:, 0]]
+        + shifts.to(positions.dtype) @ cell[0]
     )
     torch.sum(displacements.square()).backward()
     assert pair_indices.grad_fn is None
     assert shifts.grad_fn is None
     assert positions.grad is not None and torch.all(torch.isfinite(positions.grad))
-    assert cells.grad is not None and torch.all(torch.isfinite(cells.grad))
-    assert torch.count_nonzero(cells.grad) > 0
+    assert cell.grad is not None and torch.all(torch.isfinite(cell.grad))
+    assert torch.count_nonzero(cell.grad) > 0
 
 
 def test_cpu_empty_periodic_structure_skips_tiny_cell_images() -> None:
-    pair_indices, shifts = find_neighbors(
+    pair_indices, shifts = neighbor_list(
+        "PS",
         torch.empty((0, 3), dtype=torch.float64),
         (1e-12 * torch.eye(3, dtype=torch.float64))[None],
         torch.ones((1, 3), dtype=torch.bool),
         1.0,
         torch.tensor([0, 0]),
     )
-    assert pair_indices.shape == (2, 0)
+    assert pair_indices.shape == (0, 2)
     assert shifts.shape == (0, 3)
 
 
@@ -232,8 +242,8 @@ def test_cpu_cell_list_path_matches_reference(dtype: torch.dtype) -> None:
     positions = torch.rand((n_atoms, 3), generator=generator, dtype=dtype) @ cell
     batch_ptr = torch.tensor([0, n_atoms])
     pbc = torch.ones((1, 3), dtype=torch.bool)
-    expected = find_neighbors_reference(positions, cell[None], pbc, 1.2, batch_ptr)
-    actual = find_neighbors(positions, cell[None], pbc, 1.2, batch_ptr)
+    expected = neighbor_list_reference("PS", positions, cell[None], pbc, 1.2, batch_ptr)
+    actual = neighbor_list("PS", positions, cell[None], pbc, 1.2, batch_ptr)
     assert pair_keys(*actual) == pair_keys(*expected)
 
 
@@ -244,7 +254,8 @@ def test_cpu_cell_list_preserves_nextafter_inside_pairs(dtype: torch.dtype) -> N
         torch.tensor(1.0, dtype=dtype), torch.tensor(0.0, dtype=dtype)
     )
     positions[2:, 1] = 3 * torch.arange(2, 129, dtype=dtype)
-    pair_indices, shifts = find_neighbors(
+    pair_indices, shifts = neighbor_list(
+        "PS",
         positions,
         torch.zeros((1, 3, 3), dtype=dtype),
         torch.zeros((1, 3), dtype=torch.bool),
@@ -257,7 +268,8 @@ def test_cpu_cell_list_preserves_nextafter_inside_pairs(dtype: torch.dtype) -> N
 def test_cpu_cell_list_falls_back_for_extremely_sparse_bounds() -> None:
     positions = torch.zeros((256, 3))
     positions[:, 0] = torch.arange(256) * 10000.0
-    pair_indices, shifts = find_neighbors(
+    pair_indices, shifts = neighbor_list(
+        "PS",
         positions,
         torch.zeros((1, 3, 3)),
         torch.zeros((1, 3), dtype=torch.bool),
@@ -272,7 +284,8 @@ def test_cpu_rejects_nonfinite_positions(value: float) -> None:
     positions = torch.zeros((2, 3), dtype=torch.float64)
     positions[0, 0] = value
     with pytest.raises(RuntimeError, match="positions must"):
-        find_neighbors(
+        neighbor_list(
+            "PS",
             positions,
             torch.zeros((1, 3, 3), dtype=torch.float64),
             torch.zeros((1, 3), dtype=torch.bool),
@@ -286,7 +299,8 @@ def test_cpu_rejects_representative_wrap_outside_int32_range() -> None:
         [[0.1, 0.0, 0.0], [2**31 + 0.2, 0.0, 0.0]], dtype=torch.float64
     )
     with pytest.raises(RuntimeError, match="wraps.*int32"):
-        find_neighbors(
+        neighbor_list(
+            "PS",
             positions,
             torch.eye(3, dtype=torch.float64)[None],
             torch.tensor([[True, False, False]]),
@@ -300,7 +314,8 @@ def test_cpu_rejects_output_shift_outside_int32_range() -> None:
         [[-(2**31) + 0.1, 0.0, 0.0], [2**31 - 0.8, 0.0, 0.0]], dtype=torch.float64
     )
     with pytest.raises(RuntimeError, match="cell shift.*int32"):
-        find_neighbors(
+        neighbor_list(
+            "PS",
             positions,
             torch.eye(3, dtype=torch.float64)[None],
             torch.tensor([[True, False, False]]),
@@ -311,7 +326,8 @@ def test_cpu_rejects_output_shift_outside_int32_range() -> None:
 
 def test_cpu_rejects_dependent_active_cell_rows() -> None:
     with pytest.raises(ValueError, match="linearly independent"):
-        find_neighbors(
+        neighbor_list(
+            "PS",
             torch.zeros((1, 3), dtype=torch.float64),
             torch.tensor(
                 [[[1.0, 0.0, 0.0], [2.0, 0.0, 0.0], [0.0, 0.0, 4.0]]],
@@ -326,8 +342,9 @@ def test_cpu_rejects_dependent_active_cell_rows() -> None:
 def test_cpu_rejects_nonfinite_inactive_cell_row() -> None:
     cell = torch.eye(3, dtype=torch.float64)
     cell[2, 0] = torch.nan
-    with pytest.raises(ValueError, match="cells must contain only finite values"):
-        find_neighbors(
+    with pytest.raises(ValueError, match="cell must contain only finite values"):
+        neighbor_list(
+            "PS",
             torch.zeros((1, 3), dtype=torch.float64),
             cell[None],
             torch.tensor([[True, True, False]]),
@@ -346,8 +363,8 @@ def test_cpu_accepts_ill_conditioned_full_rank_active_rows() -> None:
         torch.tensor([True, True, False]),
         1e-09,
     )
-    assert pair_keys(*find_neighbors(*arguments)) == pair_keys(
-        *find_neighbors_reference(*arguments)
+    assert pair_keys(*neighbor_list("PS", *arguments)) == pair_keys(
+        *neighbor_list_reference("PS", *arguments)
     )
 
 
@@ -367,7 +384,8 @@ def test_cpu_large_unwrapped_representatives_use_original_geometry() -> None:
         ],
         dtype=torch.float64,
     )
-    pair_indices, shifts = find_neighbors(
+    pair_indices, shifts = neighbor_list(
+        "PS",
         positions,
         cell[None],
         torch.ones((1, 3), dtype=torch.bool),
@@ -392,14 +410,15 @@ def test_cpu_cell_list_large_common_lattice_translation_matches_reference() -> N
         torch.ones(3, dtype=torch.bool),
         1.0,
     )
-    assert pair_keys(*find_neighbors(*arguments)) == pair_keys(
-        *find_neighbors_reference(*arguments)
+    assert pair_keys(*neighbor_list("PS", *arguments)) == pair_keys(
+        *neighbor_list_reference("PS", *arguments)
     )
 
 
 def test_cpu_rejects_pathological_periodic_image_count() -> None:
     with pytest.raises(ValueError, match="image count.*resource limit"):
-        find_neighbors(
+        neighbor_list(
+            "PS",
             torch.zeros((1, 3), dtype=torch.float64),
             (0.001 * torch.eye(3, dtype=torch.float64))[None],
             torch.ones((1, 3), dtype=torch.bool),

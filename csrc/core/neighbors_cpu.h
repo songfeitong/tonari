@@ -10,14 +10,13 @@
 namespace neighbor_search {
 
 struct PairBuffers {
-    std::vector<int64_t> sources;
-    std::vector<int64_t> targets;
+    std::vector<int64_t> indices;
     std::vector<int32_t> shifts;
 };
 
 
 template <typename scalar_t>
-PairBuffers find_neighbors_cpu(
+PairBuffers neighbor_list_cpu(
     std::span<const scalar_t> positions,
     std::span<const int64_t> batch_ptr,
     std::span<const scalar_t> cells,
@@ -26,7 +25,7 @@ PairBuffers find_neighbors_cpu(
     PairMode mode);
 
 
-extern template PairBuffers find_neighbors_cpu<float>(
+extern template PairBuffers neighbor_list_cpu<float>(
     std::span<const float>,
     std::span<const int64_t>,
     std::span<const float>,
@@ -34,7 +33,7 @@ extern template PairBuffers find_neighbors_cpu<float>(
     double,
     PairMode);
 
-extern template PairBuffers find_neighbors_cpu<double>(
+extern template PairBuffers neighbor_list_cpu<double>(
     std::span<const double>,
     std::span<const int64_t>,
     std::span<const double>,

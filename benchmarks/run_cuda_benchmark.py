@@ -32,14 +32,26 @@ from benchmarks.matbench_data import (
     select_scaling_structure,
 )
 from benchmarks.structure_data import StructureBatch, collate_structures
-from tonari import find_neighbors
+from tonari import neighbor_list
 from tonari._extensions import load_torch_cuda
 
 CUDA_EXTENSION = load_torch_cuda()
 
 Backend = Callable[[Tensor, Tensor, Tensor, float, Tensor], tuple[Tensor, Tensor]]
+
+
+def production_cuda(
+    positions: Tensor,
+    cell: Tensor,
+    pbc: Tensor,
+    cutoff: float,
+    batch_ptr: Tensor,
+) -> tuple[Tensor, Tensor]:
+    return neighbor_list("PS", positions, cell, pbc, cutoff, batch_ptr)
+
+
 BACKENDS: dict[str, Backend] = {
-    "production_cuda": find_neighbors,
+    "production_cuda": production_cuda,
     "vesin_gpu_per_structure": vesin_gpu_batch,
     "torch_dense_batch": torch_dense_batch,
 }
@@ -48,7 +60,7 @@ BACKENDS: dict[str, Backend] = {
 def call_backend(
     backend: Backend, batch: StructureBatch, cutoff: float
 ) -> tuple[Tensor, Tensor]:
-    return backend(batch.positions, batch.cells, batch.pbc, cutoff, batch.batch_ptr)
+    return backend(batch.positions, batch.cell, batch.pbc, cutoff, batch.batch_ptr)
 
 
 def validate_external_reference(
@@ -56,7 +68,7 @@ def validate_external_reference(
 ) -> dict[str, int | bool]:
     total_pairs = 0
     for batch_index, batch in enumerate(batches):
-        actual = canonical_keys(call_backend(find_neighbors, batch, cutoff))
+        actual = canonical_keys(call_backend(production_cuda, batch, cutoff))
         expected = canonical_keys(call_backend(vesin_gpu_batch, batch, cutoff))
         if not np.array_equal(actual, expected):
             missing = len(set(map(tuple, expected)) - set(map(tuple, actual)))
@@ -76,7 +88,7 @@ def validate_external_reference(
 def validate_dense_baseline(
     batch: StructureBatch, cutoff: float
 ) -> dict[str, int | bool]:
-    actual = canonical_keys(call_backend(find_neighbors, batch, cutoff))
+    actual = canonical_keys(call_backend(production_cuda, batch, cutoff))
     expected = canonical_keys(call_backend(torch_dense_batch, batch, cutoff))
     if not np.array_equal(actual, expected):
         raise AssertionError(
@@ -105,7 +117,7 @@ def measure_backend(
         current_pairs = 0
         for batch in batches:
             output = call_backend(backend, batch, cutoff)
-            current_pairs += output[0].shape[1]
+            current_pairs += output[0].shape[0]
         torch.cuda.synchronize()
         elapsed_ms.append((time.perf_counter() - start) * 1000)
         if repeat == 0:
@@ -152,7 +164,7 @@ def benchmark_workload(
     dense_candidate_limit: int,
 ) -> dict[str, object]:
     candidate_counts = [
-        dense_candidate_count(batch.batch_ptr, batch.cells, batch.pbc, cutoff)
+        dense_candidate_count(batch.batch_ptr, batch.cell, batch.pbc, cutoff)
         for batch in batches
     ]
     source_ids = [source_id for batch in batches for source_id in batch.source_ids]
@@ -251,7 +263,7 @@ def main() -> None:
     batches = load_gpu_batches(dataset, args.batch_size, args.seed, device)
     candidate_counts = np.asarray(
         [
-            dense_candidate_count(batch.batch_ptr, batch.cells, batch.pbc, args.cutoff)
+            dense_candidate_count(batch.batch_ptr, batch.cell, batch.pbc, args.cutoff)
             for batch in batches
         ]
     )

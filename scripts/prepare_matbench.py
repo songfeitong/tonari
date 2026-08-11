@@ -88,7 +88,7 @@ def sample_rows(
 ) -> tuple[list[int], list[dict[str, object]]]:
     configuration_ids = table["configuration_id"].to_pylist()
     names = table["names"].to_pylist()
-    cells = table["cell"].to_pylist()
+    cell_rows = table["cell"].to_pylist()
     pbc_values = table["pbc"].to_pylist()
     nsites = table["nsites"].to_pylist()
     nelements = table["nelements"].to_pylist()
@@ -97,7 +97,7 @@ def sample_rows(
         tuple[int, int, int, int], list[tuple[str, int, dict[str, object]]]
     ] = defaultdict(list)
     for row_index, configuration_id in enumerate(configuration_ids):
-        cell = np.asarray(cells[row_index], dtype=np.float64)
+        cell = np.asarray(cell_rows[row_index], dtype=np.float64)
         lengths, angles, anisotropy, skew, volume = cell_metrics(cell)
         atom_bucket = bisect_right(ATOM_BOUNDARIES, nsites[row_index])
         anisotropy_bucket = bisect_right(ANISOTROPY_BOUNDARIES, anisotropy)
@@ -168,14 +168,14 @@ def write_sample_cache(
     )
     counts = np.asarray([len(values) for values in positions_rows], dtype=np.int64)
     batch_ptr = np.concatenate((np.zeros(1, dtype=np.int64), np.cumsum(counts)))
-    cells = np.asarray(structures["cell"].to_pylist(), dtype=np.float64)
+    cell = np.asarray(structures["cell"].to_pylist(), dtype=np.float64)
     pbc = np.asarray(structures["pbc"].to_pylist(), dtype=np.bool_)
     sample_path.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(
         sample_path,
         positions=positions,
         batch_ptr=batch_ptr,
-        cells=cells,
+        cell=cell,
         pbc=pbc,
         atomic_numbers=atomic_numbers,
         row_indices=np.asarray(row_indices, dtype=np.int64),

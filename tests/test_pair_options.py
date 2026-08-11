@@ -10,8 +10,8 @@ from ase.neighborlist import NeighborList as AseNeighborList
 from ase.neighborlist import PrimitiveNeighborList
 from vesin import NeighborList as VesinNeighborList
 
-from tests.reference import find_neighbors_reference
-from tonari import find_neighbors
+from tests.reference import neighbor_list_reference
+from tonari import neighbor_list
 
 PairKey = tuple[int, int, int, int, int]
 
@@ -22,13 +22,11 @@ def pair_keys(
     pair_indices, cell_shifts = output
     if isinstance(pair_indices, torch.Tensor):
         rows = (
-            torch.cat((pair_indices.T, cell_shifts.to(torch.int64)), dim=1)
-            .cpu()
-            .tolist()
+            torch.cat((pair_indices, cell_shifts.to(torch.int64)), dim=1).cpu().tolist()
         )
     else:
         rows = np.concatenate(
-            (pair_indices.T, cell_shifts.astype(np.int64)), axis=1
+            (pair_indices, cell_shifts.astype(np.int64)), axis=1
         ).tolist()
     keys = {tuple(row) for row in rows}
     assert len(keys) == len(rows)
@@ -145,9 +143,12 @@ def test_cpu_numpy_reference_vesin_and_ase_agree(
 ) -> None:
     positions, cell, pbc, cutoff = triclinic_structure
     options = {"half_list": half_list, "include_self": include_self}
-    actual_numpy = pair_keys(find_neighbors(positions, cell, pbc, cutoff, **options))
+    actual_numpy = pair_keys(
+        neighbor_list("PS", positions, cell, pbc, cutoff, **options)
+    )
     actual_torch = pair_keys(
-        find_neighbors(
+        neighbor_list(
+            "PS",
             torch.from_numpy(positions),
             torch.from_numpy(cell),
             torch.from_numpy(pbc),
@@ -156,7 +157,8 @@ def test_cpu_numpy_reference_vesin_and_ase_agree(
         )
     )
     reference = pair_keys(
-        find_neighbors_reference(
+        neighbor_list_reference(
+            "PS",
             torch.from_numpy(positions),
             torch.from_numpy(cell),
             torch.from_numpy(pbc),
@@ -174,13 +176,14 @@ def test_pair_options_obey_reverse_and_self_invariants(
     triclinic_structure: tuple[np.ndarray, np.ndarray, np.ndarray, float],
 ) -> None:
     positions, cell, pbc, cutoff = triclinic_structure
-    full = pair_keys(find_neighbors(positions, cell, pbc, cutoff))
+    full = pair_keys(neighbor_list("PS", positions, cell, pbc, cutoff))
     full_with_self = pair_keys(
-        find_neighbors(positions, cell, pbc, cutoff, include_self=True)
+        neighbor_list("PS", positions, cell, pbc, cutoff, include_self=True)
     )
-    half = pair_keys(find_neighbors(positions, cell, pbc, cutoff, half_list=True))
+    half = pair_keys(neighbor_list("PS", positions, cell, pbc, cutoff, half_list=True))
     half_with_self = pair_keys(
-        find_neighbors(
+        neighbor_list(
+            "PS",
             positions,
             cell,
             pbc,
@@ -203,8 +206,8 @@ def test_periodic_self_images_are_independent_of_zero_shift_self_option() -> Non
     positions = np.zeros((1, 3), dtype=np.float64)
     cell = np.diag([0.4, 8.0, 8.0])
     pbc = np.array([True, False, False])
-    full = pair_keys(find_neighbors(positions, cell, pbc, 1.0))
-    half = pair_keys(find_neighbors(positions, cell, pbc, 1.0, half_list=True))
+    full = pair_keys(neighbor_list("PS", positions, cell, pbc, 1.0))
+    half = pair_keys(neighbor_list("PS", positions, cell, pbc, 1.0, half_list=True))
 
     assert full == {
         (0, 0, -2, 0, 0),
@@ -213,9 +216,9 @@ def test_periodic_self_images_are_independent_of_zero_shift_self_option() -> Non
         (0, 0, 2, 0, 0),
     }
     assert half == {(0, 0, -2, 0, 0), (0, 0, -1, 0, 0)}
-    assert pair_keys(find_neighbors(positions, cell, pbc, 1.0, include_self=True)) == (
-        full | {(0, 0, 0, 0, 0)}
-    )
+    assert pair_keys(
+        neighbor_list("PS", positions, cell, pbc, 1.0, include_self=True)
+    ) == (full | {(0, 0, 0, 0, 0)})
 
 
 @pytest.mark.parametrize("half_list", [False, True])
@@ -225,7 +228,8 @@ def test_strict_boundary_and_distinct_coincident_atoms_are_not_self_pairs(
     positions = torch.tensor([[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [1.0, 0.0, 0.0]])
     options = {"half_list": half_list, "include_self": True}
     keys = pair_keys(
-        find_neighbors(
+        neighbor_list(
+            "PS",
             positions,
             torch.zeros((3, 3)),
             torch.zeros(3, dtype=torch.bool),
@@ -257,10 +261,13 @@ def test_zero_shift_self_does_not_depend_on_squared_cutoff_underflow(
     expected = {(0, 0, 0, 0, 0)}
 
     assert (
-        pair_keys(find_neighbors(positions, cell, pbc, cutoff, **options)) == expected
+        pair_keys(neighbor_list("PS", positions, cell, pbc, cutoff, **options))
+        == expected
     )
     assert (
-        pair_keys(find_neighbors_reference(positions, cell, pbc, cutoff, **options))
+        pair_keys(
+            neighbor_list_reference("PS", positions, cell, pbc, cutoff, **options)
+        )
         == expected
     )
 
@@ -275,7 +282,7 @@ def test_mixed_batch_pair_options_match_individual_structures(
         [[0.0, 0.0, 0.0], [0.4, 0.0, 0.0], [0.0, 0.0, 0.0]],
         dtype=torch.float64,
     )
-    cells = torch.stack(
+    cell = torch.stack(
         (
             torch.zeros((3, 3), dtype=torch.float64),
             torch.diag(torch.tensor([0.5, 8.0, 8.0])),
@@ -283,18 +290,20 @@ def test_mixed_batch_pair_options_match_individual_structures(
     )
     pbc = torch.tensor([[False, False, False], [True, False, False]])
     batch_ptr = torch.tensor([0, 0, 2, 3])
-    cells = torch.cat((torch.zeros((1, 3, 3), dtype=torch.float64), cells))
+    cell = torch.cat((torch.zeros((1, 3, 3), dtype=torch.float64), cell))
     pbc = torch.cat((torch.zeros((1, 3), dtype=torch.bool), pbc))
     options = {"half_list": half_list, "include_self": include_self}
 
     batched = pair_keys(
-        find_neighbors(positions, cells, pbc, 0.6, batch_ptr, **options)
+        neighbor_list("PS", positions, cell, pbc, 0.6, batch_ptr, **options)
     )
-    first = pair_keys(find_neighbors(positions[:2], cells[1], pbc[1], 0.6, **options))
+    first = pair_keys(
+        neighbor_list("PS", positions[:2], cell[1], pbc[1], 0.6, **options)
+    )
     second = {
         (source + 2, target + 2, shift_x, shift_y, shift_z)
         for source, target, shift_x, shift_y, shift_z in pair_keys(
-            find_neighbors(positions[2:], cells[2], pbc[2], 0.6, **options)
+            neighbor_list("PS", positions[2:], cell[2], pbc[2], 0.6, **options)
         )
     }
     assert batched == first | second
@@ -304,7 +313,8 @@ def test_mixed_batch_pair_options_match_individual_structures(
 def test_pair_options_require_bool(option: str) -> None:
     options = {option: 1}
     with pytest.raises(TypeError, match="half_list and include_self must be bool"):
-        find_neighbors(
+        neighbor_list(
+            "PS",
             np.zeros((1, 3)),
             np.zeros((3, 3)),
             np.zeros(3, dtype=np.bool_),
@@ -328,12 +338,12 @@ def test_cuda_exhaustive_and_cell_paths_match_cpu_and_reference(
     cell = torch.zeros((3, 3), dtype=torch.float32)
     pbc = torch.zeros(3, dtype=torch.bool)
     options = {"half_list": half_list, "include_self": include_self}
-    cpu = pair_keys(find_neighbors(positions, cell, pbc, 1.1, **options))
+    cpu = pair_keys(neighbor_list("PS", positions, cell, pbc, 1.1, **options))
     cuda = pair_keys(
-        find_neighbors(positions.cuda(), cell.cuda(), pbc.cuda(), 1.1, **options)
+        neighbor_list("PS", positions.cuda(), cell.cuda(), pbc.cuda(), 1.1, **options)
     )
     reference = pair_keys(
-        find_neighbors_reference(positions, cell, pbc, 1.1, **options)
+        neighbor_list_reference("PS", positions, cell, pbc, 1.1, **options)
     )
     assert cuda == cpu == reference
 
@@ -344,8 +354,9 @@ def test_cuda_defaults_match_explicit_default_options() -> None:
     positions = torch.rand((256, 3), device="cuda") * 8
     cell = torch.zeros((3, 3), device="cuda")
     pbc = torch.zeros(3, dtype=torch.bool, device="cuda")
-    assert pair_keys(find_neighbors(positions, cell, pbc, 1.0)) == pair_keys(
-        find_neighbors(
+    assert pair_keys(neighbor_list("PS", positions, cell, pbc, 1.0)) == pair_keys(
+        neighbor_list(
+            "PS",
             positions,
             cell,
             pbc,
@@ -374,11 +385,11 @@ def test_cuda_unwrapped_cell_list_fallback_preserves_pair_options(
     pbc = torch.ones(3, dtype=torch.bool)
     options = {"half_list": half_list, "include_self": include_self}
 
-    cpu = pair_keys(find_neighbors(positions, cell, pbc, 0.8, **options))
+    cpu = pair_keys(neighbor_list("PS", positions, cell, pbc, 0.8, **options))
     cuda = pair_keys(
-        find_neighbors(positions.cuda(), cell.cuda(), pbc.cuda(), 0.8, **options)
+        neighbor_list("PS", positions.cuda(), cell.cuda(), pbc.cuda(), 0.8, **options)
     )
     reference = pair_keys(
-        find_neighbors_reference(positions, cell, pbc, 0.8, **options)
+        neighbor_list_reference("PS", positions, cell, pbc, 0.8, **options)
     )
     assert cuda == cpu == reference

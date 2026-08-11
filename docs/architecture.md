@@ -4,11 +4,11 @@
 
 ## 整体结构
 
-用户只调用 `find_neighbors(...)`。公共 API 根据输入属于 NumPy 还是 PyTorch，以及 Torch tensor 位于 CPU 还是 CUDA，选择对应执行路径。
+用户只调用 `neighbor_list(...)`。公共 API 根据输入属于 NumPy 还是 PyTorch，以及 Torch tensor 位于 CPU 还是 CUDA，选择对应执行路径；`quantities` 决定最终 tuple 中包含哪些 arrays。
 
 ```mermaid
 flowchart LR
-    A["find_neighbors"] --> B{"输入类型与 device"}
+    A["neighbor_list"] --> B{"输入类型与 device"}
     B -- "NumPy" --> C["NumPy frontend"]
     B -- "Torch CPU" --> D["Torch frontend"]
     B -- "Torch CUDA" --> D
@@ -19,8 +19,9 @@ flowchart LR
     E --> I["共享 C++ core<br/>geometry / policy / CPU search"]
     G --> I
     H -- "geometry / pair policy" --> I
-    I --> J["pair_indices / cell_shifts"]
+    I --> J["edge-first P / S"]
     H --> J
+    J --> K["frontend 选择 i / j / P / S<br/>并按需计算 d / D"]
 ```
 
 这个结构有两个核心目标：公共语义只定义一次，每个硬件后端仍能采用适合自己的执行方式。
@@ -29,11 +30,11 @@ flowchart LR
 
 ### 公共 API
 
-`src/tonari/api.py` 定义 public function、类型标注和 docstring。它只识别输入生态并交给相应 frontend，不构造 periodic metadata，也不选择搜索算法。
+`src/tonari/api.py` 定义 public function、类型标注和 docstring。它验证 `quantities`、识别输入生态并交给相应 frontend，不构造 periodic metadata，也不选择搜索算法。
 
 ### Frontends
 
-NumPy 与 PyTorch frontend 负责各自生态的 shape、dtype、device、batch 和 contiguous-memory 规则。它们把单结构输入规范化为统一的 batch 表示，但不实现几何或 neighbor search。
+NumPy 与 PyTorch frontend 负责各自生态的 shape、dtype、device、batch 和 contiguous-memory 规则。它们把单结构输入规范化为统一的 batch 表示，并从 native `P/S` 组装请求的 quantities；`d/D` 使用原始浮点输入计算，frontend 不实现 neighbor search。
 
 NumPy frontend 不导入 PyTorch；PyTorch frontend 也不会把 tensor 转成 NumPy。这样 NumPy 用户不需要承担 Torch runtime，两个生态之间也不存在隐式复制。
 

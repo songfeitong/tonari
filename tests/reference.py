@@ -12,7 +12,7 @@ _MAXIMUM_IMAGE_SHIFTS = 2**24
 
 
 def _canonical_half_mask(pair_indices: Tensor, cell_shifts: Tensor) -> Tensor:
-    source, target = pair_indices
+    source, target = pair_indices.unbind(dim=1)
     same_atom = source == target
     shift_is_canonical = (cell_shifts[:, 0] < 0) | (
         (cell_shifts[:, 0] == 0)
@@ -25,25 +25,26 @@ def _canonical_half_mask(pair_indices: Tensor, cell_shifts: Tensor) -> Tensor:
 
 
 @torch.no_grad()
-def find_neighbors_reference(
+def neighbor_list_reference(
+    quantities: str,
     positions: Tensor,
-    cells: Tensor,
+    cell: Tensor,
     pbc: Tensor,
     cutoff: float,
     batch_ptr: Tensor | None = None,
     *,
     half_list: bool = False,
     include_self: bool = False,
-) -> tuple[Tensor, Tensor]:
+) -> tuple[Tensor, ...]:
     """Find neighbors exhaustively for development-time correctness checks."""
 
-    positions, cells, pbc, batch_ptr = normalize_torch_inputs(
-        positions, cells, pbc, batch_ptr
+    positions, cell, pbc, batch_ptr = normalize_torch_inputs(
+        positions, cell, pbc, batch_ptr
     )
     cutoff = float(cutoff)
     cutoff_squared = cutoff * cutoff
     int32_range = torch.iinfo(torch.int32)
-    validate_torch_inputs(positions, cells, pbc, cutoff, batch_ptr)
+    validate_torch_inputs(positions, cell, pbc, cutoff, batch_ptr)
     batch_ptr_cpu = batch_ptr.detach().cpu()
     if batch_ptr_cpu[0].item() != 0 or batch_ptr_cpu[-1].item() != len(positions):
         raise ValueError("batch_ptr must start at zero and end at N_total")
@@ -51,8 +52,8 @@ def find_neighbors_reference(
         raise ValueError("batch_ptr must be nondecreasing")
     if not torch.all(torch.isfinite(positions)):
         raise ValueError("positions must contain only finite values")
-    if not torch.all(torch.isfinite(cells)):
-        raise ValueError("cells must contain only finite values")
+    if not torch.all(torch.isfinite(cell)):
+        raise ValueError("cell must contain only finite values")
 
     pair_indices: list[Tensor] = []
     pair_shifts: list[Tensor] = []
@@ -69,7 +70,7 @@ def find_neighbors_reference(
         )
         repeats = [0, 0, 0]
         if active_axes.numel() > 0:
-            active_cell = cells[batch_index, active_axes]
+            active_cell = cell[batch_index, active_axes]
             active_duals = torch.linalg.pinv(active_cell)
             fractional = structure_positions @ active_duals
             floored_fractional = torch.floor(fractional)
@@ -115,7 +116,7 @@ def find_neighbors_reference(
                 displacements = (
                     displacements
                     + shifts[..., axis, None].to(positions.dtype)
-                    * cells[batch_index, axis]
+                    * cell[batch_index, axis]
                 )
             distance_squared = (
                 displacements[..., 0] * displacements[..., 0]
@@ -129,12 +130,12 @@ def find_neighbors_reference(
             if source.numel() == 0:
                 continue
             selected_shifts = shifts[source, target]
-            selected_pairs = torch.stack((source + start, target + start))
+            selected_pairs = torch.stack((source + start, target + start), dim=1)
             if half_list:
                 keep = _canonical_half_mask(selected_pairs, selected_shifts)
-                selected_pairs = selected_pairs[:, keep]
+                selected_pairs = selected_pairs[keep]
                 selected_shifts = selected_shifts[keep]
-                if selected_pairs.shape[1] == 0:
+                if selected_pairs.shape[0] == 0:
                     continue
             if torch.any(
                 (selected_shifts < int32_range.min)
@@ -147,8 +148,29 @@ def find_neighbors_reference(
             pair_shifts.append(selected_shifts.to(torch.int32))
 
     if not pair_indices:
-        return (
-            torch.empty((2, 0), dtype=torch.int64, device=positions.device),
-            torch.empty((0, 3), dtype=torch.int32, device=positions.device),
+        pairs = torch.empty((0, 2), dtype=torch.int64, device=positions.device)
+        cell_shifts = torch.empty((0, 3), dtype=torch.int32, device=positions.device)
+    else:
+        pairs = torch.cat(pair_indices, dim=0)
+        cell_shifts = torch.cat(pair_shifts, dim=0)
+
+    source, target = pairs.unbind(dim=1)
+    values: dict[str, Tensor] = {
+        "i": source,
+        "j": target,
+        "P": pairs,
+        "S": cell_shifts,
+    }
+    if "d" in quantities or "D" in quantities:
+        pair_batch = torch.bucketize(source, batch_ptr[1:], right=True)
+        displacements = (
+            positions[target]
+            - positions[source]
+            + torch.einsum(
+                "ei,eij->ej", cell_shifts.to(positions.dtype), cell[pair_batch]
+            )
         )
-    return torch.cat(pair_indices, dim=1), torch.cat(pair_shifts, dim=0)
+        values["D"] = displacements
+        if "d" in quantities:
+            values["d"] = torch.linalg.vector_norm(displacements, dim=1)
+    return tuple(values[quantity] for quantity in quantities)
