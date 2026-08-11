@@ -17,7 +17,8 @@ std::vector<torch::Tensor> neighbor_list_cuda_brute_force(
     int64_t total_blocks,
     double cutoff,
     bool half_list,
-    bool include_self);
+    bool include_self,
+    bool sorted);
 
 std::vector<torch::Tensor> neighbor_list_cuda_cell(
     const torch::Tensor& positions,
@@ -33,4 +34,5 @@ std::vector<torch::Tensor> neighbor_list_cuda_cell(
     double cutoff,
     bool half_list,
     bool include_self,
+    bool sorted,
     bool fallback_to_brute_force);

@@ -98,4 +98,4 @@ CUDA 把整个 heterogeneous batch 作为一次执行单位。`batch_ptr` 把拼
 
 Production results 已在真实晶体与分子上同 Vesin 做完整 pair-key differential validation，并用 ASE 与独立 brute-force reference 覆盖 partial PBC、multiple images、half/self 等语义。测试比较 pair identity，不依赖 backend output order。
 
-当前实现只接受 scalar cutoff，不提供 species-dependent cutoff、neighbor cap、sorting、Verlet skin 或 prepared workspace。CPU batch 内 structures 顺序执行；CUDA 对大规模未 wrap representatives 可能回退 brute force；极小周期晶胞的真实 image 数和输出数本身仍可能很大。这些限制在[设计文档](design.md)中有精确定义。
+当前实现只接受 scalar cutoff，不提供 species-dependent cutoff、neighbor cap、Verlet skin 或 prepared workspace。CPU batch 内 structures 顺序执行；CUDA 对大规模未 wrap representatives 可能回退 brute force；极小周期晶胞的真实 image 数和输出数本身仍可能很大。这些限制在[设计文档](design.md)中有精确定义。

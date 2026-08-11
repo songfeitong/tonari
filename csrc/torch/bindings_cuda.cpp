@@ -64,7 +64,8 @@ std::vector<torch::Tensor> neighbor_list(
     double cutoff,
     bool half_list,
     bool include_self,
-    const std::string& algorithm_name) {
+    const std::string& algorithm_name,
+    bool sorted) {
     TORCH_CHECK(positions.is_cuda(), "positions must be a CUDA tensor");
     TORCH_CHECK(
         batch_ptr.is_cuda() && cell.is_cuda() && pbc.is_cuda(),
@@ -205,6 +206,7 @@ std::vector<torch::Tensor> neighbor_list(
             cutoff,
             half_list,
             include_self,
+            sorted,
             requested_algorithm == neighbor_search::Algorithm::Auto);
     }
     neighbor_search::require_input(
@@ -221,7 +223,8 @@ std::vector<torch::Tensor> neighbor_list(
         total_blocks,
         cutoff,
         half_list,
-        include_self);
+        include_self,
+        sorted);
 }
 
 }  // namespace

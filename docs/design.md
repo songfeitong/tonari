@@ -14,6 +14,7 @@ results = neighbor_list(
     batch_ptr=None,
     *,
     algorithm="auto",
+    sorted=False,
     half_list=False,
     include_self=False,
 )
@@ -64,7 +65,7 @@ positions[target[k]] - positions[source[k]] + S[k] @ cell
 
 Batch 中先由 `batch_ptr` 确定 pair 所属 structure `b`，再使用 `cell[b]`。Pairs 不会跨 structure 产生，inactive PBC axes 上的 shift 必须为零。
 
-结果只包含 squared distance 严格小于 `cutoff**2` 的 atom-image pairs。输出顺序没有保证，调用者不能把 backend 当前遍历顺序当作接口契约。
+结果只包含 squared distance 严格小于 `cutoff**2` 的 atom-image pairs。默认输出顺序没有保证。`sorted=True` 只保证 source indices 非递减；相同 source 内的 target indices 和 cell shifts 顺序仍未指定。
 
 ## Full、half 与 self
 
@@ -120,4 +121,4 @@ Native provider 生成 edge-first `P` 与 `S`；frontend 按 `quantities` 选择
 
 ## 暂不支持
 
-当前不提供 pair sorting、neighbor cap、species-dependent cutoff、Verlet skin、prepared metadata/workspace、CUDA Graph capture、`torch.compile`/export contract 或 GNN/PyG adapter。未来 adapter 应在边界把 `P` 转置为 `edge_index`，把 `D` 映射为 `edge_vectors`，而不是把 graph 专属术语引入核心 API。
+当前不提供 neighbor cap、species-dependent cutoff、Verlet skin、prepared metadata/workspace、CUDA Graph capture、`torch.compile`/export contract 或 GNN/PyG adapter。未来 adapter 应在边界把 `P` 转置为 `edge_index`，把 `D` 映射为 `edge_vectors`，而不是把 graph 专属术语引入核心 API。

@@ -23,6 +23,14 @@ def pair_keys(
     return {tuple(row) for row in rows}
 
 
+def assert_sorted_by_source(pair_indices: np.ndarray | torch.Tensor) -> None:
+    source = pair_indices[:, 0]
+    if isinstance(source, np.ndarray):
+        assert np.all(source[1:] >= source[:-1])
+    else:
+        assert torch.all(source[1:] >= source[:-1])
+
+
 def periodic_batch() -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     generator = torch.Generator().manual_seed(1945)
     counts = (32, 288)
@@ -71,6 +79,7 @@ def test_cpu_algorithms_match_reference(algorithm: str, ecosystem: str) -> None:
             1.2,
             batch_ptr.numpy(),
             algorithm=algorithm,
+            sorted=True,
             half_list=True,
             include_self=True,
         )
@@ -83,10 +92,12 @@ def test_cpu_algorithms_match_reference(algorithm: str, ecosystem: str) -> None:
             1.2,
             batch_ptr,
             algorithm=algorithm,
+            sorted=True,
             half_list=True,
             include_self=True,
         )
     assert pair_keys(*actual) == pair_keys(*expected)
+    assert_sorted_by_source(actual[0])
 
 
 def test_forced_cpu_cell_list_reports_an_unsupported_layout() -> None:
@@ -126,10 +137,12 @@ def test_cuda_algorithms_match_reference(algorithm: str) -> None:
         1.2,
         batch_ptr.cuda(),
         algorithm=algorithm,
+        sorted=True,
         half_list=True,
         include_self=True,
     )
     assert pair_keys(*actual) == pair_keys(*expected)
+    assert_sorted_by_source(actual[0])
 
 
 @pytest.mark.cuda

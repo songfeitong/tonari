@@ -451,7 +451,8 @@ std::vector<torch::Tensor> neighbor_list_cuda_brute_force(
     int64_t total_blocks,
     double cutoff,
     bool half_list,
-    bool include_self) {
+    bool include_self,
+    bool sorted) {
     TORCH_CHECK(positions.is_cuda(), "positions must be a CUDA tensor");
     TORCH_CHECK(batch_ptr.is_cuda() && cell.is_cuda() && duals.is_cuda(), "all inputs must be CUDA tensors");
     TORCH_CHECK(image_shifts.is_cuda() && image_offsets.is_cuda() && block_offsets.is_cuda(), "all metadata must be CUDA tensors");
@@ -546,5 +547,10 @@ std::vector<torch::Tensor> neighbor_list_cuda_brute_force(
             stream);
     });
     C10_CUDA_KERNEL_LAUNCH_CHECK();
+    if (sorted && n_pairs > 1) {
+        const auto order = torch::argsort(pair_indices.select(1, 0));
+        pair_indices = pair_indices.index_select(0, order);
+        cell_shifts = cell_shifts.index_select(0, order);
+    }
     return {pair_indices, cell_shifts};
 }

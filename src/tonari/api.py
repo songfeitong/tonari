@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import builtins
 from typing import TYPE_CHECKING, Literal, overload
 
 import numpy as np
@@ -24,6 +25,7 @@ def neighbor_list(
     batch_ptr: Tensor | None = None,
     *,
     algorithm: _Algorithm = "auto",
+    sorted: bool = False,
     half_list: bool = False,
     include_self: bool = False,
 ) -> tuple[Tensor, ...]: ...
@@ -39,6 +41,7 @@ def neighbor_list(
     batch_ptr: NDArray[np.int64] | None = None,
     *,
     algorithm: _Algorithm = "auto",
+    sorted: bool = False,
     half_list: bool = False,
     include_self: bool = False,
 ) -> tuple[np.ndarray, ...]: ...
@@ -53,6 +56,7 @@ def neighbor_list(
     batch_ptr: Tensor | np.ndarray | None = None,
     *,
     algorithm: _Algorithm = "auto",
+    sorted: bool = False,
     half_list: bool = False,
     include_self: bool = False,
 ) -> tuple[Tensor, ...] | tuple[np.ndarray, ...]:
@@ -90,6 +94,9 @@ def neighbor_list(
             appropriate method. ``"brute_force"`` exhaustively checks every
             relevant atom pair. ``"cell_list"`` partitions space so that atoms
             only inspect nearby regions.
+        sorted: If ``True``, sort pairs by source index. The order of target
+            indices and cell shifts within each source is unspecified. The
+            default is ``False``.
         half_list: If ``False`` (default), return the full directed list. If
             ``True``, retain the lexicographically smaller of
             ``(source, target, Sx, Sy, Sz)`` and
@@ -117,7 +124,7 @@ def neighbor_list(
     Raises:
         TypeError: If ``quantities`` or ``algorithm`` is not a string; array
             arguments mix PyTorch and NumPy or use an unsupported container
-            type; or either boolean option is not a Python ``bool``.
+            type; or a boolean option is not a Python ``bool``.
         ValueError: If ``quantities`` contains an unsupported character;
             ``algorithm`` is unsupported; or frontend shapes, dtypes, devices,
             ``batch_ptr``, ``cutoff``, periodic cells, or host-validated
@@ -135,8 +142,8 @@ def neighbor_list(
         ``(target, source, -S)``. A zero-shift self pair is controlled only by
         ``include_self``. Periodic self-images remain ordinary cutoff pairs,
         and multiple periodic images are retained. Pairs never cross structures,
-        shifts along inactive ``pbc`` axes are zero, and output order is
-        unspecified.
+        shifts along inactive ``pbc`` axes are zero. Output order is
+        unspecified unless ``sorted=True``.
 
         Neighbor identity is discrete and is not differentiable. For Torch
         inputs, returned distances and displacement vectors are computed from
@@ -160,14 +167,16 @@ def neighbor_list(
         raise TypeError("quantities must be a string")
     invalid_quantities = set(quantities) - _VALID_QUANTITIES
     if invalid_quantities:
-        invalid = "".join(sorted(invalid_quantities))
+        invalid = "".join(builtins.sorted(invalid_quantities))
         raise ValueError(f"unsupported quantities: {invalid!r}")
     if not isinstance(algorithm, str):
         raise TypeError("algorithm must be a string")
     if algorithm not in _VALID_ALGORITHMS:
         raise ValueError("algorithm must be 'auto', 'brute_force', or 'cell_list'")
-    if not isinstance(half_list, bool) or not isinstance(include_self, bool):
-        raise TypeError("half_list and include_self must be bool")
+    if not all(
+        isinstance(option, bool) for option in (sorted, half_list, include_self)
+    ):
+        raise TypeError("sorted, half_list, and include_self must be bool")
     if isinstance(positions, np.ndarray):
         from ._numpy_frontend import neighbor_list_numpy
 
@@ -179,6 +188,7 @@ def neighbor_list(
             cutoff,
             batch_ptr,
             algorithm=algorithm,
+            sorted=sorted,
             half_list=half_list,
             include_self=include_self,
         )
@@ -197,6 +207,7 @@ def neighbor_list(
             cutoff,
             batch_ptr,
             algorithm=algorithm,
+            sorted=sorted,
             half_list=half_list,
             include_self=include_self,
         )

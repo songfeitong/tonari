@@ -35,9 +35,11 @@ def test_options_are_keyword_only_and_default_to_existing_behavior() -> None:
         "cutoff",
     )
     assert signature.parameters["algorithm"].kind is inspect.Parameter.KEYWORD_ONLY
+    assert signature.parameters["sorted"].kind is inspect.Parameter.KEYWORD_ONLY
     assert signature.parameters["half_list"].kind is inspect.Parameter.KEYWORD_ONLY
     assert signature.parameters["include_self"].kind is inspect.Parameter.KEYWORD_ONLY
     assert signature.parameters["algorithm"].default == "auto"
+    assert signature.parameters["sorted"].default is False
     assert signature.parameters["half_list"].default is False
     assert signature.parameters["include_self"].default is False
 

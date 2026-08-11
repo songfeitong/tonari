@@ -107,6 +107,7 @@ def neighbor_list_numpy(
     batch_ptr: np.ndarray | None,
     *,
     algorithm: str,
+    sorted: bool,
     half_list: bool,
     include_self: bool,
 ) -> tuple[np.ndarray, ...]:

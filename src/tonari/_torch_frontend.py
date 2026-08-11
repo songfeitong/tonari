@@ -114,6 +114,7 @@ def neighbor_list_torch(
     batch_ptr: Tensor | None,
     *,
     algorithm: str,
+    sorted: bool,
     half_list: bool,
     include_self: bool,
 ) -> tuple[Tensor, ...]:
@@ -140,6 +141,7 @@ def neighbor_list_torch(
             raise RuntimeError(
                 "the CUDA extension is not built; install with a CUDA toolkit"
             ) from error
+        arguments += (sorted,)
     else:
         try:
             backend = load_torch_cpu()

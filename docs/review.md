@@ -40,4 +40,4 @@ Benchmark runner 固定比较语义、线程数、warmup 和输出口径，并�
 
 ## 已知但非阻断的限制
 
-One-shot API 每次重建 geometry 与 workspace；CPU batch 内 structures 顺序执行；大规模未 wrap CUDA input 可能回退 brute force；极小周期晶胞的真实 image/output 数可能很大；当前没有 prepared cache、Verlet skin、sorting、neighbor cap 或 per-species cutoff。这些是明确的产品边界，不是被掩盖的 correctness defect。
+One-shot API 每次重建 geometry 与 workspace；CPU batch 内 structures 顺序执行；大规模未 wrap CUDA input 可能回退 brute force；极小周期晶胞的真实 image/output 数可能很大；当前没有 prepared cache、Verlet skin、neighbor cap 或 per-species cutoff。这些是明确的产品边界，不是被掩盖的 correctness defect。

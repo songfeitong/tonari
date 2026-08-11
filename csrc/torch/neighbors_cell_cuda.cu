@@ -569,6 +569,7 @@ std::vector<torch::Tensor> neighbor_list_cuda_cell(
     double cutoff,
     bool half_list,
     bool include_self,
+    bool sorted,
     bool fallback_to_brute_force) {
     validate_cell_inputs(
         positions,
@@ -676,7 +677,8 @@ std::vector<torch::Tensor> neighbor_list_cuda_cell(
             total_blocks,
             cutoff,
             half_list,
-            include_self);
+            include_self,
+            sorted);
     }
     if (total_bins > kMaximumDenseBins ||
         (total_nodes > 0 && total_bins > kMaximumBinsPerNode * total_nodes)) {
@@ -699,7 +701,8 @@ std::vector<torch::Tensor> neighbor_list_cuda_cell(
             total_blocks,
             cutoff,
             half_list,
-            include_self);
+            include_self,
+            sorted);
     }
 
     auto bin_heads = torch::full(

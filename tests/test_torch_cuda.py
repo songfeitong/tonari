@@ -242,9 +242,12 @@ def test_nondefault_stream_and_empty_structure() -> None:
     stream = torch.cuda.Stream()
     with torch.cuda.stream(stream):
         positions = positions + 0.0
-        pair_indices, shifts = neighbor_list("PS", positions, cell, pbc, 0.5, batch_ptr)
+        pair_indices, shifts = neighbor_list(
+            "PS", positions, cell, pbc, 0.5, batch_ptr, sorted=True
+        )
     torch.cuda.current_stream().wait_stream(stream)
     assert pair_keys(pair_indices, shifts) == {(0, 1, 0, 0, 0), (1, 0, 0, 0, 0)}
+    assert torch.all(pair_indices[1:, 0] >= pair_indices[:-1, 0])
 
 
 def test_empty_periodic_structure_does_not_enumerate_tiny_cell_images() -> None:

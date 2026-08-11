@@ -117,13 +117,16 @@ def test_cuda_quantities_match_cpu() -> None:
     cell = torch.diag(torch.tensor([1.0, 4.0, 4.0], dtype=torch.float64))
     pbc = torch.tensor([True, False, False])
 
-    cpu = neighbor_list("ijPSdD", positions, cell, pbc, 0.3)
-    cuda = neighbor_list("ijPSdD", positions.cuda(), cell.cuda(), pbc.cuda(), 0.3)
+    cpu = neighbor_list("ijPSdD", positions, cell, pbc, 0.3, sorted=True)
+    cuda = neighbor_list(
+        "ijPSdD", positions.cuda(), cell.cuda(), pbc.cuda(), 0.3, sorted=True
+    )
 
     def sorted_rows(output: tuple[torch.Tensor, ...]) -> np.ndarray:
         source, target, pairs, shifts, distances, displacements = output
         assert torch.equal(source, pairs[:, 0])
         assert torch.equal(target, pairs[:, 1])
+        assert torch.all(source[1:] >= source[:-1])
         rows = (
             torch.cat(
                 (

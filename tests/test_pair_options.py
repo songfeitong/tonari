@@ -309,10 +309,12 @@ def test_mixed_batch_pair_options_match_individual_structures(
     assert batched == first | second
 
 
-@pytest.mark.parametrize("option", ["half_list", "include_self"])
-def test_pair_options_require_bool(option: str) -> None:
+@pytest.mark.parametrize("option", ["sorted", "half_list", "include_self"])
+def test_boolean_options_require_bool(option: str) -> None:
     options = {option: 1}
-    with pytest.raises(TypeError, match="half_list and include_self must be bool"):
+    with pytest.raises(
+        TypeError, match="sorted, half_list, and include_self must be bool"
+    ):
         neighbor_list(
             "PS",
             np.zeros((1, 3)),
