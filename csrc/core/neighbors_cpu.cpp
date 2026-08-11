@@ -16,7 +16,7 @@ namespace {
 using neighbor_search::PairBuffers;
 
 // The crossover was selected from a real-structure threshold sweep.
-constexpr int64_t kExhaustiveCandidateLimit = 16384;
+constexpr int64_t kBruteForceCandidateLimit = 16384;
 // Avoid pathological dense allocation for sparse finite coordinates.
 constexpr int64_t kMaximumDenseBins = int64_t{1} << 26;
 constexpr int64_t kMaximumBinsPerImage = 64;
@@ -39,7 +39,7 @@ struct BinLayout {
 };
 
 
-bool candidate_count_at_most(
+bool brute_force_candidate_count_at_most(
     int64_t n_atoms, int64_t n_shifts, int64_t limit) {
     if (n_atoms == 0 || n_shifts == 0) {
         return true;
@@ -288,7 +288,7 @@ inline void append_cell_candidate(
 
 
 template <typename scalar_t, neighbor_search::PairMode Mode>
-void search_exhaustive(
+void search_brute_force(
     int64_t atom_offset,
     int64_t n_atoms,
     int64_t n_shifts,
@@ -316,6 +316,21 @@ void search_exhaustive(
             }
         }
     }
+}
+
+
+neighbor_search::Algorithm select_cpu_algorithm(
+    neighbor_search::Algorithm requested,
+    int64_t n_atoms,
+    int64_t n_shifts) {
+    if (requested != neighbor_search::Algorithm::Auto) {
+        return requested;
+    }
+    if (brute_force_candidate_count_at_most(
+            n_atoms, n_shifts, kBruteForceCandidateLimit)) {
+        return neighbor_search::Algorithm::BruteForce;
+    }
+    return neighbor_search::Algorithm::CellList;
 }
 
 
@@ -520,7 +535,8 @@ PairBuffers build_neighbor_pairs(
     std::span<const scalar_t> duals,
     std::span<const int32_t> image_shifts,
     std::span<const int64_t> image_offsets,
-    double cutoff) {
+    double cutoff,
+    neighbor_search::Algorithm requested_algorithm) {
     const scalar_t* position_data = positions.data();
     const int64_t* batch_ptr_data = batch_ptr.data();
     const scalar_t* cell_data = cells.data();
@@ -555,9 +571,10 @@ PairBuffers build_neighbor_pairs(
             atom_wraps);
         const int32_t* structure_shifts =
             image_shift_data + 3 * shift_offset;
-        if (candidate_count_at_most(
-                n_atoms, n_shifts, kExhaustiveCandidateLimit)) {
-            search_exhaustive<scalar_t, Mode>(
+        const neighbor_search::Algorithm algorithm = select_cpu_algorithm(
+            requested_algorithm, n_atoms, n_shifts);
+        if (algorithm == neighbor_search::Algorithm::BruteForce) {
+            search_brute_force<scalar_t, Mode>(
                 atom_offset,
                 n_atoms,
                 n_shifts,
@@ -586,8 +603,8 @@ PairBuffers build_neighbor_pairs(
         // distance; only the boundary shell needs the direct public formula.
         const scalar_t inner_cutoff = std::max(
             scalar_t(0), 2 * scalar_cutoff - search_cutoff);
-        if (!cell_list_cutoff_is_safe ||
-            !search_cell_list<scalar_t, Mode>(
+        const bool cell_list_succeeded = cell_list_cutoff_is_safe &&
+            search_cell_list<scalar_t, Mode>(
                 atom_offset,
                 n_atoms,
                 n_shifts,
@@ -600,18 +617,24 @@ PairBuffers build_neighbor_pairs(
                 search_cutoff,
                 inner_cutoff * inner_cutoff,
                 cutoff_squared,
-                pairs)) {
-            search_exhaustive<scalar_t, Mode>(
-                atom_offset,
-                n_atoms,
-                n_shifts,
-                position_data + 3 * atom_offset,
-                cell,
-                atom_wraps,
-                structure_shifts,
-                cutoff_squared,
                 pairs);
+        if (cell_list_succeeded) {
+            continue;
         }
+        neighbor_search::require_search(
+            requested_algorithm != neighbor_search::Algorithm::CellList,
+            "cell_list cannot safely process this structure; use "
+            "algorithm='auto' or 'brute_force'");
+        search_brute_force<scalar_t, Mode>(
+            atom_offset,
+            n_atoms,
+            n_shifts,
+            position_data + 3 * atom_offset,
+            cell,
+            atom_wraps,
+            structure_shifts,
+            cutoff_squared,
+            pairs);
     }
     return pairs;
 }
@@ -626,7 +649,8 @@ PairBuffers dispatch_neighbor_pairs(
     std::span<const int32_t> image_shifts,
     std::span<const int64_t> image_offsets,
     double cutoff,
-    neighbor_search::PairMode mode) {
+    neighbor_search::PairMode mode,
+    neighbor_search::Algorithm algorithm) {
     auto build = [&]<neighbor_search::PairMode Mode>() {
         return build_neighbor_pairs<scalar_t, Mode>(
             positions,
@@ -635,7 +659,8 @@ PairBuffers dispatch_neighbor_pairs(
             duals,
             image_shifts,
             image_offsets,
-            cutoff);
+            cutoff,
+            algorithm);
     };
     switch (mode) {
         case neighbor_search::PairMode::Full:
@@ -660,7 +685,8 @@ neighbor_search::PairBuffers neighbor_search::neighbor_list_cpu(
     std::span<const scalar_t> cells,
     std::span<const uint8_t> pbc,
     double cutoff,
-    PairMode mode) {
+    PairMode mode,
+    Algorithm algorithm) {
     require_input(positions.size() % 3 == 0, "positions must have shape (N_total, 3)");
     require_input(!batch_ptr.empty(), "batch_ptr must have shape (B + 1,)");
     const int64_t n_atoms = static_cast<int64_t>(positions.size() / 3);
@@ -701,7 +727,8 @@ neighbor_search::PairBuffers neighbor_search::neighbor_list_cpu(
         metadata.image_shifts,
         metadata.image_offsets,
         cutoff,
-        mode);
+        mode,
+        algorithm);
 }
 
 
@@ -711,7 +738,8 @@ template neighbor_search::PairBuffers neighbor_search::neighbor_list_cpu<float>(
     std::span<const float>,
     std::span<const uint8_t>,
     double,
-    PairMode);
+    PairMode,
+    Algorithm);
 
 
 template neighbor_search::PairBuffers neighbor_search::neighbor_list_cpu<double>(
@@ -720,4 +748,5 @@ template neighbor_search::PairBuffers neighbor_search::neighbor_list_cpu<double>
     std::span<const double>,
     std::span<const uint8_t>,
     double,
-    PairMode);
+    PairMode,
+    Algorithm);

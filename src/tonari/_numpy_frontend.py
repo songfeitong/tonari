@@ -106,6 +106,7 @@ def neighbor_list_numpy(
     cutoff: float,
     batch_ptr: np.ndarray | None,
     *,
+    algorithm: str,
     half_list: bool,
     include_self: bool,
 ) -> tuple[np.ndarray, ...]:
@@ -129,6 +130,7 @@ def neighbor_list_numpy(
         cutoff,
         half_list,
         include_self,
+        algorithm,
     )
     return _select_numpy_quantities(
         quantities, positions, cell, batch_ptr, pair_indices, cell_shifts

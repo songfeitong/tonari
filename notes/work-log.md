@@ -6,7 +6,7 @@
 
 项目首先固定 neighbor-search 的物理约定：cell vectors 按行；periodicity 只由 `pbc` 决定；shift 施加在 target image；displacement 从 source 指向 target；cutoff 使用严格 `<`；periodic self-images 与 multiple images 必须保留。Vesin 只作为外部 reference 和 baseline，没有复制其实现。
 
-第一版 CUDA search 已采用小体系 exhaustive、大体系 batched cell list 的总体路线。关键判断是把完整 batch 作为执行单位，不在 Python 中逐结构构图，也不 materialize `N² × images` candidate tensors。
+第一版 CUDA search 已采用小体系 brute force、大体系 batched cell list 的总体路线。关键判断是把完整 batch 作为执行单位，不在 Python 中逐结构构图，也不 materialize `N² × images` candidate tensors。
 
 早期 profiling 显示 Python/Torch metadata 的固定成本高于 raw kernels，因此 periodic geometry 和 schedule preparation 被逐步移入 native boundary。后续优化始终以完整 one-shot call 为测量单位，而不是只看单个 kernel。
 
@@ -18,7 +18,7 @@
 
 ## 2026-08-10：加入 CPU backend 与共享 geometry
 
-CPU backend 没有包在 CUDA 路径外层，而是从公共 periodic geometry 和 pair policy 出发独立设计。小候选空间使用紧凑 exhaustive loop，大候选空间使用 Cartesian cell list；batch 内 structures 顺序处理，外层 workflow 决定并行度。
+CPU backend 没有包在 CUDA 路径外层，而是从公共 periodic geometry 和 pair policy 出发独立设计。小候选空间使用紧凑 brute-force loop，大候选空间使用 Cartesian cell list；batch 内 structures 顺序处理，外层 workflow 决定并行度。
 
 CPU 与 CUDA 共享 active-cell geometry、image range 和 pair identity，但保留各自的数据布局和调度。独立审查推动 canonical displacement predicate、empty-structure behavior、rank handling、unwrapped representatives 和资源边界在两端形成一致语义。
 

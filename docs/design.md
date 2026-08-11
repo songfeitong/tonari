@@ -13,6 +13,7 @@ results = neighbor_list(
     cutoff,
     batch_ptr=None,
     *,
+    algorithm="auto",
     half_list=False,
     include_self=False,
 )
@@ -37,6 +38,8 @@ Batch 输入：
 NumPy 与 Torch 使用同一个函数，所有 array 参数必须属于同一生态。NumPy 只走 CPU；Torch 根据 `positions.device` 选择 CPU 或 CUDA。`positions` 和 `cell` 必须使用相同的 `float32` 或 `float64` dtype，`pbc` 为 bool，`batch_ptr` 为 int64；Torch arrays 还必须位于同一 device。
 
 函数与具体长度单位无关，但 `positions`、`cell` 和 `cutoff` 必须使用同一单位。`cutoff` 必须有限且为正数。
+
+`algorithm` 接受 `"auto"`、`"brute_force"` 或 `"cell_list"`。它只决定如何寻找 candidates，不改变 pair identity；精确选择规则和 fallback 语义见[算法选择](algorithm-selection.md)。
 
 ## Quantities、输出与方向
 
@@ -89,19 +92,19 @@ Pair 方向、zero-shift self 和 canonical half rule 属于共享 policy。CPU 
 
 ## CPU backend
 
-CPU 在一个 native call 内处理 batch，并按 structure 顺序搜索。候选规模较小时使用 exhaustive path；较大时使用 Cartesian cell list。算法选择是内部性能策略，不影响结果，也不属于 public API。
+CPU 在一个 native call 内处理 batch，并按 structure 顺序搜索。`"auto"` 为每个 structure 独立选择 brute-force path 或 Cartesian cell list；显式指定算法时，每个非空 structure 都使用该路径。
 
-Exhaustive path 直接枚举 source、target 和 periodic images。Cell-list path wrap representatives、建立 cutoff-sized bins、插入可能相关的 periodic target images，再让每个 source 查询邻近 bins。Broad phase 必须保守；接近浮点边界的 candidate 会按原始 positions 与最终 shift 重算公共 strict predicate。
+Brute-force path 直接枚举 source、target 和相关 cell translations。Cell-list path wrap representatives、建立 cutoff-sized bins、插入可能相关的 periodic target images，再让每个 source 查询邻近 bins。Broad phase 必须保守；接近浮点边界的 candidate 会按原始 positions 与最终 shift 重算公共 strict predicate。
 
 CPU core 不创建内部 thread pool，并在 native search 期间释放 Python GIL。调用方可以使用 DataLoader workers、进程级并行或 DDP 决定外层并行方式。
 
 ## CUDA backend
 
-CUDA provider 一次接收完整 batch。小结构使用 fused exhaustive path，大结构使用 batched cell list；选择依据是内部性能策略。
+CUDA provider 一次接收完整 batch。`"auto"` 为整个调用选择 fused brute-force path 或 batched cell list；显式指定算法时直接使用相应路径。
 
 所有 CUDA tasks 都携带 structure segmentation，geometry、image insertion、query 和 output 只在所属 structure 内执行。Kernels 使用 PyTorch current stream 和当前 device；不同 cell、PBC patterns 与 atom counts 可以存在于同一 batch。
 
-正常 well-wrapped input 使用 batched cell list。大规模未 wrap representatives 为保持原始坐标公式的浮点语义，可能回退到 exhaustive path，因此这类输入不保证 cell-list complexity。
+正常 well-wrapped input 可以使用 batched cell list。`"auto"` 遇到不适合 cell list 的 unwrapped representatives 或 bin layout 时回退 brute force；显式 `"cell_list"` 则报错。因此这类输入不保证 cell-list complexity。
 
 ## NumPy、Torch 与内存
 
@@ -111,7 +114,7 @@ Native provider 生成 edge-first `P` 与 `S`；frontend 按 `quantities` 选择
 
 ## Reference 与验证原则
 
-内部 reference 使用独立 exhaustive enumeration，只用于 tests 和 differential validation，不属于 public surface。Production tests 以公开 pair keys 和 displacement 公式为准，不冻结 output order 或内部算法选择。
+内部 reference 使用独立 brute-force enumeration，只用于 tests 和 differential validation，不属于 public surface。Production tests 以公开 pair keys 和 displacement 公式为准，不冻结 output order 或 `"auto"` 的内部选择。
 
 外部 Vesin 与 ASE 使用相同的 pair 方向和 target-shift convention；验证只需统一 half/self policy 后进行 exact key comparison。性能 benchmark 与 correctness reference 是两个角色：慢但独立的实现仍可作为 reference，快的 baseline 也必须先证明语义一致。
 

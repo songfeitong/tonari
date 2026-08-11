@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, overload
+from typing import TYPE_CHECKING, Literal, overload
 
 import numpy as np
 from numpy.typing import NDArray
@@ -10,6 +10,8 @@ if TYPE_CHECKING:
 
 
 _VALID_QUANTITIES = frozenset("ijPSdD")
+_Algorithm = Literal["auto", "brute_force", "cell_list"]
+_VALID_ALGORITHMS = frozenset(("auto", "brute_force", "cell_list"))
 
 
 @overload
@@ -21,6 +23,7 @@ def neighbor_list(
     cutoff: float,
     batch_ptr: Tensor | None = None,
     *,
+    algorithm: _Algorithm = "auto",
     half_list: bool = False,
     include_self: bool = False,
 ) -> tuple[Tensor, ...]: ...
@@ -35,6 +38,7 @@ def neighbor_list(
     cutoff: float,
     batch_ptr: NDArray[np.int64] | None = None,
     *,
+    algorithm: _Algorithm = "auto",
     half_list: bool = False,
     include_self: bool = False,
 ) -> tuple[np.ndarray, ...]: ...
@@ -48,6 +52,7 @@ def neighbor_list(
     cutoff: float,
     batch_ptr: Tensor | np.ndarray | None = None,
     *,
+    algorithm: _Algorithm = "auto",
     half_list: bool = False,
     include_self: bool = False,
 ) -> tuple[Tensor, ...] | tuple[np.ndarray, ...]:
@@ -81,6 +86,10 @@ def neighbor_list(
             nondecreasing, and end at ``N_total``. ``None`` denotes one
             structure and is equivalent to ``[0, N]``. Its array ecosystem
             and, for Torch, device must match ``positions``.
+        algorithm: Search method. ``"auto"`` (default) selects a backend-
+            appropriate method. ``"brute_force"`` exhaustively checks every
+            relevant atom pair. ``"cell_list"`` partitions space so that atoms
+            only inspect nearby regions.
         half_list: If ``False`` (default), return the full directed list. If
             ``True``, retain the lexicographically smaller of
             ``(source, target, Sx, Sy, Sz)`` and
@@ -106,16 +115,18 @@ def neighbor_list(
         For a single structure, use ``cell`` directly.
 
     Raises:
-        TypeError: If ``quantities`` is not a string; array arguments mix
-            PyTorch and NumPy or use an unsupported container type; or either
-            pair option is not a Python ``bool``.
-        ValueError: If ``quantities`` contains an unsupported character, or if
-            frontend shapes, dtypes, devices, ``batch_ptr``, ``cutoff``,
-            periodic cells, or host-validated index/resource bounds are invalid.
+        TypeError: If ``quantities`` or ``algorithm`` is not a string; array
+            arguments mix PyTorch and NumPy or use an unsupported container
+            type; or either boolean option is not a Python ``bool``.
+        ValueError: If ``quantities`` contains an unsupported character;
+            ``algorithm`` is unsupported; or frontend shapes, dtypes, devices,
+            ``batch_ptr``, ``cutoff``, periodic cells, or host-validated
+            index/resource bounds are invalid.
         RuntimeError: If the required native CPU or CUDA extension is missing;
             if native search discovers nonfinite positions or a representative
-            wrap/output shift outside its integer range; or if backend execution
-            otherwise fails.
+            wrap/output shift outside its integer range; if an explicitly
+            requested cell list cannot safely process the input; or if backend
+            execution otherwise fails.
 
     Note:
         The result contains atom-image pairs whose squared distance is strictly
@@ -151,6 +162,10 @@ def neighbor_list(
     if invalid_quantities:
         invalid = "".join(sorted(invalid_quantities))
         raise ValueError(f"unsupported quantities: {invalid!r}")
+    if not isinstance(algorithm, str):
+        raise TypeError("algorithm must be a string")
+    if algorithm not in _VALID_ALGORITHMS:
+        raise ValueError("algorithm must be 'auto', 'brute_force', or 'cell_list'")
     if not isinstance(half_list, bool) or not isinstance(include_self, bool):
         raise TypeError("half_list and include_self must be bool")
     if isinstance(positions, np.ndarray):
@@ -163,6 +178,7 @@ def neighbor_list(
             pbc,
             cutoff,
             batch_ptr,
+            algorithm=algorithm,
             half_list=half_list,
             include_self=include_self,
         )
@@ -180,6 +196,7 @@ def neighbor_list(
             pbc,
             cutoff,
             batch_ptr,
+            algorithm=algorithm,
             half_list=half_list,
             include_self=include_self,
         )

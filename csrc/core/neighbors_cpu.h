@@ -1,5 +1,6 @@
 #pragma once
 
+#include "algorithm.h"
 #include "pair_policy.h"
 
 #include <cstdint>
@@ -22,7 +23,8 @@ PairBuffers neighbor_list_cpu(
     std::span<const scalar_t> cells,
     std::span<const uint8_t> pbc,
     double cutoff,
-    PairMode mode);
+    PairMode mode,
+    Algorithm algorithm);
 
 
 extern template PairBuffers neighbor_list_cpu<float>(
@@ -31,7 +33,8 @@ extern template PairBuffers neighbor_list_cpu<float>(
     std::span<const float>,
     std::span<const uint8_t>,
     double,
-    PairMode);
+    PairMode,
+    Algorithm);
 
 extern template PairBuffers neighbor_list_cpu<double>(
     std::span<const double>,
@@ -39,6 +42,7 @@ extern template PairBuffers neighbor_list_cpu<double>(
     std::span<const double>,
     std::span<const uint8_t>,
     double,
-    PairMode);
+    PairMode,
+    Algorithm);
 
 }  // namespace neighbor_search

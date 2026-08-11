@@ -1,6 +1,6 @@
 # 算法总览
 
-本文介绍项目解决什么问题、为什么同时使用 exhaustive search 和 cell list，以及 CPU 与 CUDA 如何围绕不同硬件组织同一套 neighbor-search 语义。实现边界见[架构介绍](architecture.md)，精确约定见[设计文档](design.md)，测量方法与完整数字见[benchmark](benchmark.md)。
+本文介绍项目解决什么问题、为什么同时使用 brute force 和 cell list，以及 CPU 与 CUDA 如何围绕不同硬件组织同一套 neighbor-search 语义。实现边界见[架构介绍](architecture.md)，自动选择规则见[算法选择](algorithm-selection.md)，精确约定见[设计文档](design.md)，测量方法与完整数字见[benchmark](benchmark.md)。
 
 ## 要解决的问题
 
@@ -14,7 +14,7 @@ positions[target] - positions[source] + cell_shift @ cell
 
 ## 两种互补的搜索方式
 
-最直接的 exhaustive search 枚举每个 source、target 和相关 periodic image。它的工作量随原子数近似二次增长，但循环简单、数据连续，不需要先建立空间索引，因此在小体系上通常最快。
+最直接的 brute-force search 枚举每个 source、target 和相关 periodic image。它的工作量随原子数近似二次增长，但循环简单、数据连续，不需要先建立空间索引，因此在小体系上通常最快。
 
 Cell list 把空间划分为与 cutoff 同量级的 bins，每个 source 只查询附近 bins。固定 density、cutoff 和平均邻居数时，其工作量接近 `O(N + P)`，其中 `P` 是必须输出的 pair 数；代价是建表、额外内存和更复杂的访问模式。
 
@@ -25,10 +25,10 @@ flowchart LR
     A["positions / cell / pbc / batch_ptr"] --> B["统一 periodic geometry"]
     B --> C{"执行设备"}
     C -- "CPU" --> D{"逐 structure 选择"}
-    D -- "小候选空间" --> E["CPU exhaustive"]
+    D -- "小候选空间" --> E["CPU brute force"]
     D -- "大候选空间" --> F["CPU cell list"]
     C -- "CUDA" --> G{"整 batch 选择"}
-    G -- "小结构" --> H["fused exhaustive"]
+    G -- "小结构" --> H["fused brute force"]
     G -- "大结构" --> I["batched cell list"]
     E --> J["edge-first P / S"]
     F --> J
@@ -42,11 +42,11 @@ CPU 与 CUDA 首先从 `cell` 和 `pbc` 得到 active periodic directions、dual
 
 原子坐标不要求预先 wrap。搜索内部可以使用 wrapped representatives 提高数值稳定性和空间局部性，但返回的 cell shift 会补偿这次变换，保证调用者始终能用原始 positions 重建相同的物理 displacement。
 
-Periodic image enumeration 只决定搜索范围；最终 pair identity 始终由公开 displacement 和 strict cutoff 决定。这样 exhaustive、cell list、CPU 和 CUDA 即使采用不同的 broad phase，也不会拥有不同的物理定义。
+Periodic image enumeration 只决定搜索范围；最终 pair identity 始终由公开 displacement 和 strict cutoff 决定。这样 brute force、cell list、CPU 和 CUDA 即使采用不同的 broad phase，也不会拥有不同的物理定义。
 
 ## CPU 路径
 
-CPU 按 structure 独立选择算法。常见小体系直接进入紧凑的 native exhaustive loop，避免 Python 小算子、临时张量和 cell-list 初始化。
+CPU 按 structure 独立选择算法。常见小体系直接进入紧凑的 native brute-force loop，避免 Python 小算子、临时张量和 cell-list 初始化。
 
 大体系使用 Cartesian cell list。算法先 wrap representatives、建立 source 区域的 bins，再把可能进入 cutoff 范围的 periodic target images 插入对应 bin。每个 source 只扫描相邻 bins，并对候选执行最终 strict predicate。极端稀疏坐标若会产生不合理的空 bin grid，则回退到不需要该分配的路径。
 
@@ -64,7 +64,7 @@ Cell list 不只有一种周期表示。当前实现把可能进入搜索区域�
 
 CUDA 把整个 heterogeneous batch 作为一次执行单位。`batch_ptr` 把拼接的 positions 划分为独立 structures，kernels 根据这些边界找到每个任务所属的 cell 与 PBC；任何 pair 都不会跨结构产生。
 
-小结构走 fused exhaustive path：候选直接映射到 CUDA threads，不构造 `N²` candidate tensors。大结构走 batched cell-list pipeline：整个 batch 共同完成 wrapping、bin construction、periodic image insertion 和 source queries。不同大小的结构共享 launches，因此 GPU 不必在 Python 中逐结构循环。
+小结构走 fused brute-force path：候选直接映射到 CUDA threads，不构造 `N²` candidate tensors。大结构走 batched cell-list pipeline：整个 batch 共同完成 wrapping、bin construction、periodic image insertion 和 source queries。不同大小的结构共享 launches，因此 GPU 不必在 Python 中逐结构循环。
 
 这也是 CUDA 相对通用单结构 neighbor-list API 的主要优势。它不是让单个距离公式更快，而是让完整 batch 只跨越一次 Python/native 边界，并让许多小体系共同填满 GPU。
 
@@ -78,7 +78,7 @@ CUDA 把整个 heterogeneous batch 作为一次执行单位。`batch_ptr` 把拼
 
 项目的性能不是来自新的 neighbor-search 数学，而是来自几项组合决策：
 
-- 小体系直接 exhaustive，大体系才建立 cell list。
+- 小体系直接 brute force，大体系才建立 cell list。
 - Periodic geometry、算法选择和搜索都在一次 native call 内完成。
 - CUDA 以完整 batch 而不是单 structure 为调度单位。
 - CPU 不 materialize candidate tensors，CUDA 不 materialize padded `N² × images` tensors。
@@ -96,6 +96,6 @@ CUDA 把整个 heterogeneous batch 作为一次执行单位。`batch_ptr` 把拼
 
 ## 正确性与适用边界
 
-Production results 已在真实晶体与分子上同 Vesin 做完整 pair-key differential validation，并用 ASE 与独立 exhaustive reference 覆盖 partial PBC、multiple images、half/self 等语义。测试比较 pair identity，不依赖 backend output order。
+Production results 已在真实晶体与分子上同 Vesin 做完整 pair-key differential validation，并用 ASE 与独立 brute-force reference 覆盖 partial PBC、multiple images、half/self 等语义。测试比较 pair identity，不依赖 backend output order。
 
-当前实现只接受 scalar cutoff，不提供 species-dependent cutoff、neighbor cap、sorting、Verlet skin 或 prepared workspace。CPU batch 内 structures 顺序执行；CUDA 对大规模未 wrap representatives 可能回退 exhaustive；极小周期晶胞的真实 image 数和输出数本身仍可能很大。这些限制在[设计文档](design.md)中有精确定义。
+当前实现只接受 scalar cutoff，不提供 species-dependent cutoff、neighbor cap、sorting、Verlet skin 或 prepared workspace。CPU batch 内 structures 顺序执行；CUDA 对大规模未 wrap representatives 可能回退 brute force；极小周期晶胞的真实 image 数和输出数本身仍可能很大。这些限制在[设计文档](design.md)中有精确定义。

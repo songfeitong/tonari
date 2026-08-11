@@ -293,7 +293,7 @@ def main() -> None:
             "dataloader": "map-style, deterministic shuffle, num_workers=0",
             "warmup_seconds_per_backend_and_workload": args.warmup_seconds,
             "statistic": "median wall time; minimum and maximum retained",
-            "cpu_backend": "single-threaded hybrid exhaustive/cell-list; exhaustive candidate limit 16384",
+            "cpu_backend": "single-threaded hybrid brute-force/cell-list; brute-force candidate limit 16384",
             "output_order_compared": False,
             "exact_keys_compared": "(source, target, Sx, Sy, Sz)",
             "vesin": "one reused NeighborList with full_list=True, sorted=False, n_threads=1",

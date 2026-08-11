@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <cstring>
 #include <span>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -23,7 +24,8 @@ std::pair<py::array, py::array> neighbor_list_typed(
     const py::array& pbc,
     double cutoff,
     bool half_list,
-    bool include_self) {
+    bool include_self,
+    neighbor_search::Algorithm algorithm) {
     const auto position_info = positions.request();
     const auto batch_ptr_info = batch_ptr.request();
     const auto cell_info = cell.request();
@@ -45,7 +47,8 @@ std::pair<py::array, py::array> neighbor_list_typed(
                 static_cast<const uint8_t*>(pbc_info.ptr),
                 static_cast<size_t>(pbc_info.size)),
             cutoff,
-            neighbor_search::pair_mode(half_list, include_self));
+            neighbor_search::pair_mode(half_list, include_self),
+            algorithm);
     }
 
     const auto n_pairs = static_cast<py::ssize_t>(pairs.indices.size() / 2);
@@ -75,7 +78,8 @@ std::pair<py::array, py::array> neighbor_list(
     const py::array& pbc,
     double cutoff,
     bool half_list,
-    bool include_self) {
+    bool include_self,
+    const std::string& algorithm) {
     const auto require_contiguous = [](const py::array& array, const char* name) {
         if ((array.flags() & py::array::c_style) == 0) {
             throw py::value_error(std::string(name) + " must be C-contiguous");
@@ -94,13 +98,29 @@ std::pair<py::array, py::array> neighbor_list(
     if (!cell.dtype().is(positions.dtype())) {
         throw py::value_error("cell and positions must have the same dtype");
     }
+    const neighbor_search::Algorithm parsed_algorithm =
+        neighbor_search::parse_algorithm(algorithm);
     if (positions.dtype().is(py::dtype::of<float>())) {
         return neighbor_list_typed<float>(
-            positions, batch_ptr, cell, pbc, cutoff, half_list, include_self);
+            positions,
+            batch_ptr,
+            cell,
+            pbc,
+            cutoff,
+            half_list,
+            include_self,
+            parsed_algorithm);
     }
     if (positions.dtype().is(py::dtype::of<double>())) {
         return neighbor_list_typed<double>(
-            positions, batch_ptr, cell, pbc, cutoff, half_list, include_self);
+            positions,
+            batch_ptr,
+            cell,
+            pbc,
+            cutoff,
+            half_list,
+            include_self,
+            parsed_algorithm);
     }
     throw py::value_error("positions must have dtype float32 or float64");
 }

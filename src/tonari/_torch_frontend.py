@@ -113,6 +113,7 @@ def neighbor_list_torch(
     cutoff: float,
     batch_ptr: Tensor | None,
     *,
+    algorithm: str,
     half_list: bool,
     include_self: bool,
 ) -> tuple[Tensor, ...]:
@@ -130,6 +131,7 @@ def neighbor_list_torch(
         cutoff,
         half_list,
         include_self,
+        algorithm,
     )
     if positions.is_cuda:
         try:

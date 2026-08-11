@@ -36,7 +36,7 @@ def neighbor_list_reference(
     half_list: bool = False,
     include_self: bool = False,
 ) -> tuple[Tensor, ...]:
-    """Find neighbors exhaustively for development-time correctness checks."""
+    """Find neighbors by brute force for development-time correctness checks."""
 
     positions, cell, pbc, batch_ptr = normalize_torch_inputs(
         positions, cell, pbc, batch_ptr

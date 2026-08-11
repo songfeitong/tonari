@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <cstring>
 #include <span>
+#include <string>
 #include <vector>
 
 
@@ -21,7 +22,8 @@ std::vector<torch::Tensor> neighbor_list_typed(
     const torch::Tensor& pbc,
     double cutoff,
     bool half_list,
-    bool include_self) {
+    bool include_self,
+    neighbor_search::Algorithm algorithm) {
     const bool* pbc_data = pbc.data_ptr<bool>();
     std::vector<uint8_t> pbc_values(static_cast<size_t>(pbc.numel()));
     for (int64_t index = 0; index < pbc.numel(); ++index) {
@@ -39,7 +41,8 @@ std::vector<torch::Tensor> neighbor_list_typed(
             static_cast<size_t>(cell.numel())),
         pbc_values,
         cutoff,
-        neighbor_search::pair_mode(half_list, include_self));
+        neighbor_search::pair_mode(half_list, include_self),
+        algorithm);
 
     const int64_t n_pairs = static_cast<int64_t>(pairs.indices.size() / 2);
     auto pair_indices =
@@ -68,7 +71,8 @@ std::vector<torch::Tensor> neighbor_list(
     const torch::Tensor& pbc,
     double cutoff,
     bool half_list,
-    bool include_self) {
+    bool include_self,
+    const std::string& algorithm) {
     TORCH_CHECK(!positions.is_cuda(), "positions must be a CPU tensor");
     TORCH_CHECK(
         !batch_ptr.is_cuda() && !cell.is_cuda() && !pbc.is_cuda(),
@@ -80,6 +84,8 @@ std::vector<torch::Tensor> neighbor_list(
     TORCH_CHECK(batch_ptr.scalar_type() == torch::kInt64);
     TORCH_CHECK(pbc.scalar_type() == torch::kBool);
     TORCH_CHECK(positions.scalar_type() == cell.scalar_type());
+    const neighbor_search::Algorithm parsed_algorithm =
+        neighbor_search::parse_algorithm(algorithm);
     std::vector<torch::Tensor> result;
     AT_DISPATCH_FLOATING_TYPES(
         positions.scalar_type(), "neighbor_search_cpu", [&] {
@@ -90,7 +96,8 @@ std::vector<torch::Tensor> neighbor_list(
                 pbc,
                 cutoff,
                 half_list,
-                include_self);
+                include_self,
+                parsed_algorithm);
         });
     return result;
 }

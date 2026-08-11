@@ -161,7 +161,7 @@ __global__ void wrap_positions_kernel(
     }
     if (wraps[0] != 0 || wraps[1] != 0 || wraps[2] != 0) {
         // Wrapped arithmetic is only a search aid. For unwrapped
-        // representatives, use the exhaustive public-vector predicate to
+        // representatives, use the brute-force public-vector predicate to
         // avoid a device-dependent cutoff decision from cancellation.
         atomicOr(
             reinterpret_cast<unsigned long long*>(input_status),
@@ -223,7 +223,7 @@ __global__ void define_bins_kernel(
         } else {
             // Exact counts above the allocation limit are irrelevant. The
             // saturated value keeps the batched cumsum representable and
-            // deterministically selects the exhaustive fallback.
+            // deterministically selects the brute-force fallback.
             count = kMaximumDenseBins + 1;
             break;
         }
@@ -568,7 +568,8 @@ std::vector<torch::Tensor> neighbor_list_cuda_cell(
     int64_t total_nodes,
     double cutoff,
     bool half_list,
-    bool include_self) {
+    bool include_self,
+    bool fallback_to_brute_force) {
     validate_cell_inputs(
         positions,
         batch_ptr,
@@ -657,10 +658,14 @@ std::vector<torch::Tensor> neighbor_list_cuda_cell(
         "positions must be finite and periodic representative wraps must fit int32");
     if ((input_status & 2) != 0) {
         TORCH_CHECK(
+            fallback_to_brute_force,
+            "cell_list cannot safely process unwrapped representatives; use "
+            "algorithm='auto' or 'brute_force'");
+        TORCH_CHECK(
             total_blocks < (int64_t{1} << 31),
-            "unwrapped representatives require the exhaustive CUDA path with "
+            "unwrapped representatives require the brute-force CUDA path with "
             "fewer than 2^31 thread blocks");
-        return neighbor_list_cuda_exhaustive(
+        return neighbor_list_cuda_brute_force(
             positions,
             batch_ptr,
             cell,
@@ -676,10 +681,14 @@ std::vector<torch::Tensor> neighbor_list_cuda_cell(
     if (total_bins > kMaximumDenseBins ||
         (total_nodes > 0 && total_bins > kMaximumBinsPerNode * total_nodes)) {
         TORCH_CHECK(
+            fallback_to_brute_force,
+            "cell_list cannot safely allocate this bin layout; use "
+            "algorithm='auto' or 'brute_force'");
+        TORCH_CHECK(
             total_blocks < (int64_t{1} << 31),
-            "the cell-list bin layout exceeds its safety limits and the exhaustive "
+            "the cell-list bin layout exceeds its safety limits and the brute-force "
             "fallback requires fewer than 2^31 thread blocks");
-        return neighbor_list_cuda_exhaustive(
+        return neighbor_list_cuda_brute_force(
             positions,
             batch_ptr,
             cell,

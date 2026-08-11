@@ -1,3 +1,4 @@
+#include "../core/algorithm.h"
 #include "../core/errors.h"
 #include "../core/geometry.h"
 #include "neighbors_cuda.h"
@@ -10,6 +11,7 @@
 #include <cstring>
 #include <limits>
 #include <span>
+#include <string>
 #include <vector>
 
 
@@ -18,6 +20,21 @@ namespace {
 constexpr int64_t kBlockSize = 256;
 constexpr int64_t kCellListMinimumAtoms = 256;
 constexpr int64_t kInt32IndexLimit = int64_t{1} << 31;
+
+
+neighbor_search::Algorithm select_cuda_algorithm(
+    neighbor_search::Algorithm requested,
+    int64_t maximum_atoms,
+    int64_t total_nodes) {
+    if (requested != neighbor_search::Algorithm::Auto) {
+        return requested;
+    }
+    if (maximum_atoms >= kCellListMinimumAtoms &&
+        total_nodes < kInt32IndexLimit) {
+        return neighbor_search::Algorithm::CellList;
+    }
+    return neighbor_search::Algorithm::BruteForce;
+}
 
 
 template <typename scalar_t>
@@ -46,7 +63,8 @@ std::vector<torch::Tensor> neighbor_list(
     const torch::Tensor& pbc,
     double cutoff,
     bool half_list,
-    bool include_self) {
+    bool include_self,
+    const std::string& algorithm_name) {
     TORCH_CHECK(positions.is_cuda(), "positions must be a CUDA tensor");
     TORCH_CHECK(
         batch_ptr.is_cuda() && cell.is_cuda() && pbc.is_cuda(),
@@ -71,6 +89,8 @@ std::vector<torch::Tensor> neighbor_list(
     neighbor_search::require_input(
         positions.size(0) < kInt32IndexLimit,
         "the current implementation supports fewer than 2^31 atoms");
+    const neighbor_search::Algorithm requested_algorithm =
+        neighbor_search::parse_algorithm(algorithm_name);
 
     const auto batch_ptr_cpu = batch_ptr.to(torch::kCPU).contiguous();
     const auto cell_cpu = cell.to(torch::kCPU, torch::kFloat64).contiguous();
@@ -164,9 +184,13 @@ std::vector<torch::Tensor> neighbor_list(
         device);
     const int64_t total_blocks = block_offsets.back();
     const int64_t total_nodes = node_offsets.back();
+    const neighbor_search::Algorithm algorithm = select_cuda_algorithm(
+        requested_algorithm, maximum_atoms, total_nodes);
 
-    if (maximum_atoms >= kCellListMinimumAtoms &&
-        total_nodes < kInt32IndexLimit) {
+    if (algorithm == neighbor_search::Algorithm::CellList) {
+        neighbor_search::require_input(
+            total_nodes < kInt32IndexLimit,
+            "cell_list input exceeds its indexing limit");
         return neighbor_list_cuda_cell(
             positions,
             batch_ptr,
@@ -180,12 +204,13 @@ std::vector<torch::Tensor> neighbor_list(
             total_nodes,
             cutoff,
             half_list,
-            include_self);
+            include_self,
+            requested_algorithm == neighbor_search::Algorithm::Auto);
     }
     neighbor_search::require_input(
         total_blocks < kInt32IndexLimit,
-        "the exhaustive CUDA path requires fewer than 2^31 thread blocks");
-    return neighbor_list_cuda_exhaustive(
+        "the brute-force CUDA path requires fewer than 2^31 thread blocks");
+    return neighbor_list_cuda_brute_force(
         positions,
         batch_ptr,
         cell,

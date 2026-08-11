@@ -30,7 +30,7 @@ flowchart LR
 
 ### 公共 API
 
-`src/tonari/api.py` 定义 public function、类型标注和 docstring。它验证 `quantities`、识别输入生态并交给相应 frontend，不构造 periodic metadata，也不选择搜索算法。
+`src/tonari/api.py` 定义 public function、类型标注和 docstring。它验证 `quantities` 与 `algorithm`、识别输入生态并交给相应 frontend，不构造 periodic metadata，也不执行 backend 的自动选择策略。
 
 ### Frontends
 
@@ -42,7 +42,7 @@ NumPy frontend 不导入 PyTorch；PyTorch frontend 也不会把 tensor 转成 N
 
 Bindings 负责把 Python arrays 映射到 native memory，并把结果包装回调用者所属的生态。NumPy CPU 与 Torch CPU binding 不共享 framework glue，但会调用同一个 C++ CPU core。
 
-CUDA provider 负责 CUDA 特有的 geometry preparation、batch schedule、算法选择和 kernel launch。这些数据都是实现细节，不会穿过 public Python API。
+CUDA provider 负责 CUDA 特有的 geometry preparation、batch schedule、自动选择策略和 kernel launch。这些数据都是实现细节，不会穿过 public Python API。
 
 ### Framework-neutral core
 
@@ -75,7 +75,7 @@ csrc/
   torch/                 Torch bindings and CUDA provider
 ```
 
-独立 exhaustive reference 位于 `tests/`，benchmark adapters 位于 `benchmarks/`；它们不会进入安装包。Benchmarks 和 tests 原则上通过公共 API 观察 production behavior。
+独立 brute-force reference 位于 `tests/`，benchmark adapters 位于 `benchmarks/`；它们不会进入安装包。Benchmarks 和 tests 原则上通过公共 API 观察 production behavior。
 
 ## 对未来发布的意义
 

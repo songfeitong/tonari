@@ -17,6 +17,7 @@ extensions = [
             "csrc/core/neighbors_cpu.cpp",
         ],
         depends=[
+            "csrc/core/algorithm.h",
             "csrc/core/errors.h",
             "csrc/core/geometry.h",
             "csrc/core/neighbors_cpu.h",
@@ -33,6 +34,7 @@ extensions = [
             "csrc/core/neighbors_cpu.cpp",
         ],
         depends=[
+            "csrc/core/algorithm.h",
             "csrc/core/errors.h",
             "csrc/core/geometry.h",
             "csrc/core/neighbors_cpu.h",
@@ -53,6 +55,7 @@ if CUDA_HOME is not None and torch.version.cuda is not None:
                 "csrc/torch/neighbors_cell_cuda.cu",
             ],
             depends=[
+                "csrc/core/algorithm.h",
                 "csrc/core/errors.h",
                 "csrc/core/geometry.h",
                 "csrc/core/pair_policy.h",

@@ -328,7 +328,7 @@ def test_pair_options_require_bool(option: str) -> None:
 @pytest.mark.parametrize("n_atoms", [12, 256])
 @pytest.mark.parametrize("half_list", [False, True])
 @pytest.mark.parametrize("include_self", [False, True])
-def test_cuda_exhaustive_and_cell_paths_match_cpu_and_reference(
+def test_cuda_brute_force_and_cell_paths_match_cpu_and_reference(
     n_atoms: int,
     half_list: bool,
     include_self: bool,

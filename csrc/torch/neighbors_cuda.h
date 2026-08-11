@@ -6,7 +6,7 @@
 #include <vector>
 
 
-std::vector<torch::Tensor> neighbor_list_cuda_exhaustive(
+std::vector<torch::Tensor> neighbor_list_cuda_brute_force(
     const torch::Tensor& positions,
     const torch::Tensor& batch_ptr,
     const torch::Tensor& cell,
@@ -32,4 +32,5 @@ std::vector<torch::Tensor> neighbor_list_cuda_cell(
     int64_t total_nodes,
     double cutoff,
     bool half_list,
-    bool include_self);
+    bool include_self,
+    bool fallback_to_brute_force);

@@ -25,7 +25,7 @@ def test_version_matches_distribution_metadata() -> None:
     assert tonari.__version__ == version(tonari.__name__)
 
 
-def test_pair_options_are_keyword_only_and_default_to_existing_behavior() -> None:
+def test_options_are_keyword_only_and_default_to_existing_behavior() -> None:
     signature = inspect.signature(neighbor_list)
     assert tuple(signature.parameters)[:5] == (
         "quantities",
@@ -34,10 +34,33 @@ def test_pair_options_are_keyword_only_and_default_to_existing_behavior() -> Non
         "pbc",
         "cutoff",
     )
+    assert signature.parameters["algorithm"].kind is inspect.Parameter.KEYWORD_ONLY
     assert signature.parameters["half_list"].kind is inspect.Parameter.KEYWORD_ONLY
     assert signature.parameters["include_self"].kind is inspect.Parameter.KEYWORD_ONLY
+    assert signature.parameters["algorithm"].default == "auto"
     assert signature.parameters["half_list"].default is False
     assert signature.parameters["include_self"].default is False
+
+
+@pytest.mark.parametrize(
+    ("algorithm", "error", "message"),
+    [
+        (None, TypeError, "algorithm must be a string"),
+        ("fast", ValueError, "algorithm must be 'auto'"),
+    ],
+)
+def test_invalid_algorithm_is_rejected(
+    algorithm: object, error: type[Exception], message: str
+) -> None:
+    with pytest.raises(error, match=message):
+        neighbor_list(
+            "PS",
+            torch.zeros((1, 3)),
+            torch.zeros((3, 3)),
+            torch.zeros(3, dtype=torch.bool),
+            1.0,
+            algorithm=algorithm,
+        )
 
 
 @pytest.mark.parametrize("positions", [torch.tensor(1.0), torch.zeros(3)])

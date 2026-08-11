@@ -440,7 +440,7 @@ void dispatch_write_pairs(
 }  // namespace
 
 
-std::vector<torch::Tensor> neighbor_list_cuda_exhaustive(
+std::vector<torch::Tensor> neighbor_list_cuda_brute_force(
     const torch::Tensor& positions,
     const torch::Tensor& batch_ptr,
     const torch::Tensor& cell,
