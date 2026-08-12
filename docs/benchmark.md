@@ -12,7 +12,7 @@ CPU 固定为单核、单线程，Vesin 复用同一个 `NeighborList` 且关闭
 
 ## CPU 多线程 scaling
 
-多线程测量使用 AMD Ryzen Threadripper PRO 9975WX 上固定的八个 cores、float64 和 5 Å cutoff，显式比较 `num_threads=1/2/4/8`。Matbench 的 1,536 个晶体和 QMugs population 的 4,096 个分子分别合并成一个 `batch_ptr` batch，用于观察大量独立 structures；大型单体系沿用真实 Matbench 晶体派生的 32,768-atom supercell。三个 workload 的 8,482,022 个 pair keys 在单线程下与 Vesin 0.6.1 逐 structure exact match，其他 thread counts 的每 structure canonical-key SHA-256 也全部相同。
+多线程测量使用 AMD Ryzen Threadripper PRO 9975WX 上固定的八个 cores、float64 和 5 Å cutoff，显式比较 `cpu_threads=1/2/4/8`。Matbench 的 1,536 个晶体和 QMugs population 的 4,096 个分子分别合并成一个 `batch_ptr` batch，用于观察大量独立 structures；大型单体系沿用真实 Matbench 晶体派生的 32,768-atom supercell。三个 workload 的 8,482,022 个 pair keys 在单线程下与 Vesin 0.6.1 逐 structure exact match，其他 thread counts 的每 structure canonical-key SHA-256 也全部相同。
 
 | Workload | Threads | tonari | Speedup | Vesin | Vesin speedup |
 | --- | --: | --: | --: | --: | --: |
@@ -31,7 +31,7 @@ CPU 固定为单核、单线程，Vesin 复用同一个 `NeighborList` 且关闭
 
 Tonari 对两个大 batch 的收益来自跨 structure 调度；Vesin 的公开 API 一次只接收一个 structure，因此 baseline 复用一个 `NeighborList`、把相同 `n_threads` 传给每次调用，但仍需顺序遍历 structures。Baseline 对每个 structure 的输出只计数而不额外拼接，这略微有利于 Vesin。这个比较包含两种公开执行模型的差异，并不表示调用方不能在 Vesin 外层另行组织并行。对 32,768-atom 单体系，两者都直接使用相同线程数执行一次调用；Tonari 获得 2.17× scaling，但 Vesin 在所有线程数下仍更快，说明现有 CPU cell-list 的常数差距没有被多线程掩盖。
 
-默认 `num_threads=1` 的意义仍是控制资源而非自动追求最快 wall time。已有 DataLoader workers 或 DDP 进程时，显式增加内部线程可能像 QMugs 上的 Vesin baseline 一样让小任务的调度成本超过收益；组合建议见 [CPU 多线程](cpu-multithreading.md)。完整 samples、frequency policy、affinity、revision 与 binary/data hashes 位于 `benchmarks/results/threadripper-pro-9975wx-cpu-thread-scaling.json`。
+默认 `cpu_threads=None` 在 CPU 上解析为 `1`，其意义仍是控制资源而非自动追求最快 wall time。已有 DataLoader workers 或 DDP 进程时，显式增加内部线程可能像 QMugs 上的 Vesin baseline 一样让小任务的调度成本超过收益；组合建议见 [CPU 多线程](cpu-multithreading.md)。完整 samples、frequency policy、affinity、revision 与 binary/data hashes 位于 `benchmarks/results/threadripper-pro-9975wx-cpu-thread-scaling.json`。
 
 ## 周期晶体：matbench_mp_e_form
 

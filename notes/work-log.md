@@ -54,6 +54,6 @@ Half list 在 CPU 与 CUDA 上都真实减少 output pairs 和内存；zero-shif
 
 ## 2026-08-12：CPU 多线程成为显式执行维度
 
-CPU backend 增加了默认单线程的 `num_threads` 控制。实现没有在旧的 structure loop 外层套并行，而是把 structure preparation 与 source-range query 分离：大量小 structures 和单个大型 structure 都进入同一个可复用 native worker pool，task-local outputs 保持 source-major 顺序并直接复制到 NumPy/Torch arrays。
+CPU backend 增加了 `cpu_threads` 控制，默认 `None` 在 CPU 上采用保守的单线程配置。实现没有在旧的 structure loop 外层套并行，而是把 structure preparation 与 source-range query 分离：大量小 structures 和单个大型 structure 都进入同一个可复用 native worker pool，task-local outputs 保持 source-major 顺序并直接复制到 NumPy/Torch arrays。
 
-默认值保留为 `1`，因为项目主要进入训练和数据管线，隐式使用所有 cores 会与 DataLoader、DDP、PyTorch 或 BLAS 叠加。进程级 pool 在重复调用间复用，并在 fork 后由子进程惰性重建；并发 Python calls 与 native exception propagation 通过专门测试覆盖。
+`cpu_threads=None` 在 CPU 上解析为一个线程，因为项目主要进入训练和数据管线，隐式使用所有 cores 会与 DataLoader、DDP、PyTorch 或 BLAS 叠加。进程级 pool 在重复调用间复用，并在 fork 后由子进程惰性重建；并发 Python calls 与 native exception propagation 通过专门测试覆盖。

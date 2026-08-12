@@ -71,7 +71,7 @@ def production_backend(
             batch.pbc,
             cutoff,
             batch.batch_ptr,
-            num_threads=num_threads,
+            cpu_threads=num_threads,
         )
         return len(pairs)
 
@@ -170,7 +170,7 @@ def validate_against_vesin(
         batch.pbc,
         cutoff,
         batch.batch_ptr,
-        num_threads=1,
+        cpu_threads=1,
         sorted=True,
     )
     search = NeighborList(
@@ -227,7 +227,7 @@ def validate_against_vesin(
             batch.pbc,
             cutoff,
             batch.batch_ptr,
-            num_threads=num_threads,
+            cpu_threads=num_threads,
             sorted=True,
         )
         threaded_digest, threaded_pair_count = canonical_output_digest(
@@ -411,11 +411,11 @@ def main() -> None:
             "data_loading_timed": False,
             "warmup_seconds_per_backend_workload_and_thread_count": args.warmup_seconds,
             "statistic": "median wall time; minimum, maximum, and samples retained",
-            "tonari": "one native batch call; num_threads includes the caller",
+            "tonari": "one native batch call; the requested thread count includes the caller",
             "vesin": "one reused NeighborList per measurement; n_threads matches Tonari; batches require one public compute call per structure",
             "output_order_compared": False,
             "exact_keys_compared": "(source, target, Sx, Sy, Sz)",
-            "threaded_validation": "num_threads=1 compared exactly with Vesin per structure; every other thread count must have the same per-structure canonical-key SHA-256",
+            "threaded_validation": "the one-thread Tonari output is compared exactly with Vesin per structure; every other requested thread count must have the same per-structure canonical-key SHA-256",
         },
         "datasets": {
             "matbench_manifest_sha256": file_sha256(args.matbench_manifest),

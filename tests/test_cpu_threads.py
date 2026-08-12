@@ -69,11 +69,11 @@ def heterogeneous_reference() -> tuple[torch.Tensor, torch.Tensor]:
 
 @pytest.mark.parametrize("ecosystem", ["numpy", "torch"])
 @pytest.mark.parametrize("algorithm", ["auto", "brute_force", "cell_list"])
-@pytest.mark.parametrize("num_threads", [1, 2, 4])
+@pytest.mark.parametrize("cpu_threads", [1, 2, 4])
 def test_cpu_thread_counts_match_exact_reference(
     ecosystem: str,
     algorithm: str,
-    num_threads: int,
+    cpu_threads: int,
     heterogeneous_reference: tuple[torch.Tensor, torch.Tensor],
 ) -> None:
     positions, cell, pbc, batch_ptr = heterogeneous_batch()
@@ -95,7 +95,7 @@ def test_cpu_thread_counts_match_exact_reference(
         1.0,
         arguments[3],
         algorithm=algorithm,
-        num_threads=num_threads,
+        cpu_threads=cpu_threads,
         sorted=True,
     )
     assert pair_keys(*actual) == pair_keys(*heterogeneous_reference)
@@ -130,7 +130,7 @@ def test_threaded_pair_modes_and_quantities_stay_aligned(
         pbc,
         1.0,
         batch_ptr,
-        num_threads=4,
+        cpu_threads=4,
         sorted=True,
         half_list=half_list,
         include_self=include_self,
@@ -156,9 +156,9 @@ def test_large_single_structure_matches_across_thread_counts() -> None:
     positions = torch.rand((2048, 3), generator=generator, dtype=torch.float64) @ cell
     pbc = torch.ones(3, dtype=torch.bool)
     expected = neighbor_list(
-        "PS", positions, cell, pbc, 1.2, algorithm="cell_list", num_threads=1
+        "PS", positions, cell, pbc, 1.2, algorithm="cell_list", cpu_threads=1
     )
-    for num_threads in (2, 4, 8):
+    for cpu_threads in (2, 4, 8):
         actual = neighbor_list(
             "PS",
             positions,
@@ -166,7 +166,7 @@ def test_large_single_structure_matches_across_thread_counts() -> None:
             pbc,
             1.2,
             algorithm="cell_list",
-            num_threads=num_threads,
+            cpu_threads=cpu_threads,
         )
         assert pair_keys(*actual) == pair_keys(*expected)
 
@@ -193,7 +193,7 @@ def test_concurrent_python_calls_share_workers_safely(ecosystem: str) -> None:
                 arguments[2],
                 1.0,
                 arguments[3],
-                num_threads=4,
+                cpu_threads=4,
             )
         )
 
@@ -208,7 +208,7 @@ def test_numpy_and_torch_cpu_calls_can_overlap() -> None:
     torch_arguments = (positions, cell, pbc, batch_ptr)
     numpy_arguments = tuple(tensor.numpy() for tensor in torch_arguments)
     expected = pair_keys(
-        *neighbor_list("PS", positions, cell, pbc, 1.0, batch_ptr, num_threads=4)
+        *neighbor_list("PS", positions, cell, pbc, 1.0, batch_ptr, cpu_threads=4)
     )
 
     def run(ecosystem: str) -> set[tuple[int, ...]]:
@@ -221,7 +221,7 @@ def test_numpy_and_torch_cpu_calls_can_overlap() -> None:
                 arguments[2],
                 1.0,
                 arguments[3],
-                num_threads=4,
+                cpu_threads=4,
             )
         )
 
@@ -235,8 +235,8 @@ def test_parallel_exception_propagates_and_pool_remains_usable() -> None:
     invalid = positions.clone()
     invalid[20, 0] = torch.nan
     with pytest.raises(RuntimeError, match="positions must contain only finite values"):
-        neighbor_list("PS", invalid, cell, pbc, 1.0, batch_ptr, num_threads=4)
-    actual = neighbor_list("PS", positions, cell, pbc, 1.0, batch_ptr, num_threads=4)
+        neighbor_list("PS", invalid, cell, pbc, 1.0, batch_ptr, cpu_threads=4)
+    actual = neighbor_list("PS", positions, cell, pbc, 1.0, batch_ptr, cpu_threads=4)
     assert len(actual[0]) > 0
 
 
@@ -248,7 +248,7 @@ def _forked_numpy_search(queue: multiprocessing.Queue) -> None:
         np.zeros((3, 3), dtype=np.float64),
         np.zeros(3, dtype=np.bool_),
         0.1,
-        num_threads=2,
+        cpu_threads=2,
     )
     queue.put(len(pairs))
 
@@ -267,7 +267,7 @@ def test_worker_pool_reinitializes_after_fork() -> None:
         np.zeros((3, 3), dtype=np.float64),
         np.zeros(3, dtype=np.bool_),
         0.1,
-        num_threads=4,
+        cpu_threads=4,
     )
     context = multiprocessing.get_context("fork")
     queue = context.Queue()
@@ -284,7 +284,8 @@ def test_worker_pool_reinitializes_after_fork() -> None:
 
 @pytest.mark.cuda
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is unavailable")
-def test_cuda_rejects_cpu_thread_override() -> None:
+@pytest.mark.parametrize("cpu_threads", [1, 2])
+def test_cuda_rejects_cpu_thread_override(cpu_threads: int) -> None:
     with pytest.raises(ValueError, match="only applies to CPU"):
         neighbor_list(
             "PS",
@@ -292,5 +293,5 @@ def test_cuda_rejects_cpu_thread_override() -> None:
             torch.zeros((3, 3), device="cuda"),
             torch.zeros(3, dtype=torch.bool, device="cuda"),
             1.0,
-            num_threads=2,
+            cpu_threads=cpu_threads,
         )

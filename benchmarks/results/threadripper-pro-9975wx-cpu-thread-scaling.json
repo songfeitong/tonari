@@ -105,8 +105,8 @@
       4,
       8
     ],
-    "threaded_validation": "num_threads=1 compared exactly with Vesin per structure; every other thread count must have the same per-structure canonical-key SHA-256",
-    "tonari": "one native batch call; num_threads includes the caller",
+    "threaded_validation": "the one-thread Tonari output is compared exactly with Vesin per structure; every other requested thread count must have the same per-structure canonical-key SHA-256",
+    "tonari": "one native batch call; the requested thread count includes the caller",
     "vesin": "one reused NeighborList per measurement; n_threads matches Tonari; batches require one public compute call per structure",
     "warmup_seconds_per_backend_workload_and_thread_count": 1.0
   },

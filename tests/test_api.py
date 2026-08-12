@@ -3,6 +3,7 @@ from __future__ import annotations
 import inspect
 from importlib.metadata import version
 
+import numpy as np
 import pytest
 import torch
 
@@ -35,29 +36,29 @@ def test_options_are_keyword_only_and_default_to_existing_behavior() -> None:
         "cutoff",
     )
     assert signature.parameters["algorithm"].kind is inspect.Parameter.KEYWORD_ONLY
-    assert signature.parameters["num_threads"].kind is inspect.Parameter.KEYWORD_ONLY
+    assert signature.parameters["cpu_threads"].kind is inspect.Parameter.KEYWORD_ONLY
     assert signature.parameters["sorted"].kind is inspect.Parameter.KEYWORD_ONLY
     assert signature.parameters["half_list"].kind is inspect.Parameter.KEYWORD_ONLY
     assert signature.parameters["include_self"].kind is inspect.Parameter.KEYWORD_ONLY
     assert signature.parameters["algorithm"].default == "auto"
-    assert signature.parameters["num_threads"].default == 1
+    assert signature.parameters["cpu_threads"].default is None
     assert signature.parameters["sorted"].default is False
     assert signature.parameters["half_list"].default is False
     assert signature.parameters["include_self"].default is False
 
 
 @pytest.mark.parametrize(
-    ("num_threads", "error", "message"),
+    ("cpu_threads", "error", "message"),
     [
-        (True, TypeError, "num_threads must be an integer"),
-        (1.5, TypeError, "num_threads must be an integer"),
-        (0, ValueError, "num_threads must be positive"),
-        (-2, ValueError, "num_threads must be positive"),
-        (2**63, ValueError, "num_threads is too large"),
+        (True, TypeError, "cpu_threads must be an integer or None"),
+        (1.5, TypeError, "cpu_threads must be an integer or None"),
+        (0, ValueError, "cpu_threads must be positive"),
+        (-2, ValueError, "cpu_threads must be positive"),
+        (2**63, ValueError, "cpu_threads is too large"),
     ],
 )
-def test_invalid_num_threads_is_rejected(
-    num_threads: object, error: type[Exception], message: str
+def test_invalid_cpu_threads_is_rejected(
+    cpu_threads: object, error: type[Exception], message: str
 ) -> None:
     with pytest.raises(error, match=message):
         neighbor_list(
@@ -66,8 +67,27 @@ def test_invalid_num_threads_is_rejected(
             torch.zeros((3, 3)),
             torch.zeros(3, dtype=torch.bool),
             1.0,
-            num_threads=num_threads,
+            cpu_threads=cpu_threads,
         )
+
+
+@pytest.mark.parametrize("ecosystem", ["numpy", "torch"])
+def test_default_cpu_threads_matches_explicit_one(ecosystem: str) -> None:
+    positions = torch.tensor([[0.0, 0.0, 0.0], [0.4, 0.0, 0.0]])
+    cell = torch.zeros((3, 3))
+    pbc = torch.zeros(3, dtype=torch.bool)
+    if ecosystem == "numpy":
+        arguments = (positions.numpy(), cell.numpy(), pbc.numpy())
+    else:
+        arguments = (positions, cell, pbc)
+    default = neighbor_list("PS", *arguments, 1.0)
+    explicit = neighbor_list("PS", *arguments, 1.0, cpu_threads=1)
+    if ecosystem == "numpy":
+        assert all(
+            np.array_equal(left, right) for left, right in zip(default, explicit)
+        )
+    else:
+        assert all(torch.equal(left, right) for left, right in zip(default, explicit))
 
 
 @pytest.mark.parametrize(
