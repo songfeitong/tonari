@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <span>
+#include <variant>
 #include <vector>
 
 
@@ -18,7 +19,7 @@ struct PairBuffer {
 
 
 struct PairBuffers {
-    std::vector<PairBuffer> chunks;
+    std::variant<PairBuffer, std::vector<PairBuffer>> storage;
     size_t pair_count = 0;
 };
 

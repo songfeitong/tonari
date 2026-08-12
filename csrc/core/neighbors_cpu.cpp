@@ -719,6 +719,38 @@ PairBuffers build_neighbor_pairs(
     const scalar_t scalar_cutoff = static_cast<scalar_t>(cutoff);
     const scalar_t cutoff_squared = static_cast<scalar_t>(cutoff * cutoff);
 
+    if (num_threads == 1) {
+        PairBuffer chunk;
+        chunk.indices.reserve(static_cast<size_t>(n_atoms_total) * 64);
+        chunk.shifts.reserve(static_cast<size_t>(n_atoms_total) * 96);
+        for (int64_t batch = 0; batch < batch_size; ++batch) {
+            PreparedStructure<scalar_t> structure;
+            structure.atom_offset = batch_ptr_data[batch];
+            structure.n_atoms =
+                batch_ptr_data[batch + 1] - structure.atom_offset;
+            structure.shift_offset = image_offsets_data[batch];
+            structure.n_shifts =
+                image_offsets_data[batch + 1] - structure.shift_offset;
+            structure.positions = position_data + 3 * structure.atom_offset;
+            structure.cell = cell_data + 9 * batch;
+            structure.dual = dual_data + 9 * batch;
+            structure.image_shifts =
+                image_shift_data + 3 * structure.shift_offset;
+            prepare_structure(
+                structure, scalar_cutoff, requested_algorithm);
+            search_prepared_structure<scalar_t, Mode>(
+                structure,
+                0,
+                structure.n_atoms,
+                cutoff_squared,
+                chunk);
+        }
+        PairBuffers pairs;
+        pairs.pair_count = chunk.indices.size() / 2;
+        pairs.storage = std::move(chunk);
+        return pairs;
+    }
+
     std::vector<PreparedStructure<scalar_t>> structures(
         static_cast<size_t>(batch_size));
     for (int64_t batch = 0; batch < batch_size; ++batch) {
@@ -736,29 +768,6 @@ PairBuffers build_neighbor_pairs(
             image_shift_data + 3 * structure.shift_offset;
         structure.algorithm = select_cpu_algorithm(
             requested_algorithm, structure.n_atoms, structure.n_shifts);
-    }
-
-    if (num_threads == 1) {
-        PairBuffer chunk;
-        chunk.indices.reserve(static_cast<size_t>(n_atoms_total) * 64);
-        chunk.shifts.reserve(static_cast<size_t>(n_atoms_total) * 96);
-        for (PreparedStructure<scalar_t>& structure : structures) {
-            prepare_structure(
-                structure,
-                scalar_cutoff,
-                requested_algorithm);
-            search_prepared_structure<scalar_t, Mode>(
-                structure,
-                0,
-                structure.n_atoms,
-                cutoff_squared,
-                chunk);
-            structure = PreparedStructure<scalar_t>();
-        }
-        PairBuffers pairs;
-        pairs.pair_count = chunk.indices.size() / 2;
-        pairs.chunks.push_back(std::move(chunk));
-        return pairs;
     }
 
     std::vector<uint8_t> split_structure(static_cast<size_t>(batch_size), 0);
@@ -850,7 +859,7 @@ PairBuffers build_neighbor_pairs(
             index_count / 2 == shift_count / 3,
         "neighbor-list pair buffers are inconsistent");
     PairBuffers pairs;
-    pairs.chunks = std::move(task_pairs);
+    pairs.storage = std::move(task_pairs);
     pairs.pair_count = index_count / 2;
     return pairs;
 }
@@ -908,9 +917,28 @@ void neighbor_search::copy_pair_buffers(
         indices.size() == 2 * pairs.pair_count &&
             shifts.size() == 3 * pairs.pair_count,
         "neighbor-list output arrays have inconsistent sizes");
-    std::vector<size_t> offsets(pairs.chunks.size() + 1, 0);
-    for (size_t chunk = 0; chunk < pairs.chunks.size(); ++chunk) {
-        const PairBuffer& buffer = pairs.chunks[chunk];
+    if (const PairBuffer* buffer = std::get_if<PairBuffer>(&pairs.storage)) {
+        require_search(
+            buffer->indices.size() == indices.size() &&
+                buffer->shifts.size() == shifts.size(),
+            "neighbor-list pair buffers do not match the reported size");
+        if (!buffer->indices.empty()) {
+            std::memcpy(
+                indices.data(),
+                buffer->indices.data(),
+                buffer->indices.size() * sizeof(int64_t));
+            std::memcpy(
+                shifts.data(),
+                buffer->shifts.data(),
+                buffer->shifts.size() * sizeof(int32_t));
+        }
+        return;
+    }
+    const std::vector<PairBuffer>& chunks =
+        std::get<std::vector<PairBuffer>>(pairs.storage);
+    std::vector<size_t> offsets(chunks.size() + 1, 0);
+    for (size_t chunk = 0; chunk < chunks.size(); ++chunk) {
+        const PairBuffer& buffer = chunks[chunk];
         require_search(
             buffer.indices.size() % 2 == 0 &&
                 buffer.shifts.size() % 3 == 0 &&
@@ -926,10 +954,10 @@ void neighbor_search::copy_pair_buffers(
         offsets.back() == pairs.pair_count,
         "neighbor-list pair buffers do not match the reported size");
     parallel_for(
-        static_cast<int64_t>(pairs.chunks.size()),
+        static_cast<int64_t>(chunks.size()),
         num_threads,
         [&](int64_t chunk_index) {
-            const PairBuffer& buffer = pairs.chunks[chunk_index];
+            const PairBuffer& buffer = chunks[chunk_index];
             const size_t pair_offset = offsets[chunk_index];
             if (!buffer.indices.empty()) {
                 std::memcpy(
