@@ -3,8 +3,8 @@ from __future__ import annotations
 import pytest
 import torch
 
-from tests.assertions import pair_keys
-from tests.reference import neighbor_list_reference
+from tests.support.assertions import pair_keys
+from tests.support.reference import neighbor_list_reference
 
 
 def test_finite_directed_pairs_exclude_onsite_and_strict_boundary() -> None:

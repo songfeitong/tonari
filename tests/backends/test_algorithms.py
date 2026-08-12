@@ -3,8 +3,8 @@ from __future__ import annotations
 import pytest
 import torch
 
-from tests.assertions import assert_sorted_by_source, pair_keys
-from tests.reference import neighbor_list_reference
+from tests.support.assertions import assert_sorted_by_source, pair_keys
+from tests.support.reference import neighbor_list_reference
 from tonari import neighbor_list
 
 
@@ -92,6 +92,40 @@ def test_forced_cpu_cell_list_reports_an_unsupported_layout(
             algorithm="cell_list",
             cpu_threads=cpu_threads,
         )
+
+
+def test_cpu_auto_falls_back_for_extremely_sparse_bounds() -> None:
+    positions = torch.zeros((256, 3))
+    positions[:, 0] = torch.arange(256) * 10000.0
+    output = neighbor_list(
+        "PS",
+        positions,
+        torch.zeros((3, 3)),
+        torch.zeros(3, dtype=torch.bool),
+        1.0,
+    )
+    assert pair_keys(*output) == set()
+
+
+def test_cpu_cell_list_handles_large_common_lattice_translation() -> None:
+    generator = torch.Generator().manual_seed(9184)
+    cell = torch.tensor(
+        [[4.1, 0.3, 0.2], [0.4, 4.7, 0.1], [0.2, 0.5, 5.3]], dtype=torch.float64
+    )
+    positions = torch.rand((129, 3), generator=generator, dtype=torch.float64) @ cell
+    positions += (
+        torch.tensor([100000000, -80000000, 60000000], dtype=torch.float64) @ cell
+    )
+    pbc = torch.ones(3, dtype=torch.bool)
+    expected = neighbor_list_reference(
+        positions,
+        cell[None],
+        pbc[None],
+        1.0,
+        torch.tensor([0, len(positions)]),
+    )
+    actual = neighbor_list("PS", positions, cell, pbc, 1.0, algorithm="cell_list")
+    assert pair_keys(*actual) == pair_keys(*expected)
 
 
 @pytest.mark.cuda

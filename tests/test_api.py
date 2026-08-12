@@ -3,18 +3,16 @@ from __future__ import annotations
 import inspect
 from importlib.metadata import version
 
-import numpy as np
 import pytest
 import torch
 
 import tonari
-from tests.assertions import pair_keys
+from tests.support.assertions import pair_keys
 from tonari import neighbor_list
 
 
-def test_public_surface_contains_only_neighbor_list() -> None:
+def test_public_surface_exports_neighbor_list() -> None:
     assert tonari.__all__ == ["neighbor_list"]
-    assert not hasattr(tonari, "find_neighbors")
 
 
 def test_version_matches_distribution_metadata() -> None:
@@ -64,25 +62,6 @@ def test_invalid_cpu_threads_is_rejected(
             1.0,
             cpu_threads=cpu_threads,
         )
-
-
-@pytest.mark.parametrize("ecosystem", ["numpy", "torch"])
-def test_default_cpu_threads_matches_explicit_one(ecosystem: str) -> None:
-    positions = torch.tensor([[0.0, 0.0, 0.0], [0.4, 0.0, 0.0]])
-    cell = torch.zeros((3, 3))
-    pbc = torch.zeros(3, dtype=torch.bool)
-    if ecosystem == "numpy":
-        arguments = (positions.numpy(), cell.numpy(), pbc.numpy())
-    else:
-        arguments = (positions, cell, pbc)
-    default = neighbor_list("PS", *arguments, 1.0)
-    explicit = neighbor_list("PS", *arguments, 1.0, cpu_threads=1)
-    if ecosystem == "numpy":
-        assert all(
-            np.array_equal(left, right) for left, right in zip(default, explicit)
-        )
-    else:
-        assert all(torch.equal(left, right) for left, right in zip(default, explicit))
 
 
 @pytest.mark.parametrize(

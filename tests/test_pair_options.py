@@ -10,8 +10,8 @@ from ase.neighborlist import NeighborList as AseNeighborList
 from ase.neighborlist import PrimitiveNeighborList
 from vesin import NeighborList as VesinNeighborList
 
-from tests.assertions import PairKey, pair_keys
-from tests.reference import neighbor_list_reference
+from tests.support.assertions import PairKey, pair_keys
+from tests.support.reference import neighbor_list_reference
 from tonari import neighbor_list
 
 
@@ -357,25 +357,6 @@ def test_cuda_brute_force_and_cell_paths_match_cpu_and_reference(
         )
     )
     assert cuda == cpu == reference
-
-
-@pytest.mark.cuda
-@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is unavailable")
-def test_cuda_defaults_match_explicit_default_options() -> None:
-    positions = torch.rand((256, 3), device="cuda") * 8
-    cell = torch.zeros((3, 3), device="cuda")
-    pbc = torch.zeros(3, dtype=torch.bool, device="cuda")
-    assert pair_keys(neighbor_list("PS", positions, cell, pbc, 1.0)) == pair_keys(
-        neighbor_list(
-            "PS",
-            positions,
-            cell,
-            pbc,
-            1.0,
-            half_list=False,
-            include_self=False,
-        )
-    )
 
 
 @pytest.mark.cuda

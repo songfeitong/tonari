@@ -7,8 +7,8 @@ import numpy as np
 import pytest
 import torch
 
-from tests.assertions import pair_keys
-from tests.reference import neighbor_list_reference
+from tests.support.assertions import pair_keys
+from tests.support.reference import neighbor_list_reference
 from tonari import neighbor_list
 
 
@@ -55,11 +55,11 @@ def heterogeneous_reference() -> tuple[torch.Tensor, torch.Tensor]:
 
 @pytest.mark.parametrize("ecosystem", ["numpy", "torch"])
 @pytest.mark.parametrize("algorithm", ["auto", "brute_force", "cell_list"])
-@pytest.mark.parametrize("cpu_threads", [1, 2, 4])
+@pytest.mark.parametrize("cpu_threads", [None, 1, 2, 4])
 def test_cpu_thread_counts_match_exact_reference(
     ecosystem: str,
     algorithm: str,
-    cpu_threads: int,
+    cpu_threads: int | None,
     heterogeneous_reference: tuple[torch.Tensor, torch.Tensor],
 ) -> None:
     positions, cell, pbc, batch_ptr = heterogeneous_batch()

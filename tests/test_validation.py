@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 import torch
 
-from tests.assertions import pair_keys
+from tests.support.assertions import pair_keys
 from tonari import neighbor_list
 
 Ecosystem = Literal["numpy", "torch"]

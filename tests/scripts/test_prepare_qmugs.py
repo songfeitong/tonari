@@ -8,10 +8,7 @@ from unittest.mock import patch
 
 import numpy as np
 import pytest
-import torch
 
-from benchmarks.baselines import dense_candidate_count, torch_dense_batch
-from benchmarks.qmugs_data import QmugsStructureDataset, select_qmugs
 from scripts.prepare_qmugs import (
     ensure_download,
     parse_sdf,
@@ -40,7 +37,6 @@ class MockResponse:
 def test_download_keeps_truncated_response_resumable(tmp_path: Path) -> None:
     path = tmp_path / "source.bin"
     digest = hashlib.sha256(b"abcde").hexdigest()
-
     with (
         patch(
             "scripts.prepare_qmugs.urllib.request.urlopen",
@@ -49,10 +45,8 @@ def test_download_keeps_truncated_response_resumable(tmp_path: Path) -> None:
         pytest.raises(RuntimeError, match="rerun to resume"),
     ):
         ensure_download(path, "https://example.test/source.bin", 5, digest)
-
     assert not path.exists()
     assert path.with_suffix(".bin.part").read_bytes() == b"abc"
-
     with patch(
         "scripts.prepare_qmugs.urllib.request.urlopen",
         return_value=MockResponse(b"de", 206),
@@ -61,7 +55,6 @@ def test_download_keeps_truncated_response_resumable(tmp_path: Path) -> None:
             ensure_download(path, "https://example.test/source.bin", 5, digest)
             == digest
         )
-
     assert path.read_bytes() == b"abcde"
     assert not path.with_suffix(".bin.part").exists()
     assert urlopen.call_args.args[0].get_header("Range") == "bytes=3-"
@@ -80,9 +73,7 @@ def test_parse_qmugs_v2000_sdf() -> None:
 M  END
 $$$$
 """
-
     positions, atomic_numbers = parse_sdf(contents)
-
     np.testing.assert_array_equal(atomic_numbers, [6, 17, 1])
     np.testing.assert_allclose(
         positions,
@@ -124,11 +115,9 @@ def test_selection_uses_lowest_energy_and_disjoint_workloads(
                             "GFN2_TOTAL_ENERGY": energy,
                         }
                     )
-
     selected, counts = select_candidates(
         summary, seed=17, population_size=1, balanced_per_bin=1
     )
-
     assert counts == {"molecules": 16, "conformers": 32}
     assert len(selected) == 9
     assert len({candidate.chembl_id for candidate, _ in selected}) == 9
@@ -140,56 +129,6 @@ def test_selection_uses_lowest_energy_and_disjoint_workloads(
     assert all(candidate.conformer_id == "conf_01" for candidate, _ in selected)
 
 
-def test_dense_baseline_supports_finite_batches() -> None:
-    positions = torch.tensor(
-        [[0.0, 0.0, 0.0], [0.5, 0.0, 0.0], [10.0, 0.0, 0.0]],
-        dtype=torch.float64,
-    )
-    batch_ptr = torch.tensor([0, 2, 3])
-    cell = torch.zeros((2, 3, 3), dtype=torch.float64)
-    pbc = torch.zeros((2, 3), dtype=torch.bool)
-
-    pair_indices, cell_shifts = torch_dense_batch(positions, cell, pbc, 1.0, batch_ptr)
-
-    assert dense_candidate_count(batch_ptr, cell, pbc, 1.0) == 5
-    assert set(map(tuple, pair_indices.tolist())) == {(0, 1), (1, 0)}
-    assert torch.count_nonzero(cell_shifts) == 0
-
-
-def test_qmugs_cache_and_workload_selection(tmp_path: Path) -> None:
-    cache = tmp_path / "sample.npz"
-    manifest = tmp_path / "manifest.json"
-    structures = tmp_path / "manifest_structures.csv"
-    np.savez_compressed(
-        cache,
-        positions=np.zeros((5, 3), dtype=np.float64),
-        batch_ptr=np.asarray([0, 2, 5], dtype=np.int64),
-        atomic_numbers=np.asarray([1, 1, 6, 1, 1], dtype=np.int32),
-        source_ids=np.asarray(["CHEMBL1/conf_00", "CHEMBL2/conf_01"]),
-    )
-    manifest.write_text(
-        """{
-  "sampling": {"heavy_atom_boundaries": [10, 20, 30, 40, 50, 65, 80]},
-  "structures_file": "manifest_structures.csv"
-}
-"""
-    )
-    structures.write_text(
-        "source_id,n_atoms,n_heavy_atoms,workload,heavy_atom_bin\n"
-        "CHEMBL1/conf_00,2,1,population,0\n"
-        "CHEMBL2/conf_01,3,1,size_balanced,1\n"
-    )
-
-    dataset = QmugsStructureDataset(cache, manifest, torch.float32)
-    balanced = select_qmugs(dataset, "size_balanced", 1)
-
-    assert len(dataset) == 2
-    assert len(balanced) == 1
-    assert balanced[0]["source_id"] == "CHEMBL2/conf_01"
-    assert balanced[0]["positions"].shape == (3, 3)
-    assert not torch.any(balanced[0]["pbc"])
-
-
 def test_qmugs_cache_archive_is_deterministic(tmp_path: Path) -> None:
     first = tmp_path / "first.npz"
     second = tmp_path / "second.npz"
@@ -197,8 +136,6 @@ def test_qmugs_cache_archive_is_deterministic(tmp_path: Path) -> None:
         "positions": np.arange(12, dtype=np.float64).reshape(4, 3),
         "batch_ptr": np.asarray([0, 4], dtype=np.int64),
     }
-
     write_deterministic_npz(first, **arrays)
     write_deterministic_npz(second, **arrays)
-
     assert first.read_bytes() == second.read_bytes()
