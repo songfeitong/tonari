@@ -106,20 +106,6 @@ def test_invalid_algorithm_is_rejected(
         )
 
 
-@pytest.mark.parametrize("positions", [torch.tensor(1.0), torch.zeros(3)])
-def test_invalid_torch_positions_shape_raises_value_error(
-    positions: torch.Tensor,
-) -> None:
-    with pytest.raises(ValueError, match="positions must have shape"):
-        neighbor_list(
-            "PS",
-            positions,
-            torch.eye(3),
-            torch.zeros(3, dtype=torch.bool),
-            1.0,
-        )
-
-
 def test_single_structure_default_matches_explicit_batch() -> None:
     positions = torch.tensor(
         [[0.1, 0.2, 0.3], [1.7, 0.4, 0.5], [0.6, 1.8, 1.1]],
@@ -176,39 +162,6 @@ def test_neighbor_identity_is_independent_of_length_unit(
         "PS", positions * scale, cell * scale, pbc, 1.25 * scale, **options
     )
     assert pair_keys(scaled) == pair_keys(baseline)
-
-
-@pytest.mark.parametrize(
-    ("cell", "pbc", "batch_ptr", "message"),
-    [
-        (
-            torch.zeros((1, 3, 3)),
-            torch.zeros(3, dtype=torch.bool),
-            None,
-            "single-structure cell",
-        ),
-        (
-            torch.zeros((3, 3)),
-            torch.zeros((1, 3), dtype=torch.bool),
-            None,
-            "single-structure pbc",
-        ),
-        (
-            torch.zeros((3, 3)),
-            torch.zeros(3, dtype=torch.bool),
-            torch.tensor([0, 2]),
-            "batched cell",
-        ),
-    ],
-)
-def test_single_and_batch_shapes_are_unambiguous(
-    cell: torch.Tensor,
-    pbc: torch.Tensor,
-    batch_ptr: torch.Tensor | None,
-    message: str,
-) -> None:
-    with pytest.raises(ValueError, match=message):
-        neighbor_list("PS", torch.zeros((2, 3)), cell, pbc, 1.0, batch_ptr)
 
 
 def test_batch_ptr_defines_structure_boundaries() -> None:

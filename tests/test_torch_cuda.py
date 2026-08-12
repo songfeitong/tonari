@@ -14,6 +14,7 @@ pytestmark = [
     pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is unavailable"),
 ]
 
+
 def cuda_neighbors(
     positions: torch.Tensor,
     cell: torch.Tensor,
@@ -406,6 +407,28 @@ def test_rejects_nonfinite_inactive_cell_row() -> None:
             torch.tensor([[True, True, False]]),
             0.5,
             torch.tensor([0, 1]),
+        )
+
+
+@pytest.mark.parametrize(
+    ("batch_ptr", "message"),
+    [
+        ((1, 1, 2), "start at zero"),
+        ((0, 1, 1), "end at N_total"),
+        ((0, 2, 1, 2), "nondecreasing"),
+    ],
+)
+def test_rejects_invalid_batch_ptr_contents(
+    batch_ptr: tuple[int, ...], message: str
+) -> None:
+    batch_size = len(batch_ptr) - 1
+    with pytest.raises(ValueError, match=message):
+        cuda_neighbors(
+            torch.zeros((2, 3)),
+            torch.zeros((batch_size, 3, 3)),
+            torch.zeros((batch_size, 3), dtype=torch.bool),
+            1.0,
+            torch.tensor(batch_ptr),
         )
 
 

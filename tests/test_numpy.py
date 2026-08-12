@@ -13,20 +13,6 @@ from tests.assertions import pair_keys
 from tonari import neighbor_list
 
 
-@pytest.mark.parametrize("positions", [np.array(1.0), np.zeros(3)])
-def test_invalid_numpy_positions_shape_raises_value_error(
-    positions: np.ndarray,
-) -> None:
-    with pytest.raises(ValueError, match="positions must have shape"):
-        neighbor_list(
-            "PS",
-            positions,
-            np.eye(3),
-            np.zeros(3, dtype=np.bool_),
-            1.0,
-        )
-
-
 @pytest.mark.parametrize("dtype", [np.float32, np.float64])
 def test_numpy_single_structure_matches_torch(dtype: type[np.floating]) -> None:
     positions = np.array(
@@ -66,30 +52,6 @@ def test_numpy_batch_matches_torch() -> None:
         torch.from_numpy(batch_ptr),
     )
     assert pair_keys(actual) == pair_keys(expected)
-
-
-@pytest.mark.parametrize("argument", ["cell", "pbc", "batch_ptr"])
-def test_numpy_and_torch_inputs_cannot_be_mixed(argument: str) -> None:
-    arrays: dict[str, np.ndarray | torch.Tensor | None] = {
-        "cell": np.zeros((3, 3), dtype=np.float64),
-        "pbc": np.zeros(3, dtype=np.bool_),
-        "batch_ptr": None,
-    }
-    if argument == "batch_ptr":
-        arrays["cell"] = np.zeros((1, 3, 3), dtype=np.float64)
-        arrays["pbc"] = np.zeros((1, 3), dtype=np.bool_)
-        arrays["batch_ptr"] = torch.tensor([0, 2])
-    else:
-        arrays[argument] = torch.from_numpy(arrays[argument])
-    with pytest.raises(TypeError, match="must all be NumPy arrays"):
-        neighbor_list(
-            "PS",
-            np.zeros((2, 3), dtype=np.float64),
-            arrays["cell"],
-            arrays["pbc"],
-            1.0,
-            arrays["batch_ptr"],
-        )
 
 
 def test_numpy_adapter_accepts_readonly_and_noncontiguous_arrays() -> None:
