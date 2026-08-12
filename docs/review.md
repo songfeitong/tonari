@@ -20,7 +20,7 @@ Full/half/self 四种组合在 NumPy、Torch CPU、Torch CUDA、内部 reference
 - Brute force 与 cell-list crossover 不改变 strict-cutoff identity。
 - 用原始 positions 和 output shift 重建的 displacement 满足公共公式。
 
-本次 API 迁移还独立检查了 `i/j/P/S/d/D` 的任意选择、顺序与重复，确认 edge-first `P` 在三条执行路径中均为 `(E, 2)`，Batch displacement 使用所属 structure 的 cell，Torch `d/D` 在固定 neighbor identity 下保留梯度。完整测试为 127 passed；额外 144 组随机 differential 在 NumPy CPU、Torch CPU、Torch CUDA 与 brute-force reference 间 exact match。
+本次 API 迁移还独立检查了 `i/j/P/S/d/D` 的任意选择、顺序与重复，确认 edge-first `P` 在三条执行路径中均为 `(E, 2)`，Batch displacement 使用所属 structure 的 cell，Torch `d/D` 在固定 neighbor identity 下保留梯度。常规测试以固定随机种子在 Torch CPU、Torch CUDA 与独立 brute-force reference 间进行 differential comparison，并用代表性批次覆盖 NumPy/Torch、brute-force/cell-list、线程数和 pair policy 的组合；测试数量不再作为长期有效的审查证据写入本文。
 
 ## 真实数据证据
 

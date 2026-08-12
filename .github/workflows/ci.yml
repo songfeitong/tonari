@@ -58,6 +58,10 @@ jobs:
           uv run ruff check src tests benchmarks scripts setup.py
           uv run ruff format --check src tests benchmarks scripts setup.py
 
+      - name: Run mypy
+        if: matrix.python-version == '3.12'
+        run: uv run mypy src tests/typecheck_api.py
+
       - name: Check Markdown formatting
         if: matrix.python-version == '3.12'
         run: npx --yes prettier@3.8.3 --check --prose-wrap never '**/*.md'

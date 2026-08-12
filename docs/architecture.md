@@ -75,7 +75,7 @@ csrc/
   torch/                 Torch bindings and CUDA provider
 ```
 
-独立 brute-force reference 位于 `tests/`，benchmark adapters 位于 `benchmarks/`；它们不会进入安装包。Benchmarks 和 tests 原则上通过公共 API 观察 production behavior。
+独立 brute-force reference 位于 `tests/support/`，benchmark adapters 位于 `benchmarks/`；它们不会进入安装包。Benchmarks 和 tests 原则上通过公共 API 观察 production behavior。
 
 ## 对未来发布的意义
 

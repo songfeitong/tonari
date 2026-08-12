@@ -5,18 +5,23 @@ from functools import lru_cache
 from importlib import import_module
 from types import ModuleType
 
+BUILD_WITH_CUDA: bool | None
+BUILD_TORCH_VERSION: str | None
+BUILD_TORCH_CUDA_VERSION: str | None
+BUILD_CUDA_TOOLKIT_VERSION: str | None
+
 try:
-    from ._build_info import (
-        BUILD_CUDA_TOOLKIT_VERSION,
-        BUILD_TORCH_CUDA_VERSION,
-        BUILD_TORCH_VERSION,
-        BUILD_WITH_CUDA,
-    )
+    from . import _build_info
 except ImportError:
     BUILD_WITH_CUDA = None
     BUILD_TORCH_VERSION = None
     BUILD_TORCH_CUDA_VERSION = None
     BUILD_CUDA_TOOLKIT_VERSION = None
+else:
+    BUILD_WITH_CUDA = _build_info.BUILD_WITH_CUDA
+    BUILD_TORCH_VERSION = _build_info.BUILD_TORCH_VERSION
+    BUILD_TORCH_CUDA_VERSION = _build_info.BUILD_TORCH_CUDA_VERSION
+    BUILD_CUDA_TOOLKIT_VERSION = _build_info.BUILD_CUDA_TOOLKIT_VERSION
 
 
 def _load(name: str) -> ModuleType:

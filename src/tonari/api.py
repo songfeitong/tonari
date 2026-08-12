@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import builtins
-from typing import TYPE_CHECKING, Literal, overload
+from typing import TYPE_CHECKING, Literal, cast, overload
 
 import numpy as np
 from numpy.typing import NDArray
@@ -200,10 +200,10 @@ def neighbor_list(
         return neighbor_list_numpy(
             quantities,
             positions,
-            cell,
-            pbc,
+            cast(np.ndarray, cell),
+            cast(np.ndarray, pbc),
             cutoff,
-            batch_ptr,
+            cast(np.ndarray | None, batch_ptr),
             algorithm=algorithm,
             cpu_threads=cpu_threads,
             sorted=sorted,
@@ -213,21 +213,22 @@ def neighbor_list(
     try:
         import torch
     except ImportError:
-        torch = None
-    if torch is not None and isinstance(positions, torch.Tensor):
-        from ._torch_frontend import neighbor_list_torch
+        pass
+    else:
+        if isinstance(positions, torch.Tensor):
+            from ._torch_frontend import neighbor_list_torch
 
-        return neighbor_list_torch(
-            quantities,
-            positions,
-            cell,
-            pbc,
-            cutoff,
-            batch_ptr,
-            algorithm=algorithm,
-            cpu_threads=cpu_threads,
-            sorted=sorted,
-            half_list=half_list,
-            include_self=include_self,
-        )
+            return neighbor_list_torch(
+                quantities,
+                positions,
+                cast(torch.Tensor, cell),
+                cast(torch.Tensor, pbc),
+                cutoff,
+                cast(torch.Tensor | None, batch_ptr),
+                algorithm=algorithm,
+                cpu_threads=cpu_threads,
+                sorted=sorted,
+                half_list=half_list,
+                include_self=include_self,
+            )
     raise TypeError("positions must be a PyTorch tensor or NumPy array")

@@ -142,7 +142,7 @@ def neighbor_list_torch(
             backend = load_torch_cuda()
         except ImportError as error:
             raise RuntimeError(f"the CUDA provider is unavailable: {error}") from error
-        arguments += (sorted,)
+        pair_indices, cell_shifts = backend.neighbor_list(*arguments, sorted)
     else:
         try:
             backend = load_torch_cpu()
@@ -150,8 +150,9 @@ def neighbor_list_torch(
             raise RuntimeError(
                 f"the Torch CPU provider is unavailable: {error}"
             ) from error
-        arguments += (1 if cpu_threads is None else cpu_threads,)
-    pair_indices, cell_shifts = backend.neighbor_list(*arguments)
+        pair_indices, cell_shifts = backend.neighbor_list(
+            *arguments, 1 if cpu_threads is None else cpu_threads
+        )
     return _select_torch_quantities(
         quantities, positions, cell, batch_ptr, pair_indices, cell_shifts
     )
