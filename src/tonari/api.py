@@ -25,6 +25,7 @@ def neighbor_list(
     batch_ptr: Tensor | None = None,
     *,
     algorithm: _Algorithm = "auto",
+    num_threads: int = 1,
     sorted: bool = False,
     half_list: bool = False,
     include_self: bool = False,
@@ -41,6 +42,7 @@ def neighbor_list(
     batch_ptr: NDArray[np.int64] | None = None,
     *,
     algorithm: _Algorithm = "auto",
+    num_threads: int = 1,
     sorted: bool = False,
     half_list: bool = False,
     include_self: bool = False,
@@ -56,6 +58,7 @@ def neighbor_list(
     batch_ptr: Tensor | np.ndarray | None = None,
     *,
     algorithm: _Algorithm = "auto",
+    num_threads: int = 1,
     sorted: bool = False,
     half_list: bool = False,
     include_self: bool = False,
@@ -94,6 +97,11 @@ def neighbor_list(
             appropriate method. ``"brute_force"`` exhaustively checks every
             relevant atom pair. ``"cell_list"`` partitions space so that atoms
             only inspect nearby regions.
+        num_threads: Number of CPU threads used by this call, including the
+            calling thread. It must be a positive integer and defaults to ``1``
+            to avoid implicit oversubscription. CPU workers are reused across
+            calls. CUDA calls only accept the default value because CUDA
+            execution does not use the CPU search pool.
         sorted: If ``True``, sort pairs by source index. The order of target
             indices and cell shifts within each source is unspecified. The
             default is ``False``.
@@ -122,13 +130,14 @@ def neighbor_list(
         For a single structure, use ``cell`` directly.
 
     Raises:
-        TypeError: If ``quantities`` or ``algorithm`` is not a string; array
-            arguments mix PyTorch and NumPy or use an unsupported container
-            type; or a boolean option is not a Python ``bool``.
+        TypeError: If ``quantities`` or ``algorithm`` is not a string;
+            ``num_threads`` is not a Python ``int``; array arguments mix
+            PyTorch and NumPy or use an unsupported container type; or a
+            boolean option is not a Python ``bool``.
         ValueError: If ``quantities`` contains an unsupported character;
             ``algorithm`` is unsupported; or frontend shapes, dtypes, devices,
-            ``batch_ptr``, ``cutoff``, periodic cells, or host-validated
-            index/resource bounds are invalid.
+            ``batch_ptr``, ``cutoff``, ``num_threads``, periodic cells, or
+            host-validated index/resource bounds are invalid.
         RuntimeError: If the required native CPU or CUDA extension is missing;
             if native search discovers nonfinite positions or a representative
             wrap/output shift outside its integer range; if an explicitly
@@ -173,6 +182,12 @@ def neighbor_list(
         raise TypeError("algorithm must be a string")
     if algorithm not in _VALID_ALGORITHMS:
         raise ValueError("algorithm must be 'auto', 'brute_force', or 'cell_list'")
+    if isinstance(num_threads, bool) or not isinstance(num_threads, int):
+        raise TypeError("num_threads must be an integer")
+    if num_threads < 1:
+        raise ValueError("num_threads must be positive")
+    if num_threads > (1 << 63) - 1:
+        raise ValueError("num_threads is too large")
     if not all(
         isinstance(option, bool) for option in (sorted, half_list, include_self)
     ):
@@ -188,6 +203,7 @@ def neighbor_list(
             cutoff,
             batch_ptr,
             algorithm=algorithm,
+            num_threads=num_threads,
             sorted=sorted,
             half_list=half_list,
             include_self=include_self,
@@ -207,6 +223,7 @@ def neighbor_list(
             cutoff,
             batch_ptr,
             algorithm=algorithm,
+            num_threads=num_threads,
             sorted=sorted,
             half_list=half_list,
             include_self=include_self,

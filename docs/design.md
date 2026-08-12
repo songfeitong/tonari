@@ -14,6 +14,7 @@ results = neighbor_list(
     batch_ptr=None,
     *,
     algorithm="auto",
+    num_threads=1,
     sorted=False,
     half_list=False,
     include_self=False,
@@ -41,6 +42,8 @@ NumPy 与 Torch 使用同一个函数，所有 array 参数必须属于同一生
 函数与具体长度单位无关，但 `positions`、`cell` 和 `cutoff` 必须使用同一单位。`cutoff` 必须有限且为正数。
 
 `algorithm` 接受 `"auto"`、`"brute_force"` 或 `"cell_list"`。它只决定如何寻找 candidates，不改变 pair identity；精确选择规则和 fallback 语义见[算法选择](algorithm-selection.md)。
+
+`num_threads` 是包括调用线程在内的正整数 CPU thread count，默认值为 `1`。NumPy 与 Torch CPU 都服从该参数；Torch CUDA 不使用 CPU search pool，因此只接受默认值。选择建议与并行生命周期见 [CPU 多线程](cpu-multithreading.md)。
 
 ## Quantities、输出与方向
 
@@ -93,11 +96,11 @@ Pair 方向、zero-shift self 和 canonical half rule 属于共享 policy。CPU 
 
 ## CPU backend
 
-CPU 在一个 native call 内处理 batch，并按 structure 顺序搜索。`"auto"` 为每个 structure 独立选择 brute-force path 或 Cartesian cell list；显式指定算法时，每个非空 structure 都使用该路径。
+CPU 在一个 native call 内处理 batch。`"auto"` 为每个 structure 独立选择 brute-force path 或 Cartesian cell list；显式指定算法时，每个非空 structure 都使用该路径。
 
 Brute-force path 直接枚举 source、target 和相关 cell translations。Cell-list path wrap representatives、建立 cutoff-sized bins、插入可能相关的 periodic target images，再让每个 source 查询邻近 bins。Broad phase 必须保守；接近浮点边界的 candidate 会按原始 positions 与最终 shift 重算公共 strict predicate。
 
-CPU core 不创建内部 thread pool，并在 native search 期间释放 Python GIL。调用方可以使用 DataLoader workers、进程级并行或 DDP 决定外层并行方式。
+CPU core 在 `num_threads>1` 时使用进程级复用 worker pool，并在 native search 期间释放 Python GIL。Structures 和大型 structure 的 source ranges 进入同一个动态 task schedule；task-local outputs 按 source-major 顺序直接合并到 framework array。默认单线程用于避免与 DataLoader workers、DDP 和其他 threaded runtimes 隐式叠加。
 
 ## CUDA backend
 

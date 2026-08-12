@@ -114,6 +114,7 @@ def neighbor_list_torch(
     batch_ptr: Tensor | None,
     *,
     algorithm: str,
+    num_threads: int,
     sorted: bool,
     half_list: bool,
     include_self: bool,
@@ -135,6 +136,8 @@ def neighbor_list_torch(
         algorithm,
     )
     if positions.is_cuda:
+        if num_threads != 1:
+            raise ValueError("num_threads only applies to CPU inputs")
         try:
             backend = load_torch_cuda()
         except ImportError as error:
@@ -147,6 +150,7 @@ def neighbor_list_torch(
             raise RuntimeError(
                 f"the Torch CPU provider is unavailable: {error}"
             ) from error
+        arguments += (num_threads,)
     pair_indices, cell_shifts = backend.neighbor_list(*arguments)
     return _select_torch_quantities(
         quantities, positions, cell, batch_ptr, pair_indices, cell_shifts

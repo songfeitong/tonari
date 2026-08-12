@@ -46,9 +46,9 @@ CUDA provider 负责 CUDA 特有的 geometry preparation、batch schedule、自�
 
 ### Framework-neutral core
 
-`csrc/core/` 只依赖 C++ 标准库，负责公共 periodic geometry、pair policy 和 CPU search。它不知道 Python、NumPy、PyTorch、Tensor 或 CUDA，因此 CPU 算法可以被不同 binding 直接复用。
+`csrc/core/` 不依赖 Python、NumPy、PyTorch、Tensor 或 CUDA，负责公共 periodic geometry、pair policy 和 CPU search；thread-pool 层另外使用 POSIX fork hook，使子进程不继承失效的 worker 状态。因此 CPU 算法可以被不同 binding 直接复用。
 
-CPU 和 CUDA 共享 pair 方向、cutoff、periodic shift 与 half/self 规则，但不强求使用相同的数据布局或调度方式。语义一致比实现表面一致更重要。
+CPU 和 CUDA 共享 pair 方向、cutoff、periodic shift 与 half/self 规则，但不强求使用相同的数据布局或调度方式。CPU core 还拥有 framework-neutral worker pool 和 source-major task/output model，使 NumPy 与 Torch CPU 不会形成两套并行实现。语义一致比实现表面一致更重要。
 
 ## 依赖方向
 
@@ -70,7 +70,7 @@ src/tonari/
   _extensions.py         lazy extension loading
 
 csrc/
-  core/                  shared geometry, pair policy and CPU search
+  core/                  shared geometry, pair policy, CPU search and thread pool
   numpy/                 NumPy binding
   torch/                 Torch bindings and CUDA provider
 ```

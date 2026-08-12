@@ -28,6 +28,7 @@ extensions = [
             "csrc/numpy/bindings.cpp",
             "csrc/core/geometry.cpp",
             "csrc/core/neighbors_cpu.cpp",
+            "csrc/core/thread_pool.cpp",
         ],
         depends=[
             "csrc/core/algorithm.h",
@@ -35,9 +36,11 @@ extensions = [
             "csrc/core/geometry.h",
             "csrc/core/neighbors_cpu.h",
             "csrc/core/pair_policy.h",
+            "csrc/core/thread_pool.h",
         ],
         cxx_std=20,
-        extra_compile_args=["-O3"],
+        extra_compile_args=["-O3", "-pthread"],
+        extra_link_args=["-pthread"],
     ),
     CppExtension(
         name="tonari._torch_cpu",
@@ -45,6 +48,7 @@ extensions = [
             "csrc/torch/bindings_cpu.cpp",
             "csrc/core/geometry.cpp",
             "csrc/core/neighbors_cpu.cpp",
+            "csrc/core/thread_pool.cpp",
         ],
         depends=[
             "csrc/core/algorithm.h",
@@ -52,8 +56,10 @@ extensions = [
             "csrc/core/geometry.h",
             "csrc/core/neighbors_cpu.h",
             "csrc/core/pair_policy.h",
+            "csrc/core/thread_pool.h",
         ],
-        extra_compile_args=["-O3"],
+        extra_compile_args=["-O3", "-pthread"],
+        extra_link_args=["-pthread"],
     ),
 ]
 

@@ -107,6 +107,7 @@ def neighbor_list_numpy(
     batch_ptr: np.ndarray | None,
     *,
     algorithm: str,
+    num_threads: int,
     sorted: bool,
     half_list: bool,
     include_self: bool,
@@ -132,6 +133,7 @@ def neighbor_list_numpy(
         half_list,
         include_self,
         algorithm,
+        num_threads,
     )
     return _select_numpy_quantities(
         quantities, positions, cell, batch_ptr, pair_indices, cell_shifts

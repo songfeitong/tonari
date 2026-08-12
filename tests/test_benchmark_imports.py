@@ -19,6 +19,7 @@ class BlockCudaExtension(importlib.abc.MetaPathFinder):
         return None
 
 sys.meta_path.insert(0, BlockCudaExtension())
+import benchmarks.run_cpu_thread_scaling
 import benchmarks.run_qmugs_cpu_benchmark
 """
     environment = os.environ.copy()

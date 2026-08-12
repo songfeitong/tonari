@@ -100,7 +100,10 @@ def test_cpu_algorithms_match_reference(algorithm: str, ecosystem: str) -> None:
     assert_sorted_by_source(actual[0])
 
 
-def test_forced_cpu_cell_list_reports_an_unsupported_layout() -> None:
+@pytest.mark.parametrize("num_threads", [1, 4])
+def test_forced_cpu_cell_list_reports_an_unsupported_layout(
+    num_threads: int,
+) -> None:
     positions = torch.zeros((256, 3))
     positions[:, 0] = torch.arange(256) * 10000.0
     with pytest.raises(RuntimeError, match="cell_list cannot safely"):
@@ -111,6 +114,7 @@ def test_forced_cpu_cell_list_reports_an_unsupported_layout() -> None:
             torch.zeros(3, dtype=torch.bool),
             1.0,
             algorithm="cell_list",
+            num_threads=num_threads,
         )
 
 

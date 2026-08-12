@@ -51,3 +51,9 @@ Half list 在 CPU 与 CUDA 上都真实减少 output pairs 和内存；zero-shif
 项目现在是一套公共语义、三个 provider：NumPy CPU、Torch CPU 和 Torch CUDA。CPU 适合常见小结构、NumPy workflow 和无 GPU 环境；CUDA 面向模型入口的真实 batch；Vesin 与 ASE 保留为外部 baseline/reference。
 
 尚未实现的 prepared workspace、Verlet cache、GNN adapter 和发布 wheel matrix 都应在出现真实需求后单独设计，不应通过继续扩大当前 API 来提前猜测。
+
+## 2026-08-12：CPU 多线程成为显式执行维度
+
+CPU backend 增加了默认单线程的 `num_threads` 控制。实现没有在旧的 structure loop 外层套并行，而是把 structure preparation 与 source-range query 分离：大量小 structures 和单个大型 structure 都进入同一个可复用 native worker pool，task-local outputs 保持 source-major 顺序并直接复制到 NumPy/Torch arrays。
+
+默认值保留为 `1`，因为项目主要进入训练和数据管线，隐式使用所有 cores 会与 DataLoader、DDP、PyTorch 或 BLAS 叠加。进程级 pool 在重复调用间复用，并在 fork 后由子进程惰性重建；并发 Python calls 与 native exception propagation 通过专门测试覆盖。

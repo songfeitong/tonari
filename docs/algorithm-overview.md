@@ -50,7 +50,7 @@ CPU 按 structure 独立选择算法。常见小体系直接进入紧凑的 nati
 
 大体系使用 Cartesian cell list。算法先 wrap representatives、建立 source 区域的 bins，再把可能进入 cutoff 范围的 periodic target images 插入对应 bin。每个 source 只扫描相邻 bins，并对候选执行最终 strict predicate。极端稀疏坐标若会产生不合理的空 bin grid，则回退到不需要该分配的路径。
 
-CPU backend 本身保持单线程。并行度由调用方在 DataLoader workers、进程池、DDP 或更高层 workflow 中决定，避免 backend threads 与外层并行相互叠加。
+CPU backend 默认保持单线程，也允许通过显式 `num_threads` 在一个 native call 内使用多个 cores。大量小 structures 直接形成独立 tasks；大型 structure 的 source queries 会按连续区间拆分，二者由同一个动态调度器执行。每个 task 独占 output chunk，最后按 structure/source 顺序合并，因此 hot loop 不需要共享 push-back。与 DataLoader、DDP 和其他 threaded runtime 的组合见 [CPU 多线程](cpu-multithreading.md)。
 
 ### CPU 大体系的设计取舍
 

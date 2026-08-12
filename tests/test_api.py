@@ -35,13 +35,39 @@ def test_options_are_keyword_only_and_default_to_existing_behavior() -> None:
         "cutoff",
     )
     assert signature.parameters["algorithm"].kind is inspect.Parameter.KEYWORD_ONLY
+    assert signature.parameters["num_threads"].kind is inspect.Parameter.KEYWORD_ONLY
     assert signature.parameters["sorted"].kind is inspect.Parameter.KEYWORD_ONLY
     assert signature.parameters["half_list"].kind is inspect.Parameter.KEYWORD_ONLY
     assert signature.parameters["include_self"].kind is inspect.Parameter.KEYWORD_ONLY
     assert signature.parameters["algorithm"].default == "auto"
+    assert signature.parameters["num_threads"].default == 1
     assert signature.parameters["sorted"].default is False
     assert signature.parameters["half_list"].default is False
     assert signature.parameters["include_self"].default is False
+
+
+@pytest.mark.parametrize(
+    ("num_threads", "error", "message"),
+    [
+        (True, TypeError, "num_threads must be an integer"),
+        (1.5, TypeError, "num_threads must be an integer"),
+        (0, ValueError, "num_threads must be positive"),
+        (-2, ValueError, "num_threads must be positive"),
+        (2**63, ValueError, "num_threads is too large"),
+    ],
+)
+def test_invalid_num_threads_is_rejected(
+    num_threads: object, error: type[Exception], message: str
+) -> None:
+    with pytest.raises(error, match=message):
+        neighbor_list(
+            "PS",
+            torch.zeros((1, 3)),
+            torch.zeros((3, 3)),
+            torch.zeros(3, dtype=torch.bool),
+            1.0,
+            num_threads=num_threads,
+        )
 
 
 @pytest.mark.parametrize(

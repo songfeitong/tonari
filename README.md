@@ -18,6 +18,7 @@ results = neighbor_list(
     batch_ptr=None,
     *,
     algorithm="auto",
+    num_threads=1,
     sorted=False,
     half_list=False,
     include_self=False,
@@ -56,6 +57,7 @@ For a Batch, concatenate all positions and use `batch_ptr` to mark structure bou
   - CPU uses `"brute_force"` when it would test at most 16,384 atom pairs per structure and `"cell_list"` above that.
   - CUDA uses `"brute_force"` when the largest structure has fewer than 256 atoms and `"cell_list"` otherwise.
   - See [Algorithm selection](docs/algorithm-selection.md) for details and fallback behavior.
+- `num_threads` is the positive CPU thread count, including the calling thread. It defaults to `1`; CUDA calls only accept this default value. See [CPU multithreading](docs/cpu-multithreading.md) for workload and oversubscription guidance.
 - `sorted=True` groups pairs by source index. Their order within each source is unspecified.
 - `half_list=True` returns only one direction for each neighbor pair. The default returns both directions.
 - `include_self=True` adds one self pair for each atom. By default, self pairs within the same cell are omitted.

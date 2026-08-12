@@ -1,6 +1,7 @@
 #include "neighbors_cpu.h"
 #include "errors.h"
 #include "geometry.h"
+#include "thread_pool.h"
 
 #include <algorithm>
 #include <cmath>
@@ -13,6 +14,7 @@
 
 namespace {
 
+using neighbor_search::PairBuffer;
 using neighbor_search::PairBuffers;
 
 // The crossover was selected from a real-structure threshold sweep.
@@ -21,6 +23,8 @@ constexpr int64_t kBruteForceCandidateLimit = 16384;
 constexpr int64_t kMaximumDenseBins = int64_t{1} << 26;
 constexpr int64_t kMaximumBinsPerImage = 64;
 constexpr int kCellListRoundoffFactor = 64;
+constexpr int64_t kBruteForceCandidatesPerTask = int64_t{1} << 18;
+constexpr int64_t kCellListSourcesPerTask = 128;
 
 
 struct CellNode {
@@ -36,6 +40,42 @@ struct BinLayout {
     scalar_t size;
     int64_t dimensions[3];
     int64_t count;
+};
+
+
+template <typename scalar_t>
+struct CellListData {
+    BinLayout<scalar_t> layout;
+    std::vector<int32_t> bin_heads;
+    std::vector<CellNode> nodes;
+    scalar_t search_cutoff_squared;
+    scalar_t inner_cutoff_squared;
+};
+
+
+template <typename scalar_t>
+struct PreparedStructure {
+    int64_t atom_offset = 0;
+    int64_t n_atoms = 0;
+    int64_t shift_offset = 0;
+    int64_t n_shifts = 0;
+    neighbor_search::Algorithm algorithm = neighbor_search::Algorithm::Auto;
+    const scalar_t* positions = nullptr;
+    const scalar_t* cell = nullptr;
+    const scalar_t* dual = nullptr;
+    const int32_t* image_shifts = nullptr;
+    std::vector<scalar_t> wrapped_positions;
+    std::vector<int32_t> atom_wraps;
+    std::vector<scalar_t> translations;
+    CellListData<scalar_t> cell_list;
+};
+
+
+struct QueryTask {
+    int64_t structure;
+    int64_t source_begin;
+    int64_t source_end;
+    bool prepare_structure;
 };
 
 
@@ -191,7 +231,7 @@ inline void append_candidate(
     const int32_t* image_shifts,
     bool distance_known_inside,
     scalar_t cutoff_squared,
-    PairBuffers& pairs) {
+    PairBuffer& pairs) {
     const int32_t* search_shift = image_shifts + 3 * shift;
     int64_t output_shift[3];
     for (int axis = 0; axis < 3; ++axis) {
@@ -248,7 +288,7 @@ inline void append_cell_candidate(
     scalar_t search_cutoff_squared,
     scalar_t inner_cutoff_squared,
     scalar_t cutoff_squared,
-    PairBuffers& pairs) {
+    PairBuffer& pairs) {
     if constexpr (neighbor_search::kHalfList<Mode>) {
         const int32_t* search_shift = image_shifts + 3 * shift;
         int64_t output_shift[3];
@@ -289,6 +329,8 @@ inline void append_cell_candidate(
 
 template <typename scalar_t, neighbor_search::PairMode Mode>
 void search_brute_force(
+    int64_t source_begin,
+    int64_t source_end,
     int64_t atom_offset,
     int64_t n_atoms,
     int64_t n_shifts,
@@ -297,8 +339,8 @@ void search_brute_force(
     const std::vector<int32_t>& atom_wraps,
     const int32_t* image_shifts,
     scalar_t cutoff_squared,
-    PairBuffers& pairs) {
-    for (int64_t source = 0; source < n_atoms; ++source) {
+    PairBuffer& pairs) {
+    for (int64_t source = source_begin; source < source_end; ++source) {
         for (int64_t target = 0; target < n_atoms; ++target) {
             for (int64_t shift = 0; shift < n_shifts; ++shift) {
                 append_candidate<scalar_t, Mode>(
@@ -405,28 +447,21 @@ int64_t bin_index(
 }
 
 
-template <typename scalar_t, neighbor_search::PairMode Mode>
-bool search_cell_list(
-    int64_t atom_offset,
+template <typename scalar_t>
+bool prepare_cell_list(
     int64_t n_atoms,
     int64_t n_shifts,
-    const scalar_t* positions,
-    const scalar_t* cell,
     const std::vector<scalar_t>& wrapped_positions,
-    const std::vector<int32_t>& atom_wraps,
-    const int32_t* image_shifts,
     const std::vector<scalar_t>& translations,
     scalar_t search_cutoff,
     scalar_t inner_cutoff_squared,
-    scalar_t cutoff_squared,
-    PairBuffers& pairs) {
+    CellListData<scalar_t>& data) {
     neighbor_search::require_search(
         n_atoms < std::numeric_limits<int32_t>::max() &&
             n_shifts < std::numeric_limits<int32_t>::max(),
         "cell-list atoms and image shifts must fit int32 indexing");
     scalar_t bounds_minimum[3];
     scalar_t bounds_maximum[3];
-    BinLayout<scalar_t> layout;
     if (!build_bin_layout(
             wrapped_positions,
             n_atoms,
@@ -434,13 +469,13 @@ bool search_cell_list(
             search_cutoff,
             bounds_minimum,
             bounds_maximum,
-            layout)) {
+            data.layout)) {
         return false;
     }
-    std::vector<int32_t> bin_heads(layout.count, -1);
-    std::vector<CellNode> nodes;
+    data.bin_heads.assign(data.layout.count, -1);
     const int64_t possible_images = n_atoms * n_shifts;
-    nodes.reserve(static_cast<size_t>(std::min(possible_images, 4 * n_atoms)));
+    data.nodes.reserve(
+        static_cast<size_t>(std::min(possible_images, 4 * n_atoms)));
     for (int64_t target = 0; target < n_atoms; ++target) {
         for (int64_t shift = 0; shift < n_shifts; ++shift) {
             scalar_t image_position[3];
@@ -458,20 +493,40 @@ bool search_cell_list(
             if (!inside_bounds) {
                 continue;
             }
-            const int64_t bin = bin_index(image_position, layout);
+            const int64_t bin = bin_index(image_position, data.layout);
             neighbor_search::require_search(
-                nodes.size() < static_cast<size_t>(std::numeric_limits<int32_t>::max()),
+                data.nodes.size() <
+                    static_cast<size_t>(std::numeric_limits<int32_t>::max()),
                 "cell-list node count exceeds int32 indexing");
-            const int32_t node = static_cast<int32_t>(nodes.size());
-            nodes.push_back(
+            const int32_t node = static_cast<int32_t>(data.nodes.size());
+            data.nodes.push_back(
                 {static_cast<int32_t>(target),
                  static_cast<int32_t>(shift),
-                 bin_heads[bin]});
-            bin_heads[bin] = node;
+                 data.bin_heads[bin]});
+            data.bin_heads[bin] = node;
         }
     }
-    const scalar_t search_cutoff_squared = search_cutoff * search_cutoff;
-    for (int64_t source = 0; source < n_atoms; ++source) {
+    data.search_cutoff_squared = search_cutoff * search_cutoff;
+    data.inner_cutoff_squared = inner_cutoff_squared;
+    return true;
+}
+
+
+template <typename scalar_t, neighbor_search::PairMode Mode>
+void search_cell_list(
+    int64_t source_begin,
+    int64_t source_end,
+    int64_t atom_offset,
+    const scalar_t* positions,
+    const scalar_t* cell,
+    const std::vector<scalar_t>& wrapped_positions,
+    const std::vector<int32_t>& atom_wraps,
+    const int32_t* image_shifts,
+    const std::vector<scalar_t>& translations,
+    const CellListData<scalar_t>& data,
+    scalar_t cutoff_squared,
+    PairBuffer& pairs) {
+    for (int64_t source = source_begin; source < source_end; ++source) {
         scalar_t source_position[3];
         int64_t source_coordinates[3];
         for (int cartesian = 0; cartesian < 3; ++cartesian) {
@@ -479,43 +534,46 @@ bool search_cell_list(
                 wrapped_positions[3 * source + cartesian];
             source_coordinates[cartesian] = std::clamp(
                 static_cast<int64_t>(std::floor(
-                    (source_position[cartesian] - layout.origins[cartesian]) /
-                    layout.size)),
+                    (source_position[cartesian] -
+                     data.layout.origins[cartesian]) /
+                    data.layout.size)),
                 int64_t{0},
-                layout.dimensions[cartesian] - 1);
+                data.layout.dimensions[cartesian] - 1);
         }
         for (int offset_x = -1; offset_x <= 1; ++offset_x) {
             const int64_t x = source_coordinates[0] + offset_x;
-            if (x < 0 || x >= layout.dimensions[0]) {
+            if (x < 0 || x >= data.layout.dimensions[0]) {
                 continue;
             }
             for (int offset_y = -1; offset_y <= 1; ++offset_y) {
                 const int64_t y = source_coordinates[1] + offset_y;
-                if (y < 0 || y >= layout.dimensions[1]) {
+                if (y < 0 || y >= data.layout.dimensions[1]) {
                     continue;
                 }
                 for (int offset_z = -1; offset_z <= 1; ++offset_z) {
                     const int64_t z = source_coordinates[2] + offset_z;
-                    if (z < 0 || z >= layout.dimensions[2]) {
+                    if (z < 0 || z >= data.layout.dimensions[2]) {
                         continue;
                     }
                     const int64_t bin =
-                        (x * layout.dimensions[1] + y) * layout.dimensions[2] + z;
-                    for (int32_t node = bin_heads[bin]; node >= 0;
-                         node = nodes[node].next) {
+                        (x * data.layout.dimensions[1] + y) *
+                            data.layout.dimensions[2] +
+                        z;
+                    for (int32_t node = data.bin_heads[bin]; node >= 0;
+                         node = data.nodes[node].next) {
                         append_cell_candidate<scalar_t, Mode>(
                             source,
-                            nodes[node].target,
+                            data.nodes[node].target,
                             atom_offset,
-                            nodes[node].shift,
+                            data.nodes[node].shift,
                             positions,
                             cell,
                             wrapped_positions,
                             atom_wraps,
                             image_shifts,
                             translations,
-                            search_cutoff_squared,
-                            inner_cutoff_squared,
+                            data.search_cutoff_squared,
+                            data.inner_cutoff_squared,
                             cutoff_squared,
                             pairs);
                     }
@@ -523,7 +581,119 @@ bool search_cell_list(
             }
         }
     }
-    return true;
+}
+
+
+template <typename scalar_t, neighbor_search::PairMode Mode>
+void search_prepared_structure(
+    const PreparedStructure<scalar_t>& structure,
+    int64_t source_begin,
+    int64_t source_end,
+    scalar_t cutoff_squared,
+    PairBuffer& pairs) {
+    if (structure.algorithm == neighbor_search::Algorithm::BruteForce) {
+        search_brute_force<scalar_t, Mode>(
+            source_begin,
+            source_end,
+            structure.atom_offset,
+            structure.n_atoms,
+            structure.n_shifts,
+            structure.positions,
+            structure.cell,
+            structure.atom_wraps,
+            structure.image_shifts,
+            cutoff_squared,
+            pairs);
+        return;
+    }
+    search_cell_list<scalar_t, Mode>(
+        source_begin,
+        source_end,
+        structure.atom_offset,
+        structure.positions,
+        structure.cell,
+        structure.wrapped_positions,
+        structure.atom_wraps,
+        structure.image_shifts,
+        structure.translations,
+        structure.cell_list,
+        cutoff_squared,
+        pairs);
+}
+
+
+template <typename scalar_t>
+void prepare_structure(
+    PreparedStructure<scalar_t>& structure,
+    scalar_t cutoff,
+    neighbor_search::Algorithm requested_algorithm) {
+    if (structure.n_atoms == 0) {
+        return;
+    }
+    prepare_positions(
+        structure.positions,
+        structure.cell,
+        structure.dual,
+        structure.n_atoms,
+        structure.wrapped_positions,
+        structure.atom_wraps);
+    structure.algorithm = select_cpu_algorithm(
+        requested_algorithm, structure.n_atoms, structure.n_shifts);
+    if (structure.algorithm == neighbor_search::Algorithm::BruteForce) {
+        return;
+    }
+
+    structure.translations = image_translations(
+        structure.image_shifts, structure.cell, structure.n_shifts);
+    scalar_t search_cutoff = scalar_t(0);
+    const bool cell_list_cutoff_is_safe = conservative_cell_list_cutoff(
+        structure.positions,
+        structure.cell,
+        structure.n_atoms,
+        structure.wrapped_positions,
+        structure.atom_wraps,
+        structure.image_shifts,
+        structure.n_shifts,
+        cutoff,
+        search_cutoff);
+    // Candidates safely inside the error band keep the fast wrapped
+    // distance; only the boundary shell needs the direct public formula.
+    const scalar_t inner_cutoff = std::max(
+        scalar_t(0), 2 * cutoff - search_cutoff);
+    const bool cell_list_succeeded = cell_list_cutoff_is_safe &&
+        prepare_cell_list(
+            structure.n_atoms,
+            structure.n_shifts,
+            structure.wrapped_positions,
+            structure.translations,
+            search_cutoff,
+            inner_cutoff * inner_cutoff,
+            structure.cell_list);
+    if (cell_list_succeeded) {
+        return;
+    }
+    neighbor_search::require_search(
+        requested_algorithm != neighbor_search::Algorithm::CellList,
+        "cell_list cannot safely process this structure; use "
+        "algorithm='auto' or 'brute_force'");
+    structure.algorithm = neighbor_search::Algorithm::BruteForce;
+}
+
+
+int64_t query_chunk_size(
+    neighbor_search::Algorithm algorithm,
+    int64_t n_atoms,
+    int64_t n_shifts) {
+    if (algorithm == neighbor_search::Algorithm::CellList) {
+        return kCellListSourcesPerTask;
+    }
+    if (n_atoms == 0 || n_shifts == 0 ||
+        n_atoms > std::numeric_limits<int64_t>::max() / n_shifts) {
+        return 1;
+    }
+    const int64_t candidates_per_source = n_atoms * n_shifts;
+    return std::max(
+        int64_t{1}, kBruteForceCandidatesPerTask / candidates_per_source);
 }
 
 
@@ -536,7 +706,8 @@ PairBuffers build_neighbor_pairs(
     std::span<const int32_t> image_shifts,
     std::span<const int64_t> image_offsets,
     double cutoff,
-    neighbor_search::Algorithm requested_algorithm) {
+    neighbor_search::Algorithm requested_algorithm,
+    int64_t num_threads) {
     const scalar_t* position_data = positions.data();
     const int64_t* batch_ptr_data = batch_ptr.data();
     const scalar_t* cell_data = cells.data();
@@ -548,94 +719,139 @@ PairBuffers build_neighbor_pairs(
     const scalar_t scalar_cutoff = static_cast<scalar_t>(cutoff);
     const scalar_t cutoff_squared = static_cast<scalar_t>(cutoff * cutoff);
 
-    PairBuffers pairs;
-    pairs.indices.reserve(static_cast<size_t>(n_atoms_total) * 64);
-    pairs.shifts.reserve(static_cast<size_t>(n_atoms_total) * 96);
+    std::vector<PreparedStructure<scalar_t>> structures(
+        static_cast<size_t>(batch_size));
     for (int64_t batch = 0; batch < batch_size; ++batch) {
-        const int64_t atom_offset = batch_ptr_data[batch];
-        const int64_t n_atoms = batch_ptr_data[batch + 1] - atom_offset;
-        if (n_atoms == 0) {
-            continue;
-        }
-        const int64_t shift_offset = image_offsets_data[batch];
-        const int64_t n_shifts = image_offsets_data[batch + 1] - shift_offset;
-        const scalar_t* cell = cell_data + 9 * batch;
-        std::vector<scalar_t> wrapped_positions;
-        std::vector<int32_t> atom_wraps;
-        prepare_positions(
-            position_data + 3 * atom_offset,
-            cell,
-            dual_data + 9 * batch,
-            n_atoms,
-            wrapped_positions,
-            atom_wraps);
-        const int32_t* structure_shifts =
-            image_shift_data + 3 * shift_offset;
-        const neighbor_search::Algorithm algorithm = select_cpu_algorithm(
-            requested_algorithm, n_atoms, n_shifts);
-        if (algorithm == neighbor_search::Algorithm::BruteForce) {
-            search_brute_force<scalar_t, Mode>(
-                atom_offset,
-                n_atoms,
-                n_shifts,
-                position_data + 3 * atom_offset,
-                cell,
-                atom_wraps,
-                structure_shifts,
-                cutoff_squared,
-                pairs);
-            continue;
-        }
-        const auto translations =
-            image_translations(structure_shifts, cell, n_shifts);
-        scalar_t search_cutoff = scalar_t(0);
-        const bool cell_list_cutoff_is_safe = conservative_cell_list_cutoff(
-                position_data + 3 * atom_offset,
-                cell,
-                n_atoms,
-                wrapped_positions,
-                atom_wraps,
-                structure_shifts,
-                n_shifts,
-                scalar_cutoff,
-                search_cutoff);
-        // Candidates safely inside the error band keep the fast wrapped
-        // distance; only the boundary shell needs the direct public formula.
-        const scalar_t inner_cutoff = std::max(
-            scalar_t(0), 2 * scalar_cutoff - search_cutoff);
-        const bool cell_list_succeeded = cell_list_cutoff_is_safe &&
-            search_cell_list<scalar_t, Mode>(
-                atom_offset,
-                n_atoms,
-                n_shifts,
-                position_data + 3 * atom_offset,
-                cell,
-                wrapped_positions,
-                atom_wraps,
-                structure_shifts,
-                translations,
-                search_cutoff,
-                inner_cutoff * inner_cutoff,
-                cutoff_squared,
-                pairs);
-        if (cell_list_succeeded) {
-            continue;
-        }
-        neighbor_search::require_search(
-            requested_algorithm != neighbor_search::Algorithm::CellList,
-            "cell_list cannot safely process this structure; use "
-            "algorithm='auto' or 'brute_force'");
-        search_brute_force<scalar_t, Mode>(
-            atom_offset,
-            n_atoms,
-            n_shifts,
-            position_data + 3 * atom_offset,
-            cell,
-            atom_wraps,
-            structure_shifts,
-            cutoff_squared,
-            pairs);
+        PreparedStructure<scalar_t>& structure = structures[batch];
+        structure.atom_offset = batch_ptr_data[batch];
+        structure.n_atoms =
+            batch_ptr_data[batch + 1] - structure.atom_offset;
+        structure.shift_offset = image_offsets_data[batch];
+        structure.n_shifts =
+            image_offsets_data[batch + 1] - structure.shift_offset;
+        structure.positions = position_data + 3 * structure.atom_offset;
+        structure.cell = cell_data + 9 * batch;
+        structure.dual = dual_data + 9 * batch;
+        structure.image_shifts =
+            image_shift_data + 3 * structure.shift_offset;
+        structure.algorithm = select_cpu_algorithm(
+            requested_algorithm, structure.n_atoms, structure.n_shifts);
     }
+
+    if (num_threads == 1) {
+        PairBuffer chunk;
+        chunk.indices.reserve(static_cast<size_t>(n_atoms_total) * 64);
+        chunk.shifts.reserve(static_cast<size_t>(n_atoms_total) * 96);
+        for (PreparedStructure<scalar_t>& structure : structures) {
+            prepare_structure(
+                structure,
+                scalar_cutoff,
+                requested_algorithm);
+            search_prepared_structure<scalar_t, Mode>(
+                structure,
+                0,
+                structure.n_atoms,
+                cutoff_squared,
+                chunk);
+            structure = PreparedStructure<scalar_t>();
+        }
+        PairBuffers pairs;
+        pairs.pair_count = chunk.indices.size() / 2;
+        pairs.chunks.push_back(std::move(chunk));
+        return pairs;
+    }
+
+    std::vector<uint8_t> split_structure(static_cast<size_t>(batch_size), 0);
+    std::vector<int64_t> split_indices;
+    for (int64_t batch = 0; batch < batch_size; ++batch) {
+        const PreparedStructure<scalar_t>& structure = structures[batch];
+        const int64_t chunk_size = query_chunk_size(
+            structure.algorithm, structure.n_atoms, structure.n_shifts);
+        if (structure.n_atoms > chunk_size) {
+            split_structure[batch] = 1;
+            split_indices.push_back(batch);
+        }
+    }
+    neighbor_search::parallel_for(
+        static_cast<int64_t>(split_indices.size()),
+        num_threads,
+        [&](int64_t index) {
+            prepare_structure(
+                structures[split_indices[index]],
+                scalar_cutoff,
+                requested_algorithm);
+        });
+
+    std::vector<QueryTask> tasks;
+    for (int64_t batch = 0; batch < batch_size; ++batch) {
+        const PreparedStructure<scalar_t>& structure = structures[batch];
+        if (structure.n_atoms == 0) {
+            continue;
+        }
+        if (!split_structure[batch]) {
+            tasks.push_back({batch, 0, structure.n_atoms, true});
+            continue;
+        }
+        const int64_t chunk_size = query_chunk_size(
+            structure.algorithm, structure.n_atoms, structure.n_shifts);
+        for (int64_t source = 0; source < structure.n_atoms;
+             source += chunk_size) {
+            tasks.push_back(
+                {batch,
+                 source,
+                 std::min(structure.n_atoms, source + chunk_size),
+                 false});
+        }
+    }
+
+    std::vector<PairBuffer> task_pairs(tasks.size());
+    neighbor_search::parallel_for(
+        static_cast<int64_t>(tasks.size()),
+        num_threads,
+        [&](int64_t task_index) {
+            const QueryTask& task = tasks[task_index];
+            PairBuffer& local_pairs = task_pairs[task_index];
+            PreparedStructure<scalar_t>& structure =
+                structures[task.structure];
+            if (task.prepare_structure) {
+                prepare_structure(
+                    structure, scalar_cutoff, requested_algorithm);
+            }
+            const int64_t source_count = task.source_end - task.source_begin;
+            local_pairs.indices.reserve(static_cast<size_t>(source_count) * 64);
+            local_pairs.shifts.reserve(static_cast<size_t>(source_count) * 96);
+            search_prepared_structure<scalar_t, Mode>(
+                structure,
+                task.source_begin,
+                task.source_end,
+                cutoff_squared,
+                local_pairs);
+            if (task.prepare_structure) {
+                structure = PreparedStructure<scalar_t>();
+            }
+        });
+
+    size_t index_count = 0;
+    size_t shift_count = 0;
+    for (const PairBuffer& local_pairs : task_pairs) {
+        neighbor_search::require_search(
+            local_pairs.indices.size() <=
+                std::numeric_limits<size_t>::max() - index_count,
+            "neighbor-list output size exceeds addressable memory");
+        neighbor_search::require_search(
+            local_pairs.shifts.size() <=
+                std::numeric_limits<size_t>::max() - shift_count,
+            "neighbor-list output size exceeds addressable memory");
+        index_count += local_pairs.indices.size();
+        shift_count += local_pairs.shifts.size();
+    }
+    neighbor_search::require_search(
+        index_count % 2 == 0 && shift_count % 3 == 0 &&
+            index_count / 2 == shift_count / 3,
+        "neighbor-list pair buffers are inconsistent");
+    PairBuffers pairs;
+    pairs.chunks = std::move(task_pairs);
+    pairs.pair_count = index_count / 2;
     return pairs;
 }
 
@@ -650,7 +866,8 @@ PairBuffers dispatch_neighbor_pairs(
     std::span<const int64_t> image_offsets,
     double cutoff,
     neighbor_search::PairMode mode,
-    neighbor_search::Algorithm algorithm) {
+    neighbor_search::Algorithm algorithm,
+    int64_t num_threads) {
     auto build = [&]<neighbor_search::PairMode Mode>() {
         return build_neighbor_pairs<scalar_t, Mode>(
             positions,
@@ -660,7 +877,8 @@ PairBuffers dispatch_neighbor_pairs(
             image_shifts,
             image_offsets,
             cutoff,
-            algorithm);
+            algorithm,
+            num_threads);
     };
     switch (mode) {
         case neighbor_search::PairMode::Full:
@@ -678,6 +896,55 @@ PairBuffers dispatch_neighbor_pairs(
 }  // namespace
 
 
+void neighbor_search::copy_pair_buffers(
+    const PairBuffers& pairs,
+    std::span<int64_t> indices,
+    std::span<int32_t> shifts,
+    int64_t num_threads) {
+    require_search(
+        pairs.pair_count <= std::numeric_limits<size_t>::max() / 3,
+        "neighbor-list output size exceeds addressable memory");
+    require_search(
+        indices.size() == 2 * pairs.pair_count &&
+            shifts.size() == 3 * pairs.pair_count,
+        "neighbor-list output arrays have inconsistent sizes");
+    std::vector<size_t> offsets(pairs.chunks.size() + 1, 0);
+    for (size_t chunk = 0; chunk < pairs.chunks.size(); ++chunk) {
+        const PairBuffer& buffer = pairs.chunks[chunk];
+        require_search(
+            buffer.indices.size() % 2 == 0 &&
+                buffer.shifts.size() % 3 == 0 &&
+                buffer.indices.size() / 2 == buffer.shifts.size() / 3,
+            "neighbor-list pair buffers are inconsistent");
+        const size_t chunk_pairs = buffer.indices.size() / 2;
+        require_search(
+            chunk_pairs <= pairs.pair_count - offsets[chunk],
+            "neighbor-list pair buffers exceed the reported size");
+        offsets[chunk + 1] = offsets[chunk] + chunk_pairs;
+    }
+    require_search(
+        offsets.back() == pairs.pair_count,
+        "neighbor-list pair buffers do not match the reported size");
+    parallel_for(
+        static_cast<int64_t>(pairs.chunks.size()),
+        num_threads,
+        [&](int64_t chunk_index) {
+            const PairBuffer& buffer = pairs.chunks[chunk_index];
+            const size_t pair_offset = offsets[chunk_index];
+            if (!buffer.indices.empty()) {
+                std::memcpy(
+                    indices.data() + 2 * pair_offset,
+                    buffer.indices.data(),
+                    buffer.indices.size() * sizeof(int64_t));
+                std::memcpy(
+                    shifts.data() + 3 * pair_offset,
+                    buffer.shifts.data(),
+                    buffer.shifts.size() * sizeof(int32_t));
+            }
+        });
+}
+
+
 template <typename scalar_t>
 neighbor_search::PairBuffers neighbor_search::neighbor_list_cpu(
     std::span<const scalar_t> positions,
@@ -686,7 +953,8 @@ neighbor_search::PairBuffers neighbor_search::neighbor_list_cpu(
     std::span<const uint8_t> pbc,
     double cutoff,
     PairMode mode,
-    Algorithm algorithm) {
+    Algorithm algorithm,
+    int64_t num_threads) {
     require_input(positions.size() % 3 == 0, "positions must have shape (N_total, 3)");
     require_input(!batch_ptr.empty(), "batch_ptr must have shape (B + 1,)");
     const int64_t n_atoms = static_cast<int64_t>(positions.size() / 3);
@@ -700,6 +968,7 @@ neighbor_search::PairBuffers neighbor_search::neighbor_list_cpu(
     require_input(
         std::isfinite(cutoff) && cutoff > 0,
         "cutoff must be finite and positive");
+    require_input(num_threads > 0, "num_threads must be a positive integer");
     require_input(batch_ptr.front() == 0, "batch_ptr must start at zero");
     require_input(batch_ptr.back() == n_atoms, "batch_ptr must end at N_total");
     require_input(
@@ -728,7 +997,8 @@ neighbor_search::PairBuffers neighbor_search::neighbor_list_cpu(
         metadata.image_offsets,
         cutoff,
         mode,
-        algorithm);
+        algorithm,
+        num_threads);
 }
 
 
@@ -739,7 +1009,8 @@ template neighbor_search::PairBuffers neighbor_search::neighbor_list_cpu<float>(
     std::span<const uint8_t>,
     double,
     PairMode,
-    Algorithm);
+    Algorithm,
+    int64_t);
 
 
 template neighbor_search::PairBuffers neighbor_search::neighbor_list_cpu<double>(
@@ -749,4 +1020,5 @@ template neighbor_search::PairBuffers neighbor_search::neighbor_list_cpu<double>
     std::span<const uint8_t>,
     double,
     PairMode,
-    Algorithm);
+    Algorithm,
+    int64_t);

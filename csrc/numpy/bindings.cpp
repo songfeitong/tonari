@@ -4,7 +4,7 @@
 #include <pybind11/pybind11.h>
 
 #include <cstdint>
-#include <cstring>
+#include <limits>
 #include <span>
 #include <string>
 #include <utility>
@@ -25,7 +25,8 @@ std::pair<py::array, py::array> neighbor_list_typed(
     double cutoff,
     bool half_list,
     bool include_self,
-    neighbor_search::Algorithm algorithm) {
+    neighbor_search::Algorithm algorithm,
+    int64_t num_threads) {
     const auto position_info = positions.request();
     const auto batch_ptr_info = batch_ptr.request();
     const auto cell_info = cell.request();
@@ -48,24 +49,30 @@ std::pair<py::array, py::array> neighbor_list_typed(
                 static_cast<size_t>(pbc_info.size)),
             cutoff,
             neighbor_search::pair_mode(half_list, include_self),
-            algorithm);
+            algorithm,
+            num_threads);
     }
 
-    const auto n_pairs = static_cast<py::ssize_t>(pairs.indices.size() / 2);
+    neighbor_search::require_search(
+        pairs.pair_count <=
+            static_cast<size_t>(std::numeric_limits<py::ssize_t>::max()),
+        "neighbor-list output exceeds the Python index range");
+    const auto n_pairs = static_cast<py::ssize_t>(pairs.pair_count);
     py::array_t<int64_t> pair_indices(
         std::vector<py::ssize_t>{n_pairs, 2});
     py::array_t<int32_t> cell_shifts(
         std::vector<py::ssize_t>{n_pairs, 3});
     if (n_pairs > 0) {
-        auto* pair_data = pair_indices.mutable_data();
-        std::memcpy(
-            pair_data,
-            pairs.indices.data(),
-            static_cast<size_t>(2 * n_pairs) * sizeof(int64_t));
-        std::memcpy(
-            cell_shifts.mutable_data(),
-            pairs.shifts.data(),
-            static_cast<size_t>(3 * n_pairs) * sizeof(int32_t));
+        py::gil_scoped_release release;
+        neighbor_search::copy_pair_buffers(
+            pairs,
+            std::span(
+                pair_indices.mutable_data(),
+                2 * static_cast<size_t>(n_pairs)),
+            std::span(
+                cell_shifts.mutable_data(),
+                3 * static_cast<size_t>(n_pairs)),
+            num_threads);
     }
     return {std::move(pair_indices), std::move(cell_shifts)};
 }
@@ -79,7 +86,8 @@ std::pair<py::array, py::array> neighbor_list(
     double cutoff,
     bool half_list,
     bool include_self,
-    const std::string& algorithm) {
+    const std::string& algorithm,
+    int64_t num_threads) {
     const auto require_contiguous = [](const py::array& array, const char* name) {
         if ((array.flags() & py::array::c_style) == 0) {
             throw py::value_error(std::string(name) + " must be C-contiguous");
@@ -109,7 +117,8 @@ std::pair<py::array, py::array> neighbor_list(
             cutoff,
             half_list,
             include_self,
-            parsed_algorithm);
+            parsed_algorithm,
+            num_threads);
     }
     if (positions.dtype().is(py::dtype::of<double>())) {
         return neighbor_list_typed<double>(
@@ -120,7 +129,8 @@ std::pair<py::array, py::array> neighbor_list(
             cutoff,
             half_list,
             include_self,
-            parsed_algorithm);
+            parsed_algorithm,
+            num_threads);
     }
     throw py::value_error("positions must have dtype float32 or float64");
 }

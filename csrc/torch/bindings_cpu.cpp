@@ -3,7 +3,7 @@
 #include <torch/extension.h>
 
 #include <cstdint>
-#include <cstring>
+#include <limits>
 #include <span>
 #include <string>
 #include <vector>
@@ -23,7 +23,8 @@ std::vector<torch::Tensor> neighbor_list_typed(
     double cutoff,
     bool half_list,
     bool include_self,
-    neighbor_search::Algorithm algorithm) {
+    neighbor_search::Algorithm algorithm,
+    int64_t num_threads) {
     const bool* pbc_data = pbc.data_ptr<bool>();
     std::vector<uint8_t> pbc_values(static_cast<size_t>(pbc.numel()));
     for (int64_t index = 0; index < pbc.numel(); ++index) {
@@ -42,23 +43,28 @@ std::vector<torch::Tensor> neighbor_list_typed(
         pbc_values,
         cutoff,
         neighbor_search::pair_mode(half_list, include_self),
-        algorithm);
+        algorithm,
+        num_threads);
 
-    const int64_t n_pairs = static_cast<int64_t>(pairs.indices.size() / 2);
+    neighbor_search::require_search(
+        pairs.pair_count <=
+            static_cast<size_t>(std::numeric_limits<int64_t>::max()),
+        "neighbor-list output exceeds the int64 range");
+    const int64_t n_pairs = static_cast<int64_t>(pairs.pair_count);
     auto pair_indices =
         torch::empty({n_pairs, 2}, positions.options().dtype(torch::kInt64));
     auto cell_shifts =
         torch::empty({n_pairs, 3}, positions.options().dtype(torch::kInt32));
     if (n_pairs > 0) {
-        int64_t* pair_data = pair_indices.data_ptr<int64_t>();
-        std::memcpy(
-            pair_data,
-            pairs.indices.data(),
-            static_cast<size_t>(2 * n_pairs) * sizeof(int64_t));
-        std::memcpy(
-            cell_shifts.data_ptr<int32_t>(),
-            pairs.shifts.data(),
-            static_cast<size_t>(3 * n_pairs) * sizeof(int32_t));
+        neighbor_search::copy_pair_buffers(
+            pairs,
+            std::span(
+                pair_indices.data_ptr<int64_t>(),
+                2 * static_cast<size_t>(n_pairs)),
+            std::span(
+                cell_shifts.data_ptr<int32_t>(),
+                3 * static_cast<size_t>(n_pairs)),
+            num_threads);
     }
     return {pair_indices, cell_shifts};
 }
@@ -72,7 +78,8 @@ std::vector<torch::Tensor> neighbor_list(
     double cutoff,
     bool half_list,
     bool include_self,
-    const std::string& algorithm) {
+    const std::string& algorithm,
+    int64_t num_threads) {
     TORCH_CHECK(!positions.is_cuda(), "positions must be a CPU tensor");
     TORCH_CHECK(
         !batch_ptr.is_cuda() && !cell.is_cuda() && !pbc.is_cuda(),
@@ -97,7 +104,8 @@ std::vector<torch::Tensor> neighbor_list(
                 cutoff,
                 half_list,
                 include_self,
-                parsed_algorithm);
+                parsed_algorithm,
+                num_threads);
         });
     return result;
 }
