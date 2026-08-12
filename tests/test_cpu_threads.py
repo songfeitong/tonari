@@ -7,23 +7,9 @@ import numpy as np
 import pytest
 import torch
 
+from tests.assertions import pair_keys
 from tests.reference import neighbor_list_reference
 from tonari import neighbor_list
-
-
-def pair_keys(
-    pair_indices: np.ndarray | torch.Tensor,
-    cell_shifts: np.ndarray | torch.Tensor,
-) -> set[tuple[int, ...]]:
-    if isinstance(pair_indices, np.ndarray):
-        rows = np.concatenate(
-            (pair_indices, cell_shifts.astype(np.int64)), axis=1
-        ).tolist()
-    else:
-        rows = (
-            torch.cat((pair_indices, cell_shifts.to(torch.int64)), dim=1).cpu().tolist()
-        )
-    return {tuple(row) for row in rows}
 
 
 def heterogeneous_batch() -> tuple[torch.Tensor, ...]:

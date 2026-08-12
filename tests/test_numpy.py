@@ -9,19 +9,8 @@ import numpy as np
 import pytest
 import torch
 
+from tests.assertions import pair_keys
 from tonari import neighbor_list
-
-
-def numpy_pair_keys(output: tuple[np.ndarray, np.ndarray]) -> set[tuple[int, ...]]:
-    pair_indices, cell_shifts = output
-    rows = np.concatenate((pair_indices, cell_shifts.astype(np.int64)), axis=1)
-    return {tuple(row) for row in rows.tolist()}
-
-
-def torch_pair_keys(output: tuple[torch.Tensor, torch.Tensor]) -> set[tuple[int, ...]]:
-    pair_indices, cell_shifts = output
-    rows = torch.cat((pair_indices, cell_shifts.to(torch.int64)), dim=1)
-    return {tuple(row) for row in rows.tolist()}
 
 
 @pytest.mark.parametrize("positions", [np.array(1.0), np.zeros(3)])
@@ -56,7 +45,7 @@ def test_numpy_single_structure_matches_torch(dtype: type[np.floating]) -> None:
     pair_indices, cell_shifts = actual
     assert pair_indices.dtype == np.int64
     assert cell_shifts.dtype == np.int32
-    assert numpy_pair_keys(actual) == torch_pair_keys(expected)
+    assert pair_keys(actual) == pair_keys(expected)
 
 
 def test_numpy_batch_matches_torch() -> None:
@@ -76,7 +65,7 @@ def test_numpy_batch_matches_torch() -> None:
         0.6,
         torch.from_numpy(batch_ptr),
     )
-    assert numpy_pair_keys(actual) == torch_pair_keys(expected)
+    assert pair_keys(actual) == pair_keys(expected)
 
 
 @pytest.mark.parametrize("argument", ["cell", "pbc", "batch_ptr"])

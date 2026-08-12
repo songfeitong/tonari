@@ -1,34 +1,11 @@
 from __future__ import annotations
 
-import numpy as np
 import pytest
 import torch
 
+from tests.assertions import assert_sorted_by_source, pair_keys
 from tests.reference import neighbor_list_reference
 from tonari import neighbor_list
-
-
-def pair_keys(
-    pair_indices: np.ndarray | torch.Tensor,
-    cell_shifts: np.ndarray | torch.Tensor,
-) -> set[tuple[int, ...]]:
-    if isinstance(pair_indices, np.ndarray):
-        rows = np.concatenate(
-            (pair_indices, cell_shifts.astype(np.int64)), axis=1
-        ).tolist()
-    else:
-        rows = (
-            torch.cat((pair_indices, cell_shifts.to(torch.int64)), dim=1).cpu().tolist()
-        )
-    return {tuple(row) for row in rows}
-
-
-def assert_sorted_by_source(pair_indices: np.ndarray | torch.Tensor) -> None:
-    source = pair_indices[:, 0]
-    if isinstance(source, np.ndarray):
-        assert np.all(source[1:] >= source[:-1])
-    else:
-        assert torch.all(source[1:] >= source[:-1])
 
 
 def periodic_batch() -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:

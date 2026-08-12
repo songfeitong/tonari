@@ -5,14 +5,9 @@ import pytest
 import torch
 from ase.neighborlist import primitive_neighbor_list
 
+from tests.assertions import pair_keys
 from tests.reference import neighbor_list_reference
 from tonari import neighbor_list
-
-
-def pair_keys(pair_indices: torch.Tensor, shifts: torch.Tensor) -> set[tuple[int, ...]]:
-    rows = torch.cat((pair_indices, shifts.to(torch.int64)), dim=1).tolist()
-    assert len(rows) == len({tuple(row) for row in rows})
-    return {tuple(row) for row in rows}
 
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])

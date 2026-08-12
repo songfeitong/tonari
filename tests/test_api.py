@@ -8,13 +8,8 @@ import pytest
 import torch
 
 import tonari
+from tests.assertions import pair_keys
 from tonari import neighbor_list
-
-
-def pair_keys(output: tuple[torch.Tensor, torch.Tensor]) -> set[tuple[int, ...]]:
-    pair_indices, cell_shifts = output
-    rows = torch.cat((pair_indices, cell_shifts.to(torch.int64)), dim=1)
-    return {tuple(row) for row in rows.cpu().tolist()}
 
 
 def test_public_surface_contains_only_neighbor_list() -> None:

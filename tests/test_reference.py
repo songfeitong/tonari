@@ -3,12 +3,8 @@ from __future__ import annotations
 import pytest
 import torch
 
+from tests.assertions import pair_keys
 from tests.reference import neighbor_list_reference
-
-
-def pair_keys(pair_indices: torch.Tensor, shifts: torch.Tensor) -> set[tuple[int, ...]]:
-    keys = torch.cat((pair_indices, shifts.to(torch.int64)), dim=1).cpu().tolist()
-    return {tuple(row) for row in keys}
 
 
 def test_finite_directed_pairs_exclude_onsite_and_strict_boundary() -> None:

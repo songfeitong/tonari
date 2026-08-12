@@ -10,27 +10,9 @@ from ase.neighborlist import NeighborList as AseNeighborList
 from ase.neighborlist import PrimitiveNeighborList
 from vesin import NeighborList as VesinNeighborList
 
+from tests.assertions import PairKey, pair_keys
 from tests.reference import neighbor_list_reference
 from tonari import neighbor_list
-
-PairKey = tuple[int, int, int, int, int]
-
-
-def pair_keys(
-    output: tuple[torch.Tensor, torch.Tensor] | tuple[np.ndarray, np.ndarray],
-) -> set[PairKey]:
-    pair_indices, cell_shifts = output
-    if isinstance(pair_indices, torch.Tensor):
-        rows = (
-            torch.cat((pair_indices, cell_shifts.to(torch.int64)), dim=1).cpu().tolist()
-        )
-    else:
-        rows = np.concatenate(
-            (pair_indices, cell_shifts.astype(np.int64)), axis=1
-        ).tolist()
-    keys = {tuple(row) for row in rows}
-    assert len(keys) == len(rows)
-    return keys
 
 
 def reverse_key(key: PairKey) -> PairKey:

@@ -5,6 +5,7 @@ import pytest
 import torch
 from ase.neighborlist import primitive_neighbor_list
 
+from tests.assertions import pair_keys
 from tests.reference import neighbor_list_reference
 from tonari import neighbor_list
 
@@ -12,13 +13,6 @@ pytestmark = [
     pytest.mark.cuda,
     pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is unavailable"),
 ]
-
-
-def pair_keys(pair_indices: torch.Tensor, shifts: torch.Tensor) -> set[tuple[int, ...]]:
-    rows = torch.cat((pair_indices, shifts.to(torch.int64)), dim=1).cpu().tolist()
-    assert len(rows) == len({tuple(row) for row in rows})
-    return {tuple(row) for row in rows}
-
 
 def cuda_neighbors(
     positions: torch.Tensor,
