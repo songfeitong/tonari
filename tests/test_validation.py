@@ -156,6 +156,34 @@ def test_batched_metadata_contract(
 
 @pytest.mark.parametrize("ecosystem", ["numpy", "torch"])
 @pytest.mark.parametrize(
+    ("field", "invalid", "message"),
+    [
+        ("cell", torch.zeros((3, 3), dtype=torch.float64), "batched cell"),
+        ("pbc", torch.zeros(3, dtype=torch.bool), "batched pbc"),
+    ],
+)
+def test_explicit_batch_ptr_requires_batched_metadata(
+    ecosystem: Ecosystem,
+    field: str,
+    invalid: torch.Tensor,
+    message: str,
+) -> None:
+    positions, cell, pbc, batch_ptr = valid_batch(ecosystem)
+    arguments = {"cell": cell, "pbc": pbc}
+    arguments[field] = as_ecosystem(invalid, ecosystem)
+    with pytest.raises(ValueError, match=message):
+        neighbor_list(
+            "PS",
+            positions,
+            arguments["cell"],
+            arguments["pbc"],
+            1.0,
+            batch_ptr,
+        )
+
+
+@pytest.mark.parametrize("ecosystem", ["numpy", "torch"])
+@pytest.mark.parametrize(
     ("batch_ptr", "message"),
     [
         ((1, 1, 2), "batch_ptr must start at zero"),

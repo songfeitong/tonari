@@ -23,3 +23,10 @@ assert_type(
     neighbor_list("PS", torch_positions, torch_cell, torch_pbc, 1.0),
     tuple[torch.Tensor, ...],
 )
+
+neighbor_list(  # type: ignore[call-overload]
+    "PS", numpy_positions, torch_cell, numpy_pbc, 1.0
+)
+neighbor_list(  # type: ignore[call-overload]
+    "PS", torch_positions, torch_cell, torch_pbc, 1.0, algorithm="fast"
+)

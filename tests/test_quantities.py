@@ -94,14 +94,19 @@ def test_batch_displacements_use_each_structure_cell() -> None:
     assert torch.equal(displacements, expected)
 
 
-def test_torch_distances_and_displacements_preserve_autograd() -> None:
+def test_torch_distances_and_displacements_preserve_autograd(
+    torch_device: torch.device,
+) -> None:
     positions = torch.tensor(
         [[0.0, 0.0, 0.0], [0.8, 0.0, 0.0]],
         dtype=torch.float64,
+        device=torch_device,
         requires_grad=True,
     )
-    cell = (torch.eye(3, dtype=torch.float64) * 4.0).requires_grad_()
-    pbc = torch.zeros(3, dtype=torch.bool)
+    cell = (
+        torch.eye(3, dtype=torch.float64, device=torch_device) * 4.0
+    ).requires_grad_()
+    pbc = torch.zeros(3, dtype=torch.bool, device=torch_device)
 
     distances, displacements = neighbor_list("dD", positions, cell, pbc, 1.0)
     (distances.sum() + displacements.sum()).backward()
