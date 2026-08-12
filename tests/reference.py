@@ -6,8 +6,6 @@ from math import ceil
 import torch
 from torch import Tensor
 
-from tonari._torch_frontend import normalize_torch_inputs, validate_torch_inputs
-
 _MAXIMUM_IMAGE_SHIFTS = 2**24
 
 
@@ -26,25 +24,26 @@ def _canonical_half_mask(pair_indices: Tensor, cell_shifts: Tensor) -> Tensor:
 
 @torch.no_grad()
 def neighbor_list_reference(
-    quantities: str,
     positions: Tensor,
     cell: Tensor,
     pbc: Tensor,
     cutoff: float,
-    batch_ptr: Tensor | None = None,
+    batch_ptr: Tensor,
     *,
     half_list: bool = False,
     include_self: bool = False,
-) -> tuple[Tensor, ...]:
-    """Find neighbors by brute force for development-time correctness checks."""
+) -> tuple[Tensor, Tensor]:
+    """Enumerate pair identities independently for correctness checks."""
 
-    positions, cell, pbc, batch_ptr = normalize_torch_inputs(
-        positions, cell, pbc, batch_ptr
-    )
+    if positions.ndim != 2 or positions.shape[1] != 3:
+        raise ValueError("positions must have shape (N_total, 3)")
+    if cell.shape != (batch_ptr.numel() - 1, 3, 3):
+        raise ValueError("cell must have shape (B, 3, 3)")
+    if pbc.shape != (batch_ptr.numel() - 1, 3):
+        raise ValueError("pbc must have shape (B, 3)")
     cutoff = float(cutoff)
     cutoff_squared = cutoff * cutoff
     int32_range = torch.iinfo(torch.int32)
-    validate_torch_inputs(positions, cell, pbc, cutoff, batch_ptr)
     batch_ptr_cpu = batch_ptr.detach().cpu()
     if batch_ptr_cpu[0].item() != 0 or batch_ptr_cpu[-1].item() != len(positions):
         raise ValueError("batch_ptr must start at zero and end at N_total")
@@ -154,23 +153,4 @@ def neighbor_list_reference(
         pairs = torch.cat(pair_indices, dim=0)
         cell_shifts = torch.cat(pair_shifts, dim=0)
 
-    source, target = pairs.unbind(dim=1)
-    values: dict[str, Tensor] = {
-        "i": source,
-        "j": target,
-        "P": pairs,
-        "S": cell_shifts,
-    }
-    if "d" in quantities or "D" in quantities:
-        pair_batch = torch.bucketize(source, batch_ptr[1:], right=True)
-        displacements = (
-            positions[target]
-            - positions[source]
-            + torch.einsum(
-                "ei,eij->ej", cell_shifts.to(positions.dtype), cell[pair_batch]
-            )
-        )
-        values["D"] = displacements
-        if "d" in quantities:
-            values["d"] = torch.linalg.vector_norm(displacements, dim=1)
-    return tuple(values[quantity] for quantity in quantities)
+    return pairs, cell_shifts

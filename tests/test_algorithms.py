@@ -38,7 +38,6 @@ def periodic_batch() -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Te
 def test_cpu_algorithms_match_reference(algorithm: str, ecosystem: str) -> None:
     positions, cell, pbc, batch_ptr = periodic_batch()
     expected = neighbor_list_reference(
-        "PS",
         positions,
         cell,
         pbc,
@@ -101,7 +100,6 @@ def test_forced_cpu_cell_list_reports_an_unsupported_layout(
 def test_cuda_algorithms_match_reference(algorithm: str) -> None:
     positions, cell, pbc, batch_ptr = periodic_batch()
     expected = neighbor_list_reference(
-        "PS",
         positions,
         cell,
         pbc,

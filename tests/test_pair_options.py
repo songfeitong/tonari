@@ -140,11 +140,11 @@ def test_cpu_numpy_reference_vesin_and_ase_agree(
     )
     reference = pair_keys(
         neighbor_list_reference(
-            "PS",
             torch.from_numpy(positions),
-            torch.from_numpy(cell),
-            torch.from_numpy(pbc),
+            torch.from_numpy(cell)[None],
+            torch.from_numpy(pbc)[None],
             cutoff,
+            torch.tensor([0, len(positions)]),
             **options,
         )
     )
@@ -248,7 +248,14 @@ def test_zero_shift_self_does_not_depend_on_squared_cutoff_underflow(
     )
     assert (
         pair_keys(
-            neighbor_list_reference("PS", positions, cell, pbc, cutoff, **options)
+            neighbor_list_reference(
+                positions,
+                cell[None],
+                pbc[None],
+                cutoff,
+                torch.tensor([0, len(positions)]),
+                **options,
+            )
         )
         == expected
     )
@@ -309,11 +316,14 @@ def test_boolean_options_require_bool(option: str) -> None:
 
 @pytest.mark.cuda
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is unavailable")
-@pytest.mark.parametrize("n_atoms", [12, 256])
+@pytest.mark.parametrize(
+    ("n_atoms", "algorithm"), [(12, "brute_force"), (256, "cell_list")]
+)
 @pytest.mark.parametrize("half_list", [False, True])
 @pytest.mark.parametrize("include_self", [False, True])
 def test_cuda_brute_force_and_cell_paths_match_cpu_and_reference(
     n_atoms: int,
+    algorithm: str,
     half_list: bool,
     include_self: bool,
 ) -> None:
@@ -322,12 +332,29 @@ def test_cuda_brute_force_and_cell_paths_match_cpu_and_reference(
     cell = torch.zeros((3, 3), dtype=torch.float32)
     pbc = torch.zeros(3, dtype=torch.bool)
     options = {"half_list": half_list, "include_self": include_self}
-    cpu = pair_keys(neighbor_list("PS", positions, cell, pbc, 1.1, **options))
+    cpu = pair_keys(
+        neighbor_list("PS", positions, cell, pbc, 1.1, algorithm=algorithm, **options)
+    )
     cuda = pair_keys(
-        neighbor_list("PS", positions.cuda(), cell.cuda(), pbc.cuda(), 1.1, **options)
+        neighbor_list(
+            "PS",
+            positions.cuda(),
+            cell.cuda(),
+            pbc.cuda(),
+            1.1,
+            algorithm=algorithm,
+            **options,
+        )
     )
     reference = pair_keys(
-        neighbor_list_reference("PS", positions, cell, pbc, 1.1, **options)
+        neighbor_list_reference(
+            positions,
+            cell[None],
+            pbc[None],
+            1.1,
+            torch.tensor([0, len(positions)]),
+            **options,
+        )
     )
     assert cuda == cpu == reference
 
@@ -355,7 +382,7 @@ def test_cuda_defaults_match_explicit_default_options() -> None:
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is unavailable")
 @pytest.mark.parametrize("half_list", [False, True])
 @pytest.mark.parametrize("include_self", [False, True])
-def test_cuda_unwrapped_cell_list_fallback_preserves_pair_options(
+def test_cuda_auto_fallback_preserves_pair_options(
     half_list: bool,
     include_self: bool,
 ) -> None:
@@ -374,6 +401,13 @@ def test_cuda_unwrapped_cell_list_fallback_preserves_pair_options(
         neighbor_list("PS", positions.cuda(), cell.cuda(), pbc.cuda(), 0.8, **options)
     )
     reference = pair_keys(
-        neighbor_list_reference("PS", positions, cell, pbc, 0.8, **options)
+        neighbor_list_reference(
+            positions,
+            cell[None],
+            pbc[None],
+            0.8,
+            torch.tensor([0, len(positions)]),
+            **options,
+        )
     )
     assert cuda == cpu == reference

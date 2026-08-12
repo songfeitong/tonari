@@ -10,7 +10,6 @@ from tests.reference import neighbor_list_reference
 def test_finite_directed_pairs_exclude_onsite_and_strict_boundary() -> None:
     positions = torch.tensor([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.5, 0.0, 0.0]])
     pair_indices, shifts = neighbor_list_reference(
-        "PS",
         positions,
         torch.zeros((1, 3, 3)),
         torch.zeros((1, 3), dtype=torch.bool),
@@ -22,7 +21,6 @@ def test_finite_directed_pairs_exclude_onsite_and_strict_boundary() -> None:
 
 def test_periodic_small_cell_retains_self_images_and_multiple_images() -> None:
     pair_indices, shifts = neighbor_list_reference(
-        "PS",
         torch.tensor([[0.0, 0.0, 0.0]]),
         torch.diag(torch.tensor([1.0, 9.0, 9.0]))[None],
         torch.tensor([[True, False, False]]),
@@ -40,7 +38,6 @@ def test_periodic_small_cell_retains_self_images_and_multiple_images() -> None:
 def test_mixed_batch_uses_each_structure_cell_and_never_crosses() -> None:
     positions = torch.tensor([[0.0, 0.0, 0.0], [0.4, 0.0, 0.0], [0.0, 0.0, 0.0]])
     pair_indices, shifts = neighbor_list_reference(
-        "PS",
         positions,
         torch.stack((torch.zeros((3, 3)), torch.diag(torch.tensor([0.5, 8.0, 8.0])))),
         torch.tensor([[False, False, False], [True, False, False]]),
@@ -64,9 +61,14 @@ def test_representative_translation_relabels_shift_without_changing_vectors() ->
     positions = torch.tensor([[0.2, 0.1, 0.0], [1.8, 0.1, 0.0]])
     translated = positions.clone()
     translated[1] += cell[0]
-    common = (cell, torch.tensor([True, True, True]), 0.5)
-    first_pairs, first_shifts = neighbor_list_reference("PS", positions, *common)
-    second_pairs, second_shifts = neighbor_list_reference("PS", translated, *common)
+    common = (
+        cell[None],
+        torch.tensor([[True, True, True]]),
+        0.5,
+        torch.tensor([0, len(positions)]),
+    )
+    first_pairs, first_shifts = neighbor_list_reference(positions, *common)
+    second_pairs, second_shifts = neighbor_list_reference(translated, *common)
     first_displacements = (
         positions[first_pairs[:, 1]]
         - positions[first_pairs[:, 0]]
@@ -88,7 +90,6 @@ def test_representative_translation_relabels_shift_without_changing_vectors() ->
 
 def test_empty_periodic_reference_skips_tiny_cell_image_enumeration() -> None:
     pair_indices, shifts = neighbor_list_reference(
-        "PS",
         torch.empty((0, 3), dtype=torch.float64),
         (0.02 * torch.eye(3, dtype=torch.float64))[None],
         torch.ones((1, 3), dtype=torch.bool),
@@ -102,7 +103,6 @@ def test_empty_periodic_reference_skips_tiny_cell_image_enumeration() -> None:
 def test_reference_rejects_pathological_periodic_image_count() -> None:
     with pytest.raises(ValueError, match="image count.*resource limit"):
         neighbor_list_reference(
-            "PS",
             torch.zeros((1, 3), dtype=torch.float64),
             (0.001 * torch.eye(3, dtype=torch.float64))[None],
             torch.ones((1, 3), dtype=torch.bool),

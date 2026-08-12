@@ -50,7 +50,7 @@ def heterogeneous_batch() -> tuple[torch.Tensor, ...]:
 @pytest.fixture(scope="module")
 def heterogeneous_reference() -> tuple[torch.Tensor, torch.Tensor]:
     positions, cell, pbc, batch_ptr = heterogeneous_batch()
-    return neighbor_list_reference("PS", positions, cell, pbc, 1.0, batch_ptr)
+    return neighbor_list_reference(positions, cell, pbc, 1.0, batch_ptr)
 
 
 @pytest.mark.parametrize("ecosystem", ["numpy", "torch"])
@@ -100,7 +100,6 @@ def test_threaded_pair_modes_and_quantities_stay_aligned(
 ) -> None:
     positions, cell, pbc, batch_ptr = heterogeneous_batch()
     expected = neighbor_list_reference(
-        "PS",
         positions,
         cell,
         pbc,

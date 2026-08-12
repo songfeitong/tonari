@@ -21,6 +21,8 @@ def cuda_neighbors(
     pbc: torch.Tensor,
     cutoff: float,
     batch_ptr: torch.Tensor | None = None,
+    *,
+    algorithm: str = "auto",
 ) -> tuple[torch.Tensor, torch.Tensor]:
     return neighbor_list(
         "PS",
@@ -29,6 +31,7 @@ def cuda_neighbors(
         pbc.cuda(),
         cutoff,
         None if batch_ptr is None else batch_ptr.cuda(),
+        algorithm=algorithm,
     )
 
 
@@ -63,7 +66,7 @@ def test_cuda_matches_reference_for_mixed_boundary_conditions(
         )
     )
     pbc = torch.tensor([[False, False, False], [True, True, False], [True, True, True]])
-    expected = neighbor_list_reference("PS", positions, cell, pbc, 1.35, batch_ptr)
+    expected = neighbor_list_reference(positions, cell, pbc, 1.35, batch_ptr)
     actual = cuda_neighbors(positions, cell, pbc, 1.35, batch_ptr)
     assert pair_keys(*actual) == pair_keys(*expected)
 
@@ -187,7 +190,6 @@ def test_cuda_paths_use_the_same_float32_cutoff_rounding(n_atoms: int) -> None:
     cpu = neighbor_list("PS", positions, cell, pbc, cutoff)
     cuda = neighbor_list("PS", positions.cuda(), cell.cuda(), pbc.cuda(), cutoff)
     reference = neighbor_list_reference(
-        "PS",
         positions,
         cell[None],
         pbc[None],
@@ -258,7 +260,9 @@ def test_empty_periodic_structure_does_not_enumerate_tiny_cell_images() -> None:
 
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
-def test_cell_list_path_matches_reference(dtype: torch.dtype) -> None:
+def test_auto_fallback_for_unwrapped_representatives_matches_reference(
+    dtype: torch.dtype,
+) -> None:
     generator = torch.Generator().manual_seed(1842)
     n_atoms = 288
     cell = torch.tensor(
@@ -268,12 +272,12 @@ def test_cell_list_path_matches_reference(dtype: torch.dtype) -> None:
     positions[:5] += 3 * cell[0] - 2 * cell[1]
     batch_ptr = torch.tensor([0, n_atoms])
     pbc = torch.tensor([[True, True, True]])
-    expected = neighbor_list_reference("PS", positions, cell[None], pbc, 1.2, batch_ptr)
+    expected = neighbor_list_reference(positions, cell[None], pbc, 1.2, batch_ptr)
     actual = cuda_neighbors(positions, cell[None], pbc, 1.2, batch_ptr)
     assert pair_keys(*actual) == pair_keys(*expected)
 
 
-def test_cell_list_path_handles_mixed_finite_and_partial_pbc_batch() -> None:
+def test_auto_fallback_handles_mixed_finite_and_partial_pbc_batch() -> None:
     generator = torch.Generator().manual_seed(5801)
     counts = (256, 257)
     cell = torch.tensor(
@@ -293,7 +297,7 @@ def test_cell_list_path_handles_mixed_finite_and_partial_pbc_batch() -> None:
     positions[-3:] += 4 * cell[1, 0]
     batch_ptr = torch.tensor([0, counts[0], sum(counts)])
     pbc = torch.tensor([[False, False, False], [True, False, False]])
-    expected = neighbor_list_reference("PS", positions, cell, pbc, 0.55, batch_ptr)
+    expected = neighbor_list_reference(positions, cell, pbc, 0.55, batch_ptr)
     actual = cuda_neighbors(positions, cell, pbc, 0.55, batch_ptr)
     assert pair_keys(*actual) == pair_keys(*expected)
     pair_indices, shifts = actual

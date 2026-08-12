@@ -33,7 +33,7 @@ def test_cpu_matches_reference_for_mixed_batch(dtype: torch.dtype) -> None:
     batch_ptr = torch.tensor([0, 7, 12, 16])
     cell = torch.stack((torch.zeros((3, 3), dtype=dtype), partial_cell, periodic_cell))
     pbc = torch.tensor([[False, False, False], [True, True, False], [True, True, True]])
-    expected = neighbor_list_reference("PS", positions, cell, pbc, 1.35, batch_ptr)
+    expected = neighbor_list_reference(positions, cell, pbc, 1.35, batch_ptr)
     actual = neighbor_list("PS", positions, cell, pbc, 1.35, batch_ptr)
     assert pair_keys(*actual) == pair_keys(*expected)
 
@@ -179,9 +179,14 @@ def test_cpu_randomized_differential() -> None:
             pbc,
             cutoff,
         )
-        assert pair_keys(*neighbor_list("PS", *arguments)) == pair_keys(
-            *neighbor_list_reference("PS", *arguments)
+        expected = neighbor_list_reference(
+            positions,
+            cell[None],
+            pbc[None],
+            cutoff,
+            torch.tensor([0, len(positions)]),
         )
+        assert pair_keys(*neighbor_list("PS", *arguments)) == pair_keys(*expected)
 
 
 def test_cpu_allows_continuous_geometry_backward() -> None:
@@ -237,8 +242,16 @@ def test_cpu_cell_list_path_matches_reference(dtype: torch.dtype) -> None:
     positions = torch.rand((n_atoms, 3), generator=generator, dtype=dtype) @ cell
     batch_ptr = torch.tensor([0, n_atoms])
     pbc = torch.ones((1, 3), dtype=torch.bool)
-    expected = neighbor_list_reference("PS", positions, cell[None], pbc, 1.2, batch_ptr)
-    actual = neighbor_list("PS", positions, cell[None], pbc, 1.2, batch_ptr)
+    expected = neighbor_list_reference(positions, cell[None], pbc, 1.2, batch_ptr)
+    actual = neighbor_list(
+        "PS",
+        positions,
+        cell[None],
+        pbc,
+        1.2,
+        batch_ptr,
+        algorithm="cell_list",
+    )
     assert pair_keys(*actual) == pair_keys(*expected)
 
 
@@ -256,6 +269,7 @@ def test_cpu_cell_list_preserves_nextafter_inside_pairs(dtype: torch.dtype) -> N
         torch.zeros((1, 3), dtype=torch.bool),
         1.0,
         torch.tensor([0, len(positions)]),
+        algorithm="cell_list",
     )
     assert pair_keys(pair_indices, shifts) == {(0, 1, 0, 0, 0), (1, 0, 0, 0, 0)}
 
@@ -359,7 +373,13 @@ def test_cpu_accepts_ill_conditioned_full_rank_active_rows() -> None:
         1e-09,
     )
     assert pair_keys(*neighbor_list("PS", *arguments)) == pair_keys(
-        *neighbor_list_reference("PS", *arguments)
+        *neighbor_list_reference(
+            arguments[0],
+            arguments[1][None],
+            arguments[2][None],
+            arguments[3],
+            torch.tensor([0, len(arguments[0])]),
+        )
     )
 
 
@@ -405,8 +425,16 @@ def test_cpu_cell_list_large_common_lattice_translation_matches_reference() -> N
         torch.ones(3, dtype=torch.bool),
         1.0,
     )
-    assert pair_keys(*neighbor_list("PS", *arguments)) == pair_keys(
-        *neighbor_list_reference("PS", *arguments)
+    assert pair_keys(
+        *neighbor_list("PS", *arguments, algorithm="cell_list")
+    ) == pair_keys(
+        *neighbor_list_reference(
+            arguments[0],
+            arguments[1][None],
+            arguments[2][None],
+            arguments[3],
+            torch.tensor([0, len(arguments[0])]),
+        )
     )
 
 
