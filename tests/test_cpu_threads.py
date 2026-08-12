@@ -203,6 +203,33 @@ def test_concurrent_python_calls_share_workers_safely(ecosystem: str) -> None:
     assert all(result == expected for result in results)
 
 
+def test_numpy_and_torch_cpu_calls_can_overlap() -> None:
+    positions, cell, pbc, batch_ptr = heterogeneous_batch()
+    torch_arguments = (positions, cell, pbc, batch_ptr)
+    numpy_arguments = tuple(tensor.numpy() for tensor in torch_arguments)
+    expected = pair_keys(
+        *neighbor_list("PS", positions, cell, pbc, 1.0, batch_ptr, num_threads=4)
+    )
+
+    def run(ecosystem: str) -> set[tuple[int, ...]]:
+        arguments = numpy_arguments if ecosystem == "numpy" else torch_arguments
+        return pair_keys(
+            *neighbor_list(
+                "PS",
+                arguments[0],
+                arguments[1],
+                arguments[2],
+                1.0,
+                arguments[3],
+                num_threads=4,
+            )
+        )
+
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        results = list(executor.map(run, ("numpy", "torch") * 4))
+    assert all(result == expected for result in results)
+
+
 def test_parallel_exception_propagates_and_pool_remains_usable() -> None:
     positions, cell, pbc, batch_ptr = heterogeneous_batch()
     invalid = positions.clone()

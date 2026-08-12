@@ -13,6 +13,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
+from torch import Tensor
 from vesin import NeighborList
 
 from benchmarks.common import (
@@ -133,9 +134,35 @@ def measure(
     }
 
 
+def canonical_output_digest(
+    pair_indices: Tensor, cell_shifts: Tensor, batch_ptr: Tensor
+) -> tuple[str, int]:
+    boundaries = batch_ptr.tolist()
+    edge_boundaries = torch.searchsorted(
+        pair_indices[:, 0].contiguous(), batch_ptr, right=False
+    ).tolist()
+    digest = hashlib.sha256()
+    total_pairs = 0
+    for structure in range(len(boundaries) - 1):
+        edge_start = edge_boundaries[structure]
+        edge_stop = edge_boundaries[structure + 1]
+        keys = canonical_keys(
+            (
+                pair_indices[edge_start:edge_stop],
+                cell_shifts[edge_start:edge_stop],
+            )
+        )
+        digest.update(np.asarray([len(keys)], dtype="<i8").tobytes())
+        digest.update(keys.astype("<i8", copy=False).tobytes())
+        total_pairs += len(keys)
+    return digest.hexdigest(), total_pairs
+
+
 def validate_against_vesin(
-    batch: StructureBatch, cutoff: float
-) -> dict[str, int | bool]:
+    batch: StructureBatch,
+    cutoff: float,
+    thread_counts: tuple[int, ...],
+) -> dict[str, object]:
     actual_pairs, actual_shifts = neighbor_list(
         "PS",
         batch.positions,
@@ -156,6 +183,7 @@ def validate_against_vesin(
     edge_boundaries = torch.searchsorted(
         actual_pairs[:, 0].contiguous(), batch.batch_ptr, right=False
     ).tolist()
+    digest = hashlib.sha256()
     total_pairs = 0
     for structure, (start, stop) in enumerate(pairwise(boundaries)):
         edge_start = edge_boundaries[structure]
@@ -182,11 +210,42 @@ def validate_against_vesin(
             raise AssertionError(
                 f"structure {structure} differs from Vesin: {missing=} {extra=}"
             )
+        digest.update(np.asarray([len(actual)], dtype="<i8").tobytes())
+        digest.update(actual.astype("<i8", copy=False).tobytes())
         total_pairs += len(actual)
     if total_pairs != len(actual_pairs):
         raise AssertionError("production batch contains cross-structure pairs")
+    reference_digest = digest.hexdigest()
+    thread_digests = {"1": reference_digest}
+    for num_threads in thread_counts:
+        if num_threads == 1:
+            continue
+        threaded_pairs, threaded_shifts = neighbor_list(
+            "PS",
+            batch.positions,
+            batch.cell,
+            batch.pbc,
+            cutoff,
+            batch.batch_ptr,
+            num_threads=num_threads,
+            sorted=True,
+        )
+        threaded_digest, threaded_pair_count = canonical_output_digest(
+            threaded_pairs, threaded_shifts, batch.batch_ptr
+        )
+        if threaded_pair_count != total_pairs or threaded_digest != reference_digest:
+            raise AssertionError(
+                f"Tonari differs from its exact Vesin-validated reference at "
+                f"{num_threads} threads"
+            )
+        thread_digests[str(num_threads)] = threaded_digest
     return {
         "exact_key_match": True,
+        "canonical_key_sha256": reference_digest,
+        "thread_count_key_match": {
+            str(num_threads): thread_digests[str(num_threads)] == reference_digest
+            for num_threads in thread_counts
+        },
         "structures": len(batch.source_ids),
         "atoms": len(batch.positions),
         "pairs": total_pairs,
@@ -201,7 +260,7 @@ def benchmark_workload(
     repeats: int,
     warmup_seconds: float,
 ) -> dict[str, object]:
-    validation = validate_against_vesin(batch, cutoff)
+    validation = validate_against_vesin(batch, cutoff, thread_counts)
     measurements: dict[str, dict[str, dict[str, object]]] = {}
     for num_threads in thread_counts:
         production = measure(
@@ -356,6 +415,7 @@ def main() -> None:
             "vesin": "one reused NeighborList per measurement; n_threads matches Tonari; batches require one public compute call per structure",
             "output_order_compared": False,
             "exact_keys_compared": "(source, target, Sx, Sy, Sz)",
+            "threaded_validation": "num_threads=1 compared exactly with Vesin per structure; every other thread count must have the same per-structure canonical-key SHA-256",
         },
         "datasets": {
             "matbench_manifest_sha256": file_sha256(args.matbench_manifest),
