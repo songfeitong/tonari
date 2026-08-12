@@ -17,6 +17,7 @@ from vesin import NeighborList
 
 from benchmarks.common import (
     canonical_keys,
+    cpu_frequency_policy,
     file_sha256,
     git_revision,
     git_worktree_is_clean,
@@ -327,13 +328,17 @@ def main() -> None:
         )
         for name, batch in workloads
     ]
+    affinity = sorted(os.sched_getaffinity(0))
     report = {
         "environment": {
             "platform": platform.platform(),
             "python": platform.python_version(),
             "torch": torch.__version__,
             "cpu": cpu_model(),
-            "cpu_affinity": sorted(os.sched_getaffinity(0)),
+            "cpu_affinity": affinity,
+            "cpu_frequency_policy": {
+                str(cpu): cpu_frequency_policy(cpu) for cpu in affinity
+            },
             "torch_num_threads": torch.get_num_threads(),
             "repository_revision": git_revision(repository_root),
             "repository_worktree_clean": worktree_clean,
