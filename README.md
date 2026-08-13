@@ -64,7 +64,7 @@ For a Batch, concatenate all positions and use `batch_ptr` to mark structure bou
 
 ## Install from source
 
-The project currently builds compiled extensions from source and requires Python 3.11–3.14, PyTorch, and a C++20 compiler. NumPy and Torch CPU support are always built. CUDA support is built by default and requires a CUDA-enabled PyTorch installation and a local CUDA toolkit containing `nvcc`.
+The project builds its native code with CMake and packages it with scikit-build-core. Source installation requires Python 3.11–3.14, PyTorch, and a C++20 compiler. NumPy and Torch CPU support are always built. CUDA support is built by default and requires a CUDA-enabled PyTorch installation and a local CUDA toolkit containing `nvcc`.
 
 ```bash
 # NumPy, Torch CPU, and Torch CUDA (default)

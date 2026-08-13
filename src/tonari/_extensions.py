@@ -5,23 +5,11 @@ from functools import lru_cache
 from importlib import import_module
 from types import ModuleType
 
-BUILD_WITH_CUDA: bool | None
-BUILD_TORCH_VERSION: str | None
-BUILD_TORCH_CUDA_VERSION: str | None
-BUILD_CUDA_TOOLKIT_VERSION: str | None
-
-try:
-    from . import _build_info
-except ImportError:
-    BUILD_WITH_CUDA = None
-    BUILD_TORCH_VERSION = None
-    BUILD_TORCH_CUDA_VERSION = None
-    BUILD_CUDA_TOOLKIT_VERSION = None
-else:
-    BUILD_WITH_CUDA = _build_info.BUILD_WITH_CUDA
-    BUILD_TORCH_VERSION = _build_info.BUILD_TORCH_VERSION
-    BUILD_TORCH_CUDA_VERSION = _build_info.BUILD_TORCH_CUDA_VERSION
-    BUILD_CUDA_TOOLKIT_VERSION = _build_info.BUILD_CUDA_TOOLKIT_VERSION
+from ._build_info import (
+    BUILD_TORCH_CUDA_VERSION,
+    BUILD_TORCH_VERSION,
+    BUILD_WITH_CUDA,
+)
 
 
 def _load(name: str) -> ModuleType:
@@ -45,9 +33,7 @@ def _require_cuda_provider() -> None:
 def _check_torch_compatibility(*, cuda: bool) -> None:
     import torch
 
-    if BUILD_TORCH_VERSION is not None and _major_minor(
-        torch.__version__
-    ) != _major_minor(BUILD_TORCH_VERSION):
+    if _major_minor(torch.__version__) != _major_minor(BUILD_TORCH_VERSION):
         raise ImportError(
             "the tonari Torch provider was built against PyTorch "
             f"{BUILD_TORCH_VERSION}, but PyTorch {torch.__version__} is installed; "

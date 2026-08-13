@@ -55,19 +55,45 @@ jobs:
       - name: Run Ruff
         if: matrix.python-version == '3.12'
         run: |
-          uv run ruff check src tests benchmarks scripts setup.py
-          uv run ruff format --check src tests benchmarks scripts setup.py
+          uv run ruff check src tests benchmarks scripts
+          uv run ruff format --check src tests benchmarks scripts
+
+      - name: Build reusable CMake core
+        if: matrix.python-version == '3.12'
+        run: |
+          cmake -S . -B build/core -G Ninja -DTONARI_BUILD_PYTHON=OFF
+          cmake --build build/core
+
+      - name: Build and install CPU wheel
+        if: matrix.python-version == '3.12'
+        run: |
+          uv build --wheel --out-dir dist/ci
+          uv run --no-project python - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile
+
+          wheel = next(Path("dist/ci").glob("*.whl"))
+          with ZipFile(wheel) as archive:
+              names = set(archive.namelist())
+              assert any(name.startswith("tonari/_numpy_cpu.") for name in names)
+              assert any(name.startswith("tonari/_torch_cpu.") for name in names)
+              assert not any(name.startswith("tonari/_torch_cuda.") for name in names)
+              build_info = archive.read("tonari/_build_info.py").decode()
+              assert "BUILD_WITH_CUDA = False" in build_info
+          PY
+          uv pip install --python .venv/bin/python --reinstall --no-deps dist/ci/*.whl
+          .venv/bin/python -c "from tonari import _extensions; _extensions.load_numpy_cpu(); _extensions.load_torch_cpu()"
 
       - name: Run mypy
         if: matrix.python-version == '3.12'
-        run: uv run mypy src tests/typecheck_api.py
+        run: uv run --no-sync mypy src tests/typecheck_api.py
 
       - name: Check Markdown formatting
         if: matrix.python-version == '3.12'
         run: npx --yes prettier@3.8.3 --check --prose-wrap never '**/*.md'
 
       - name: Run tests
-        run: uv run pytest -q -m "not cuda"
+        run: uv run --no-sync pytest -q -m "not cuda"
 
   cuda:
     name: CUDA

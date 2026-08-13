@@ -9,9 +9,7 @@ from pathlib import Path
 def run_isolated(script: str) -> None:
     repository_root = Path(__file__).resolve().parents[2]
     environment = os.environ.copy()
-    environment["PYTHONPATH"] = os.pathsep.join(
-        (str(repository_root), str(repository_root / "src"))
-    )
+    environment["PYTHONPATH"] = str(repository_root)
     subprocess.run(
         [sys.executable, "-c", script],
         cwd=repository_root,

@@ -73,6 +73,9 @@ csrc/
   core/                  shared geometry, pair policy, CPU search and thread pool
   numpy/                 NumPy binding
   torch/                 Torch bindings and CUDA provider
+
+CMakeLists.txt            reusable native targets and Python provider targets
+cmake/                    generated build-metadata template
 ```
 
 独立 brute-force reference 位于 `tests/support/`，benchmark adapters 位于 `benchmarks/`；它们不会进入安装包。Benchmarks 和 tests 原则上通过公共 API 观察 production behavior。
@@ -81,6 +84,6 @@ csrc/
 
 当前包名只出现在 distribution metadata、Python import path 和用户文档中；native namespace、算法对象、错误信息与源码注释使用中性术语。因此以后即使更换项目名，也不需要重命名整个算法实现。
 
-当前源码构建保持一个 `tonari` distribution。NumPy CPU 与 Torch CPU providers 始终构建；Torch CUDA 默认构建，并可通过 `BUILD_CUDA=0` 明确关闭。构建不会因环境探测失败而静默降级。每次构建记录 Torch、CUDA 和 provider 信息，provider loader 在导入 native extension 前检查兼容性。安装命令和精确行为见[源码构建](source-builds.md)。
+Native build 的 source of truth 是根目录 `CMakeLists.txt`。`tonari::geometry` 只包含 framework-neutral periodic geometry，`tonari::cpu` 在其上加入 CPU search、thread pool 和 Threads 依赖；二者不包含 Python packaging 假设，可由父项目通过 `add_subdirectory` 直接链接。NumPy CPU 与 Torch CPU modules 都链接同一个 `tonari::cpu` target，因此 core 不会因 binding 数量重复编译；Torch CUDA module 链接 `tonari::geometry` 并拥有 CUDA schedule 与 kernels。
 
-正式 wheel 的构建与发布策略尚未决定，但不需要为此提前改变公共 API 或 framework-neutral core。未来增加新 provider 或 prepared search 时，应继续遵守现有边界，而不是扩大公共 API 对内部实现的了解。
+Standalone distribution 使用 scikit-build-core 调用同一 CMake graph，并只把 Python package、生成的 build metadata 与 provider modules 安装进 wheel。顶层构建默认启用 Python providers；作为子目录加入其他 CMake project 时默认只定义 native core targets。Torch CUDA 默认构建，并可通过 `BUILD_CUDA=0` 明确关闭；探测失败不会静默降级。安装命令、CMake integration 与精确行为见[源码构建](source-builds.md)。未来增加新 provider 或 prepared search 时，应继续遵守现有边界，而不是扩大公共 API 对内部实现的了解。

@@ -1,2 +1,0 @@
-prune tests
-exclude src/tonari/_build_info.py

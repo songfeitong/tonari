@@ -13,12 +13,11 @@ dependencies = [
 
 [build-system]
 requires = [
-  "numpy>=2.0",
   "pybind11>=3.0",
-  "setuptools>=77",
+  "scikit-build-core>=1.0",
   "torch==2.12.1",
 ]
-build-backend = "setuptools.build_meta"
+build-backend = "scikit_build_core.build"
 
 [dependency-groups]
 data = [
@@ -49,5 +48,6 @@ target-version = "py311"
 [tool.mypy]
 strict = true
 
-[tool.setuptools.package-data]
-tonari = ["py.typed"]
+[tool.scikit-build]
+minimum-version = "build-system.requires"
+wheel.packages = ["src/tonari"]
