@@ -4,30 +4,6 @@
 
 [![CI](https://github.com/songfeitong/tonari/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/songfeitong/tonari/actions/workflows/ci.yml)
 
-## Performance
-
-Measured with a 5 Å cutoff and full neighbor lists, excluding data loading and host-to-device transfer. CUDA uses float32 on an NVIDIA RTX PRO 6000 Blackwell Workstation Edition; CPU uses NumPy float64 on an AMD Ryzen Threadripper PRO 9975WX. See the [full benchmark results](docs/benchmark.md) for timing protocols, variability, correctness checks, and source revisions.
-
-### CUDA batch performance
-
-Native batching keeps neighbor-list construction fast across real QMugs molecules and Matbench crystals. At batch size 512, tonari takes 0.23 ms and 2.78 ms, respectively. The Vesin CUDA baseline calls its public API once per structure and concatenates the results.
-
-![CUDA batch latency for QMugs and Matbench](artifacts/readme-cuda-batches.png)
-
-### Large periodic structures
-
-For a 32,768-atom supercell, tonari takes 0.21 ms on CUDA. On a single CPU thread, tonari is about 17.7× faster than ASE; Vesin is about 2× faster than tonari. These workloads are supercells of one real crystal, with different CPU/GPU timing records and axis ranges.
-
-![CUDA and single-thread CPU latency for large periodic structures](artifacts/readme-large-structures.png)
-
-### CPU multithreading
-
-For fixed batches, increasing tonari from 1 to 8 threads gives 3.45× speedup on QMugs and 3.53× on Matbench. Vesin uses the same internal thread count per structure and is called sequentially across the batch; its adapter includes index offsets and output concatenation, with no outer structure parallelism.
-
-![CPU thread scaling for fixed QMugs and Matbench batches](artifacts/readme-cpu-threads.png)
-
-[Individual figures and PDF downloads](artifacts/README.md) · [Single large-structure thread scaling](docs/benchmark.md#cpu-thread-figures)
-
 ## API
 
 The entire public API is one function:
@@ -148,6 +124,30 @@ ase_source, ase_target, ase_cell_shifts = primitive_neighbor_list(
     cutoff,
 )
 ```
+
+## Performance
+
+Median neighbor-list construction time with a 5 Å cutoff, full lists, and cell shifts; data loading and host-to-device transfer are excluded. CUDA: float32, RTX PRO 6000 Blackwell Workstation Edition. CPU: NumPy float64, Threadripper PRO 9975WX. [Measurement details and source records](docs/benchmark.md).
+
+### CUDA batches
+
+Time per batch versus batch size for QMugs molecules and Matbench crystals. Tonari processes the batch in one call; Vesin calls each structure separately and concatenates the outputs.
+
+![CUDA batch latency for QMugs and Matbench](artifacts/readme-cuda-batches.png)
+
+### Large periodic structures
+
+Time per structure versus atom count for supercells of one Matbench crystal, from 64 to 32,768 atoms. The CPU comparison uses one thread; ASE uses `primitive_neighbor_list`.
+
+![CUDA and single-thread CPU latency for large periodic structures](artifacts/readme-large-structures.png)
+
+### CPU multithreading
+
+Time versus thread count for fixed batches of 4,096 QMugs molecules and 1,536 Matbench crystals, using eight physical cores. Vesin uses the specified internal thread count per structure, with sequential structure calls and output concatenation.
+
+![CPU thread scaling for fixed QMugs and Matbench batches](artifacts/readme-cpu-threads.png)
+
+[Individual figures and PDF downloads](artifacts/README.md) · [Single large-structure thread scaling](docs/benchmark.md#cpu-thread-figures)
 
 ## License
 
