@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import json
 from pathlib import Path
 
@@ -23,6 +24,22 @@ OUTPUT = Path(__file__).resolve().parent
 def main() -> None:
     report = json.loads(RESULTS.read_text())
     report["workloads"].extend(json.loads(SUPPLEMENT.read_text())["workloads"])
+    with (ROOT / "benchmarks/data/qmugs_sample_structures.csv").open(
+        newline=""
+    ) as handle:
+        molecule_sizes = [
+            int(row["n_atoms"])
+            for row in csv.DictReader(handle)
+            if row["workload"] == "population"
+        ]
+    crystal_manifest = json.loads(
+        (ROOT / "benchmarks/data/matbench_mp_e_form_sample.json").read_text()
+    )
+    crystal_sizes = [row["n_atoms"] for row in crystal_manifest["structures"]]
+    subtitles = {
+        "qmugs_population": f"{np.mean(molecule_sizes):.1f} atoms per molecule on average",
+        "matbench": f"{np.mean(crystal_sizes):.1f} atoms per crystal on average",
+    }
     plt.rcParams.update(
         {
             "font.family": "DejaVu Sans",
@@ -58,7 +75,7 @@ def main() -> None:
         fig.text(
             0.115,
             0.885,
-            "Neighbor-list construction · single-batch latency",
+            subtitles[dataset],
             fontsize=11,
             color="#536174",
         )
