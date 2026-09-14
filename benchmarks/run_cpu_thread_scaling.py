@@ -8,16 +8,16 @@ import platform
 import statistics
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from itertools import pairwise
 from pathlib import Path
 
 import numpy as np
 import torch
-from torch import Tensor
 from vesin import NeighborList
 
 from benchmarks.common import (
-    canonical_keys,
     cpu_frequency_policy,
     file_sha256,
     git_revision,
@@ -30,12 +30,33 @@ from benchmarks.matbench_data import (
 )
 from benchmarks.qmugs_data import QmugsStructureDataset, select_qmugs
 from benchmarks.run_cpu_benchmark import cpu_model
-from benchmarks.structure_data import StructureBatch, collate_structures
+from benchmarks.structure_data import collate_structures
 from tonari import neighbor_list
-from tonari._extensions import load_torch_cpu
+from tonari._extensions import load_numpy_cpu
 
-CPU_EXTENSION = load_torch_cpu()
-Backend = Callable[[], int]
+CPU_EXTENSION = load_numpy_cpu()
+Output = tuple[np.ndarray, np.ndarray, np.ndarray]
+Backend = Callable[[], Output]
+
+
+@dataclass
+class NumpyBatch:
+    positions: np.ndarray
+    cell: np.ndarray
+    pbc: np.ndarray
+    batch_ptr: np.ndarray
+    source_ids: tuple[str, ...]
+
+    @classmethod
+    def from_structures(cls, structures: list[dict[str, object]]) -> NumpyBatch:
+        batch = collate_structures(structures)
+        return cls(
+            *(
+                np.ascontiguousarray(getattr(batch, key).numpy())
+                for key in ("positions", "cell", "pbc", "batch_ptr")
+            ),
+            batch.source_ids,
+        )
 
 
 def parse_thread_counts(value: str) -> tuple[int, ...]:
@@ -60,12 +81,10 @@ def parse_cpus(value: str) -> tuple[int, ...]:
     return cpus
 
 
-def production_backend(
-    batch: StructureBatch, cutoff: float, num_threads: int
-) -> Backend:
-    def run() -> int:
-        pairs, _ = neighbor_list(
-            "PS",
+def production_backend(batch: NumpyBatch, cutoff: float, num_threads: int) -> Backend:
+    def run() -> Output:
+        return neighbor_list(
+            "ijS",
             batch.positions,
             batch.cell,
             batch.pbc,
@@ -73,56 +92,55 @@ def production_backend(
             batch.batch_ptr,
             cpu_threads=num_threads,
         )
-        return len(pairs)
 
     return run
 
 
-def vesin_backend(batch: StructureBatch, cutoff: float, num_threads: int) -> Backend:
+def vesin_backend(batch: NumpyBatch, cutoff: float, num_threads: int) -> Backend:
     search = NeighborList(
-        cutoff=cutoff,
-        full_list=True,
-        sorted=False,
-        n_threads=num_threads,
+        cutoff=cutoff, full_list=True, sorted=False, n_threads=num_threads
     )
     boundaries = batch.batch_ptr.tolist()
 
-    def run() -> int:
-        pair_count = 0
+    def run() -> Output:
+        if len(batch.source_ids) == 1:
+            return search.compute(batch.positions, batch.cell[0], batch.pbc[0], "ijS")
+        outputs = []
         for structure, (start, stop) in enumerate(pairwise(boundaries)):
-            first, _, _ = search.compute(
+            first, second, shifts = search.compute(
                 batch.positions[start:stop],
                 batch.cell[structure],
                 batch.pbc[structure],
                 "ijS",
             )
-            pair_count += len(first)
-        return pair_count
+            outputs.append((first + start, second + start, shifts))
+        return tuple(
+            np.concatenate([output[column] for output in outputs], axis=0)
+            for column in range(3)
+        )
 
     return run
 
 
-def measure(
-    backend: Backend,
-    repeats: int,
-    warmup_seconds: float,
-) -> dict[str, object]:
+def measure(backend: Backend, repeats: int, warmup_seconds: float) -> dict[str, object]:
     warmup_start = time.perf_counter()
     warmup_runs = 0
     while time.perf_counter() - warmup_start < warmup_seconds:
-        backend()
+        output = backend()
+        del output
         warmup_runs += 1
-
     samples_ms = []
-    pair_count = 0
-    for repeat in range(repeats):
-        start = time.perf_counter()
-        current_pairs = backend()
-        samples_ms.append((time.perf_counter() - start) * 1000)
-        if repeat == 0:
-            pair_count = current_pairs
-        elif current_pairs != pair_count:
-            raise RuntimeError("backend pair count changed between benchmark repeats")
+    pair_count = None
+    for _ in range(repeats):
+        start = time.perf_counter_ns()
+        output = backend()
+        samples_ms.append((time.perf_counter_ns() - start) / 1e6)
+        assert all(isinstance(array, np.ndarray) for array in output)
+        if pair_count is None:
+            pair_count = len(output[0])
+        elif len(output[0]) != pair_count:
+            raise RuntimeError("backend pair count changed between repeats")
+        del output
     return {
         "median_ms": statistics.median(samples_ms),
         "minimum_ms": min(samples_ms),
@@ -134,132 +152,49 @@ def measure(
     }
 
 
-def canonical_output_digest(
-    pair_indices: Tensor, cell_shifts: Tensor, batch_ptr: Tensor
-) -> tuple[str, int]:
-    boundaries = batch_ptr.tolist()
-    edge_boundaries = torch.searchsorted(
-        pair_indices[:, 0].contiguous(), batch_ptr, right=False
-    ).tolist()
-    digest = hashlib.sha256()
-    total_pairs = 0
-    for structure in range(len(boundaries) - 1):
-        edge_start = edge_boundaries[structure]
-        edge_stop = edge_boundaries[structure + 1]
-        keys = canonical_keys(
-            (
-                pair_indices[edge_start:edge_stop],
-                cell_shifts[edge_start:edge_stop],
-            )
-        )
-        digest.update(np.asarray([len(keys)], dtype="<i8").tobytes())
-        digest.update(keys.astype("<i8", copy=False).tobytes())
-        total_pairs += len(keys)
-    return digest.hexdigest(), total_pairs
+def canonical(output: Output) -> np.ndarray:
+    first, second, shifts = output
+    assert all(isinstance(array, np.ndarray) for array in output)
+    keys = np.column_stack((first, second, shifts)).astype("<i8", copy=False)
+    return keys[np.lexsort(tuple(keys[:, column] for column in range(4, -1, -1)))]
 
 
 def validate_against_vesin(
-    batch: StructureBatch,
-    cutoff: float,
-    thread_counts: tuple[int, ...],
+    batch: NumpyBatch, cutoff: float, thread_counts: tuple[int, ...]
 ) -> dict[str, object]:
-    actual_pairs, actual_shifts = neighbor_list(
-        "PS",
-        batch.positions,
-        batch.cell,
-        batch.pbc,
-        cutoff,
-        batch.batch_ptr,
-        cpu_threads=1,
-        sorted=True,
-    )
-    search = NeighborList(
-        cutoff=cutoff,
-        full_list=True,
-        sorted=False,
-        n_threads=1,
-    )
-    boundaries = batch.batch_ptr.tolist()
-    edge_boundaries = torch.searchsorted(
-        actual_pairs[:, 0].contiguous(), batch.batch_ptr, right=False
-    ).tolist()
-    digest = hashlib.sha256()
-    total_pairs = 0
-    for structure, (start, stop) in enumerate(pairwise(boundaries)):
-        edge_start = edge_boundaries[structure]
-        edge_stop = edge_boundaries[structure + 1]
-        actual = canonical_keys(
-            (
-                actual_pairs[edge_start:edge_stop],
-                actual_shifts[edge_start:edge_stop],
-            )
-        )
-        first, second, shifts = search.compute(
-            batch.positions[start:stop],
-            batch.cell[structure],
-            batch.pbc[structure],
-            "ijS",
-        )
-        expected_pairs = torch.stack(
-            (first.to(torch.int64) + start, second.to(torch.int64) + start), dim=1
-        )
-        expected = canonical_keys((expected_pairs, shifts))
-        if not np.array_equal(actual, expected):
-            missing = len(set(map(tuple, expected)) - set(map(tuple, actual)))
-            extra = len(set(map(tuple, actual)) - set(map(tuple, expected)))
-            raise AssertionError(
-                f"structure {structure} differs from Vesin: {missing=} {extra=}"
-            )
-        digest.update(np.asarray([len(actual)], dtype="<i8").tobytes())
-        digest.update(actual.astype("<i8", copy=False).tobytes())
-        total_pairs += len(actual)
-    if total_pairs != len(actual_pairs):
-        raise AssertionError("production batch contains cross-structure pairs")
-    reference_digest = digest.hexdigest()
-    thread_digests = {"1": reference_digest}
-    for num_threads in thread_counts:
-        if num_threads == 1:
-            continue
-        threaded_pairs, threaded_shifts = neighbor_list(
-            "PS",
-            batch.positions,
-            batch.cell,
-            batch.pbc,
-            cutoff,
-            batch.batch_ptr,
-            cpu_threads=num_threads,
-            sorted=True,
-        )
-        threaded_digest, threaded_pair_count = canonical_output_digest(
-            threaded_pairs, threaded_shifts, batch.batch_ptr
-        )
-        if threaded_pair_count != total_pairs or threaded_digest != reference_digest:
-            raise AssertionError(
-                f"Tonari differs from its exact Vesin-validated reference at "
-                f"{num_threads} threads"
-            )
-        thread_digests[str(num_threads)] = threaded_digest
+    expected = canonical(production_backend(batch, cutoff, 1)())
+    digest = hashlib.sha256(expected.tobytes()).hexdigest()
+    matches = {}
+    for threads in thread_counts:
+        matches[str(threads)] = {}
+        for name, factory in (("tonari", production_backend), ("vesin", vesin_backend)):
+            actual = canonical(factory(batch, cutoff, threads)())
+            if not np.array_equal(expected, actual):
+                raise AssertionError(f"{name} differs at {threads} threads")
+            matches[str(threads)][name] = hashlib.sha256(actual.tobytes()).hexdigest()
     return {
         "exact_key_match": True,
-        "canonical_key_sha256": reference_digest,
+        "canonical_key_sha256": digest,
+        "backend_thread_key_sha256": matches,
         "thread_count_key_match": {
-            str(num_threads): thread_digests[str(num_threads)] == reference_digest
-            for num_threads in thread_counts
+            str(n): all(value == digest for value in matches[str(n)].values())
+            for n in thread_counts
         },
         "structures": len(batch.source_ids),
         "atoms": len(batch.positions),
-        "pairs": total_pairs,
+        "pairs": len(expected),
     }
 
 
 def benchmark_workload(
     name: str,
-    batch: StructureBatch,
+    batch: NumpyBatch,
     cutoff: float,
     thread_counts: tuple[int, ...],
     repeats: int,
     warmup_seconds: float,
 ) -> dict[str, object]:
+    print(f"{name}: validating NumPy outputs at all thread counts", flush=True)
     validation = validate_against_vesin(batch, cutoff, thread_counts)
     measurements: dict[str, dict[str, dict[str, object]]] = {}
     for num_threads in thread_counts:
@@ -281,6 +216,10 @@ def benchmark_workload(
             "tonari": production,
             "vesin": vesin,
         }
+        print(
+            f"{name}: {num_threads} threads: tonari={production['median_ms']:.3f} ms, vesin={vesin['median_ms']:.3f} ms",
+            flush=True,
+        )
     one_thread = measurements["1"]
     for num_threads, result in measurements.items():
         result["tonari"]["speedup_over_one_thread"] = (
@@ -363,17 +302,21 @@ def main() -> None:
     workloads = (
         (
             "matbench_1536_structure_batch",
-            collate_structures([matbench[index] for index in range(len(matbench))]),
+            NumpyBatch.from_structures(
+                [matbench[index] for index in range(len(matbench))]
+            ),
         ),
         (
             "qmugs_population_4096_structure_batch",
-            collate_structures(
+            NumpyBatch.from_structures(
                 [qmugs_population[index] for index in range(len(qmugs_population))]
             ),
         ),
         (
             "matbench_32768_atom_supercell",
-            collate_structures([repeat_structure(scaling_structure, (8, 8, 8))]),
+            NumpyBatch.from_structures(
+                [repeat_structure(scaling_structure, (8, 8, 8))]
+            ),
         ),
     )
     results = [
@@ -390,6 +333,9 @@ def main() -> None:
     affinity = sorted(os.sched_getaffinity(0))
     report = {
         "environment": {
+            "timestamp_utc": datetime.now(UTC).isoformat(),
+            "numpy": np.__version__,
+            "script_sha256": file_sha256(Path(__file__)),
             "platform": platform.platform(),
             "python": platform.python_version(),
             "torch": torch.__version__,
@@ -401,7 +347,7 @@ def main() -> None:
             "torch_num_threads": torch.get_num_threads(),
             "repository_revision": git_revision(repository_root),
             "repository_worktree_clean": worktree_clean,
-            "cpu_extension_sha256": file_sha256(Path(CPU_EXTENSION.__file__)),
+            "numpy_extension_sha256": file_sha256(Path(CPU_EXTENSION.__file__)),
             "vesin_version": __import__("vesin").__version__,
         },
         "method": {
@@ -409,13 +355,16 @@ def main() -> None:
             "dtype": "float64",
             "thread_counts": list(args.threads),
             "data_loading_timed": False,
+            "array_api": "NumPy inputs and outputs; Torch used only for data preparation outside timing",
+            "quantities": "ijS",
+            "output_release_timed": False,
             "warmup_seconds_per_backend_workload_and_thread_count": args.warmup_seconds,
             "statistic": "median wall time; minimum, maximum, and samples retained",
-            "tonari": "one native batch call; the requested thread count includes the caller",
-            "vesin": "one reused NeighborList per measurement; n_threads matches Tonari; batches require one public compute call per structure",
+            "tonari": "one native NumPy batch call; the requested thread count includes the caller",
+            "vesin": "one reused NeighborList per measurement; n_threads matches Tonari; NumPy compute per structure; batch offsets and concatenation timed; single structure uses direct compute",
             "output_order_compared": False,
             "exact_keys_compared": "(source, target, Sx, Sy, Sz)",
-            "threaded_validation": "the one-thread Tonari output is compared exactly with Vesin per structure; every other requested thread count must have the same per-structure canonical-key SHA-256",
+            "threaded_validation": "both NumPy backends at every thread count are exact-compared against canonical single-thread Tonari keys; SHA-256 recorded for each",
         },
         "datasets": {
             "matbench_manifest_sha256": file_sha256(args.matbench_manifest),
