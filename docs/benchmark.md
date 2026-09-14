@@ -141,14 +141,14 @@ CPU 与 CUDA 在全部 1,536 个 structures、2,780,158 个 pair keys 上与 Ves
 
 计时包含一次公开 API 调用的分配、搜索和输出构造，输出释放、数据准备、超胞生成及 correctness comparison 在计时外。Vesin 复用一个 `NeighborList` 配置对象，但每次重新搜索；三家均不使用 Verlet/skin 缓存。各 backend 先 warmup 至少 1 秒，然后轮换顺序测 11 次，表中是中位数。
 
-| Atoms | Pairs | tonari NumPy | Vesin NumPy | ASE primitive_neighbor_list |
-| --: | --: | --: | --: | --: |
-| 64 | 744 | 0.0713 ms | 0.0674 ms | 1.2320 ms |
-| 512 | 5,952 | 0.4088 ms | 0.2889 ms | 5.8109 ms |
-| 1,728 | 20,088 | 1.6916 ms | 0.8205 ms | 20.1134 ms |
-| 4,096 | 47,616 | 4.2524 ms | 1.7862 ms | 49.3511 ms |
-| 13,824 | 160,704 | 12.3045 ms | 5.5745 ms | 180.1876 ms |
-| 32,768 | 380,928 | 25.6869 ms | 12.8554 ms | 453.5265 ms |
+|  Atoms |   Pairs | tonari NumPy | Vesin NumPy | ASE primitive_neighbor_list |
+| -----: | ------: | -----------: | ----------: | --------------------------: |
+|     64 |     744 |    0.0713 ms |   0.0674 ms |                   1.2320 ms |
+|    512 |   5,952 |    0.4088 ms |   0.2889 ms |                   5.8109 ms |
+|  1,728 |  20,088 |    1.6916 ms |   0.8205 ms |                  20.1134 ms |
+|  4,096 |  47,616 |    4.2524 ms |   1.7862 ms |                  49.3511 ms |
+| 13,824 | 160,704 |   12.3045 ms |   5.5745 ms |                 180.1876 ms |
+| 32,768 | 380,928 |   25.6869 ms |  12.8554 ms |                 453.5265 ms |
 
 六个尺寸的三方 canonical pair keys 全部 exact match，共 616,032 条。32,768 原子时，tonari 约比 ASE 快 17.7×，Vesin 约比 tonari 快 2.0×。这支持 CPU 大体系上 Vesin 更快的结论；不要将 NumPy API 的新测量与上方历史 Torch adapter 计时拼成同一条曲线。
 
