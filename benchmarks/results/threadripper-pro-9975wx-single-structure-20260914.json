@@ -1,0 +1,465 @@
+{
+  "dataset": {
+    "cache_sha256": "d43ff90f10c63c05f645b6a0a7b4ba825b613af37653e7dc1e42b52b5bbd5e55",
+    "manifest_sha256": "3475c391b8def6bf599a57a7f1c938113eabcbfb0f2b89f7d31da648c6f7b413",
+    "source_id": "CO_8661596785617876616983344"
+  },
+  "environment": {
+    "ase": "3.29.0",
+    "cpu": "AMD Ryzen Threadripper PRO 9975WX 32-Cores",
+    "cpu_affinity": [
+      31
+    ],
+    "cpu_frequency_policy": {
+      "boost": "1",
+      "driver": "amd-pstate-epp",
+      "energy_performance_preference": "balance_performance",
+      "governor": "powersave",
+      "scaling_max_khz": "5487604",
+      "scaling_min_khz": "1223141"
+    },
+    "numpy": "2.5.1",
+    "numpy_extension_sha256": "bd7fec91c8a321ac2da5cdeca7fdd5acd5ede835075d680236323f60f7986313",
+    "platform": "Linux-7.0.0-28-generic-x86_64-with-glibc2.39",
+    "python": "3.12.13",
+    "repository_revision": "6f845ce0657969bc88e2811884531bd92cf428bf",
+    "repository_worktree_clean": true,
+    "script_sha256": "f615cfa6999fc81a557ff9d8a71d9b2bb29f7c005d7d0c4ec094ce9f62cb82cc",
+    "timestamp_utc": "2026-09-14T04:55:05.069754+00:00",
+    "torch": "2.12.1+cu130",
+    "vesin": "0.6.1"
+  },
+  "method": {
+    "ase": "primitive_neighbor_list, scalar cutoff, self_interaction=False, use_scaled_positions=False; default max_nbins; fresh search each call; native output ordering retained",
+    "cutoff_angstrom": 5.0,
+    "data_loading_and_structure_preparation_timed": false,
+    "dtype": "float64",
+    "full_list": true,
+    "include_self": false,
+    "quantities": "ijS",
+    "repeats": 11,
+    "statistic": "median wall time; raw samples retained",
+    "threads": 1,
+    "timing": "single public NumPy call; perf_counter_ns; output release outside timing; rotating backend order across repeats",
+    "tonari": "NumPy provider, algorithm=auto, cpu_threads=1, sorted=False",
+    "validation": "exact canonical (i,j,Sx,Sy,Sz) comparison for all three backends at every size, outside timing",
+    "vesin": "reused NeighborList, full_list=True, sorted=False, n_threads=1; NumPy compute each call",
+    "warmup_seconds_per_backend": 1.0
+  },
+  "workloads": [
+    {
+      "atoms": 64,
+      "backends": {
+        "ase": {
+          "maximum_ms": 1.248199,
+          "median_ms": 1.231975,
+          "minimum_ms": 1.223062,
+          "samples_ms": [
+            1.245094,
+            1.230634,
+            1.223062,
+            1.248199,
+            1.231975,
+            1.229821,
+            1.246095,
+            1.23502,
+            1.229581,
+            1.241699,
+            1.229351
+          ],
+          "warmup_calls": 818
+        },
+        "tonari": {
+          "maximum_ms": 0.102834,
+          "median_ms": 0.071287,
+          "minimum_ms": 0.052199,
+          "samples_ms": [
+            0.102834,
+            0.07998,
+            0.071287,
+            0.054702,
+            0.076044,
+            0.068002,
+            0.052199,
+            0.076064,
+            0.069544,
+            0.055242,
+            0.07364
+          ],
+          "warmup_calls": 27409
+        },
+        "vesin": {
+          "maximum_ms": 0.089364,
+          "median_ms": 0.067421,
+          "minimum_ms": 0.052759,
+          "samples_ms": [
+            0.089364,
+            0.075083,
+            0.073741,
+            0.05341,
+            0.067421,
+            0.07314,
+            0.052759,
+            0.06672,
+            0.072939,
+            0.056514,
+            0.06671
+          ],
+          "warmup_calls": 25155
+        }
+      },
+      "name": "matbench_supercell_1x1x1",
+      "pairs": 744,
+      "structures": 1,
+      "validation": {
+        "canonical_sha256": "6e0477e68e5412fa11a853a968bc6cfb110465f33cb01b4613c4fa844d8f41dc",
+        "exact_key_match": true
+      }
+    },
+    {
+      "atoms": 512,
+      "backends": {
+        "ase": {
+          "maximum_ms": 5.834166,
+          "median_ms": 5.810922,
+          "minimum_ms": 5.794537,
+          "samples_ms": [
+            5.810922,
+            5.806065,
+            5.806475,
+            5.832254,
+            5.808889,
+            5.794537,
+            5.816961,
+            5.827707,
+            5.798183,
+            5.834166,
+            5.833435
+          ],
+          "warmup_calls": 173
+        },
+        "tonari": {
+          "maximum_ms": 0.432087,
+          "median_ms": 0.408752,
+          "minimum_ms": 0.372578,
+          "samples_ms": [
+            0.418587,
+            0.42751,
+            0.419478,
+            0.389964,
+            0.432087,
+            0.42092,
+            0.398607,
+            0.408752,
+            0.399758,
+            0.372578,
+            0.406599
+          ],
+          "warmup_calls": 3999
+        },
+        "vesin": {
+          "maximum_ms": 0.296864,
+          "median_ms": 0.288913,
+          "minimum_ms": 0.25334,
+          "samples_ms": [
+            0.296864,
+            0.296764,
+            0.287791,
+            0.25334,
+            0.291667,
+            0.288913,
+            0.25377,
+            0.292528,
+            0.288352,
+            0.256924,
+            0.288913
+          ],
+          "warmup_calls": 4694
+        }
+      },
+      "name": "matbench_supercell_2x2x2",
+      "pairs": 5952,
+      "structures": 1,
+      "validation": {
+        "canonical_sha256": "965fa200c05a5b7d1d5d7334d03e8638fca2b9b2821bb0ec05f35b0a24153a81",
+        "exact_key_match": true
+      }
+    },
+    {
+      "atoms": 1728,
+      "backends": {
+        "ase": {
+          "maximum_ms": 20.190926,
+          "median_ms": 20.113371,
+          "minimum_ms": 18.973954,
+          "samples_ms": [
+            20.061683,
+            20.05946,
+            18.973954,
+            20.138959,
+            20.189124,
+            20.061223,
+            20.052189,
+            20.18011,
+            20.113371,
+            20.190926,
+            20.182624
+          ],
+          "warmup_calls": 50
+        },
+        "tonari": {
+          "maximum_ms": 1.932824,
+          "median_ms": 1.691583,
+          "minimum_ms": 1.263082,
+          "samples_ms": [
+            1.701458,
+            1.337533,
+            1.932824,
+            1.322931,
+            1.759795,
+            1.757532,
+            1.316572,
+            1.72311,
+            1.691583,
+            1.263082,
+            1.632805
+          ],
+          "warmup_calls": 818
+        },
+        "vesin": {
+          "maximum_ms": 0.837745,
+          "median_ms": 0.820549,
+          "minimum_ms": 0.745006,
+          "samples_ms": [
+            0.837745,
+            0.823133,
+            0.830564,
+            0.755492,
+            0.816983,
+            0.820549,
+            0.745006,
+            0.822111,
+            0.819247,
+            0.747259,
+            0.822962
+          ],
+          "warmup_calls": 1457
+        }
+      },
+      "name": "matbench_supercell_3x3x3",
+      "pairs": 20088,
+      "structures": 1,
+      "validation": {
+        "canonical_sha256": "58c82914adf2409a4b841e8f6dadfed951a6c71745d053fa13769d93fca813b6",
+        "exact_key_match": true
+      }
+    },
+    {
+      "atoms": 4096,
+      "backends": {
+        "ase": {
+          "maximum_ms": 49.86576,
+          "median_ms": 49.351128,
+          "minimum_ms": 46.889813,
+          "samples_ms": [
+            49.197709,
+            49.533492,
+            49.32523,
+            49.351128,
+            49.835804,
+            47.177143,
+            49.014924,
+            49.591398,
+            46.889813,
+            49.464529,
+            49.86576
+          ],
+          "warmup_calls": 20
+        },
+        "tonari": {
+          "maximum_ms": 4.786048,
+          "median_ms": 4.252368,
+          "minimum_ms": 2.967294,
+          "samples_ms": [
+            4.252368,
+            4.265167,
+            4.583424,
+            2.985531,
+            3.106142,
+            4.533068,
+            2.967294,
+            3.093313,
+            4.786048,
+            2.983628,
+            4.296815
+          ],
+          "warmup_calls": 345
+        },
+        "vesin": {
+          "maximum_ms": 3.075395,
+          "median_ms": 1.786155,
+          "minimum_ms": 1.674498,
+          "samples_ms": [
+            1.786155,
+            3.075395,
+            1.777022,
+            1.679385,
+            3.067143,
+            1.785114,
+            1.674498,
+            3.063188,
+            1.787667,
+            1.678404,
+            3.066332
+          ],
+          "warmup_calls": 629
+        }
+      },
+      "name": "matbench_supercell_4x4x4",
+      "pairs": 47616,
+      "structures": 1,
+      "validation": {
+        "canonical_sha256": "76ccd51e54d245a545131f0ee20799b29732ec827c6f36bb228bbc6a9a5cfb18",
+        "exact_key_match": true
+      }
+    },
+    {
+      "atoms": 13824,
+      "backends": {
+        "ase": {
+          "maximum_ms": 181.413148,
+          "median_ms": 180.187578,
+          "minimum_ms": 172.06145,
+          "samples_ms": [
+            181.413148,
+            180.761863,
+            180.354044,
+            180.182478,
+            181.120994,
+            180.139935,
+            179.798294,
+            180.187578,
+            172.06145,
+            179.786309,
+            180.551595
+          ],
+          "warmup_calls": 6
+        },
+        "tonari": {
+          "maximum_ms": 13.049033,
+          "median_ms": 12.304518,
+          "minimum_ms": 9.878305,
+          "samples_ms": [
+            12.401464,
+            13.049033,
+            12.304518,
+            9.878305,
+            12.318028,
+            12.883746,
+            9.926627,
+            10.672675,
+            12.842144,
+            9.896523,
+            12.254004
+          ],
+          "warmup_calls": 102
+        },
+        "vesin": {
+          "maximum_ms": 7.88479,
+          "median_ms": 5.574499,
+          "minimum_ms": 5.370804,
+          "samples_ms": [
+            5.587208,
+            7.778189,
+            5.53521,
+            5.37504,
+            7.87926,
+            5.574499,
+            5.39475,
+            7.692781,
+            5.531795,
+            5.370804,
+            7.88479
+          ],
+          "warmup_calls": 189
+        }
+      },
+      "name": "matbench_supercell_6x6x6",
+      "pairs": 160704,
+      "structures": 1,
+      "validation": {
+        "canonical_sha256": "1cc086cb3955c239b42b2d6bfac4b7600a60e56968e682375e117297ed50468b",
+        "exact_key_match": true
+      }
+    },
+    {
+      "atoms": 32768,
+      "backends": {
+        "ase": {
+          "maximum_ms": 456.439862,
+          "median_ms": 453.526528,
+          "minimum_ms": 449.862415,
+          "samples_ms": [
+            455.707852,
+            454.637162,
+            449.862415,
+            453.526528,
+            456.200477,
+            453.296282,
+            450.629231,
+            455.867252,
+            451.051472,
+            451.711245,
+            456.439862
+          ],
+          "warmup_calls": 3
+        },
+        "tonari": {
+          "maximum_ms": 26.248115,
+          "median_ms": 25.686917,
+          "minimum_ms": 23.329845,
+          "samples_ms": [
+            25.741836,
+            26.072612,
+            25.734866,
+            23.377526,
+            26.248115,
+            25.5031,
+            23.329845,
+            25.645214,
+            25.710132,
+            23.414313,
+            25.686917
+          ],
+          "warmup_calls": 43
+        },
+        "vesin": {
+          "maximum_ms": 13.138129,
+          "median_ms": 12.855435,
+          "minimum_ms": 12.663819,
+          "samples_ms": [
+            12.855435,
+            13.138129,
+            12.848575,
+            12.680393,
+            13.133242,
+            12.866282,
+            12.702336,
+            13.089847,
+            12.849958,
+            12.663819,
+            13.039913
+          ],
+          "warmup_calls": 81
+        }
+      },
+      "name": "matbench_supercell_8x8x8",
+      "pairs": 380928,
+      "structures": 1,
+      "validation": {
+        "canonical_sha256": "dd4dfb121d85ae88f1c6c071fe7d112eb76f81a5d2fcfe15bcd06677e0f3064d",
+        "exact_key_match": true
+      }
+    }
+  ]
+}

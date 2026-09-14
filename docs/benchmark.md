@@ -96,6 +96,32 @@ CPU 与 CUDA 在全部 1,536 个 structures、2,780,158 个 pair keys 上与 Ves
 
 真实 epoch 由大量小结构组成，本项目的低固定成本占优。约 512 atoms 进入当前机器的 crossover，之后 Vesin 的成熟 CPU cell list 更快；32,768 原子时 Vesin 约快 1.88×。这说明本项目适合常见小结构与 one-shot calls，但不能解释为所有尺度上的 CPU cell-list 优势。
 
+### 单体系 CPU 三方复测（2026-09-14）
+
+使用相同 Matbench 64-atom 晶体派生的六个超胞，三家均使用 NumPy 输入输出、float64、5 Å cutoff、full list，无 zero-shift self，返回 `ijS`。固定 Threadripper PRO 9975WX 的 core 31，tonari 和 Vesin 显式设为单线程，OMP/OpenBLAS/MKL 也设为单线程。ASE 使用 `primitive_neighbor_list`，保留其默认分箱参数和原生输出排序，不再使用旧 pair-options 测试中的 `PrimitiveNeighborList` 逐原子提取/Torch 转换 adapter。
+
+计时包含一次公开 API 调用的分配、搜索和输出构造，输出释放、数据准备、超胞生成及 correctness comparison 在计时外。Vesin 复用一个 `NeighborList` 配置对象，但每次重新搜索；三家均不使用 Verlet/skin 缓存。各 backend 先 warmup 至少 1 秒，然后轮换顺序测 11 次，表中是中位数。
+
+| Atoms | Pairs | tonari NumPy | Vesin NumPy | ASE primitive_neighbor_list |
+| --: | --: | --: | --: | --: |
+| 64 | 744 | 0.0713 ms | 0.0674 ms | 1.2320 ms |
+| 512 | 5,952 | 0.4088 ms | 0.2889 ms | 5.8109 ms |
+| 1,728 | 20,088 | 1.6916 ms | 0.8205 ms | 20.1134 ms |
+| 4,096 | 47,616 | 4.2524 ms | 1.7862 ms | 49.3511 ms |
+| 13,824 | 160,704 | 12.3045 ms | 5.5745 ms | 180.1876 ms |
+| 32,768 | 380,928 | 25.6869 ms | 12.8554 ms | 453.5265 ms |
+
+六个尺寸的三方 canonical pair keys 全部 exact match，共 616,032 条。32,768 原子时，tonari 约比 ASE 快 17.7×，Vesin 约比 tonari 快 2.0×。这支持 CPU 大体系上 Vesin 更快的结论；不要将 NumPy API 的新测量与上方历史 Torch adapter 计时拼成同一条曲线。
+
+[完整原始记录](../benchmarks/results/threadripper-pro-9975wx-single-structure-20260914.json)保留每次计时、环境、CPU frequency policy、数据与 native binary hashes；[PDF 图](../artifacts/single-structure-cpu-latency.pdf)展示同一组测量。
+
+```bash
+OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 \
+  python -m benchmarks.run_cpu_single_structure \
+  --output runs/cpu-single-structure-20260914.json
+python artifacts/plot_cpu_single_structure.py
+```
+
 ### CUDA
 
 硬件为 NVIDIA RTX PRO 6000 Blackwell，geometry 使用 float32，主 workload 为 `batch_size=32`。
@@ -166,6 +192,7 @@ Half list 把 pair count 和 output bytes 精确减半，说明它是 native can
 scripts/prepare_matbench.py
 scripts/prepare_qmugs.py
 benchmarks/run_cpu_benchmark.py
+benchmarks/run_cpu_single_structure.py
 benchmarks/run_cpu_thread_scaling.py
 benchmarks/run_cuda_benchmark.py
 benchmarks/run_cuda_batch_scaling.py
