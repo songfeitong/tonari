@@ -10,8 +10,8 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib import font_manager
 from matplotlib.ticker import FixedLocator, FuncFormatter
+from plot_fonts import load_geist
 
 ROOT = Path(__file__).resolve().parents[1]
 RESULTS = (
@@ -22,8 +22,7 @@ OUTPUT = Path(__file__).resolve().parent
 
 def main() -> None:
     report = json.loads(RESULTS.read_text())
-    for filename in ("Geist-Regular.ttf", "Geist-Bold.ttf"):
-        font_manager.fontManager.addfont(OUTPUT / "fonts/geist" / filename)
+    load_geist()
     plt.rcParams.update(
         {
             "font.family": "Geist",
@@ -122,6 +121,7 @@ def main() -> None:
             "Subject": "64–32,768 atoms; NumPy single-thread latency medians",
         },
     )
+    fig.savefig(OUTPUT / filename.replace(".pdf", ".png"), dpi=180, facecolor="white")
     plt.close(fig)
 
 

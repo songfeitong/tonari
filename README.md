@@ -4,6 +4,30 @@
 
 [![CI](https://github.com/songfeitong/tonari/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/songfeitong/tonari/actions/workflows/ci.yml)
 
+## Performance
+
+Measured with a 5 Å cutoff and full neighbor lists, excluding data loading and host-to-device transfer. CUDA uses float32 on an NVIDIA RTX PRO 6000 Blackwell Workstation Edition; CPU uses NumPy float64 on an AMD Ryzen Threadripper PRO 9975WX. See the [full benchmark results](docs/benchmark.md) for timing protocols, variability, correctness checks, and source revisions.
+
+### CUDA batch performance
+
+Native batching keeps neighbor-list construction fast across real QMugs molecules and Matbench crystals. At batch size 512, tonari takes 0.23 ms and 2.78 ms, respectively. The Vesin CUDA baseline calls its public API once per structure and concatenates the results.
+
+![CUDA batch latency for QMugs and Matbench](artifacts/readme-cuda-batches.png)
+
+### Large periodic structures
+
+For a 32,768-atom supercell, tonari takes 0.21 ms on CUDA. On a single CPU thread, tonari is about 17.7× faster than ASE; Vesin is about 2× faster than tonari. These workloads are supercells of one real crystal, with different CPU/GPU timing records and axis ranges.
+
+![CUDA and single-thread CPU latency for large periodic structures](artifacts/readme-large-structures.png)
+
+### CPU multithreading
+
+For fixed batches, increasing tonari from 1 to 8 threads gives 3.45× speedup on QMugs and 3.53× on Matbench. Vesin uses the same internal thread count per structure and is called sequentially across the batch; its adapter includes index offsets and output concatenation, with no outer structure parallelism.
+
+![CPU thread scaling for fixed QMugs and Matbench batches](artifacts/readme-cpu-threads.png)
+
+[Individual figures and PDF downloads](artifacts/README.md) · [Single large-structure thread scaling](docs/benchmark.md#cpu-thread-figures)
+
 ## API
 
 The entire public API is one function:
@@ -61,23 +85,6 @@ For a Batch, concatenate all positions and use `batch_ptr` to mark structure bou
 - `sorted=True` groups pairs by source index. Their order within each source is unspecified.
 - `half_list=True` returns only one direction for each neighbor pair. The default returns both directions.
 - `include_self=True` adds one self pair for each atom. By default, self pairs within the same cell are omitted.
-
-## CUDA benchmarks
-
-Synchronized latency for one complete batch on an NVIDIA RTX PRO 6000 Blackwell (float32, 5 Å cutoff, full neighbor lists with pair indices and cell shifts). Data loading and host-to-device transfer are excluded. Vesin 0.6.1 runs on CUDA once per structure, including output concatenation.
-
-| Structures per batch | QMugs: tonari | QMugs: Vesin | Matbench: tonari | Matbench: Vesin |
-| --: | --: | --: | --: | --: |
-| 8 | 0.105 ms | 1.882 ms | 0.118 ms | 2.346 ms |
-| 16 | 0.112 ms | 3.727 ms | 0.211 ms | 4.824 ms |
-| 32 | 0.118 ms | 7.383 ms | 0.268 ms | 9.312 ms |
-| 64 | 0.115 ms | 14.084 ms | 0.417 ms | 19.108 ms |
-| 128 | 0.130 ms | 28.085 ms | 0.705 ms | 38.314 ms |
-| 256 | 0.147 ms | 56.022 ms | 1.333 ms | 77.462 ms |
-| 512 | 0.226 ms | 112.198 ms | 2.779 ms | 152.629 ms |
-| 1024 | 0.349 ms | 225.422 ms | 7.513 ms | 303.111 ms |
-
-Measured on 2026-09-14: 16 sampled batches per size, 7 timed calls per backend and batch. Values are medians across per-batch medians; all 256 batches exactly match Vesin pair keys. This compares native batching with a per-structure API. See [benchmark methodology, variability, and reproducible records](docs/benchmark.md#cuda-batch-size-scaling2026-09-14).
 
 ## Install from source
 

@@ -11,8 +11,8 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib import font_manager
 from matplotlib.ticker import FixedLocator, FuncFormatter
+from plot_fonts import load_geist
 
 ROOT = Path(__file__).resolve().parents[1]
 RESULTS = ROOT / "benchmarks/results/rtx-pro-6000-blackwell-batch-scaling-20260914.json"
@@ -41,8 +41,7 @@ def main() -> None:
         "qmugs_population": f"Avg {np.mean(molecule_sizes):.1f} atoms per structure · Cutoff 5 Å · RTX PRO 6000 Blackwell",
         "matbench": f"Avg {np.mean(crystal_sizes):.1f} atoms per structure · Cutoff 5 Å · RTX PRO 6000 Blackwell",
     }
-    for filename in ("Geist-Regular.ttf", "Geist-Bold.ttf"):
-        font_manager.fontManager.addfont(OUTPUT / "fonts/geist" / filename)
+    load_geist()
     plt.rcParams.update(
         {
             "font.family": "Geist",
@@ -144,6 +143,9 @@ def main() -> None:
                 "Author": "tonari",
                 "Subject": "Batch sizes 8–512; synchronized latency medians",
             },
+        )
+        fig.savefig(
+            OUTPUT / filename.replace(".pdf", ".png"), dpi=180, facecolor="white"
         )
         plt.close(fig)
 

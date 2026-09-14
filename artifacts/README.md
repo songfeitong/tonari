@@ -1,6 +1,26 @@
-# CUDA batch-latency figures
+# Benchmark figures
 
-All figures use bundled [Geist Regular and Bold](fonts/geist/README.md), embedded in the vector PDFs.
+All figures use the locally installed [Geist v1.7.2 font](https://github.com/vercel/geist-font/releases/tag/v1.7.2). The repository contains no font binaries; PDF files embed the glyphs they use. Regeneration requires Matplotlib, NumPy, and system-installed Geist Regular and Bold. On this workstation, the fonts and their SIL Open Font License are installed in `/usr/local/share/fonts/geist/`; `fc-match Geist` confirms discovery. The scripts fail if Geist is unavailable rather than silently using a different font.
+
+The main README uses three compact two-panel PNGs: [CUDA batches](readme-cuda-batches.png), [large periodic structures](readme-large-structures.png), and [CPU threads](readme-cpu-threads.png). Each single-panel figure is also exported as PNG and vector PDF. README layouts use shorter titles and endpoint labels; the individual PDFs retain the full annotations.
+
+```bash
+python artifacts/plot_readme.py
+```
+
+## Downloads
+
+| Figure | PNG | PDF |
+| --- | --- | --- |
+| QMugs CUDA batch | [PNG](qmugs-cuda-batch-latency.png) | [PDF](qmugs-cuda-batch-latency.pdf) |
+| Matbench CUDA batch | [PNG](matbench-cuda-batch-latency.png) | [PDF](matbench-cuda-batch-latency.pdf) |
+| Large periodic structure CUDA | [PNG](single-structure-cuda-latency.png) | [PDF](single-structure-cuda-latency.pdf) |
+| Large periodic structure CPU | [PNG](single-structure-cpu-latency.png) | [PDF](single-structure-cpu-latency.pdf) |
+| QMugs CPU threads | [PNG](qmugs-cpu-thread-scaling.png) | [PDF](qmugs-cpu-thread-scaling.pdf) |
+| Matbench CPU threads | [PNG](matbench-cpu-thread-scaling.png) | [PDF](matbench-cpu-thread-scaling.pdf) |
+| Large periodic structure CPU threads | [PNG](single-structure-cpu-thread-scaling.png) | [PDF](single-structure-cpu-thread-scaling.pdf) |
+
+## CUDA batch latency
 
 English vector PDF figures for QMugs population and Matbench, showing batch sizes 8, 16, 32, 64, 128, 256, and 512. Both figures use identical logarithmic axes. Lines show the median across 16 per-batch latency medians. Subtitles report the mean atom count in the source benchmark samples: 226,648 / 4,096 = 55.3 atoms per QMugs molecule and 75,238 / 1,536 = 49.0 atoms per Matbench crystal (rounded to one decimal). The plotting script computes these from the committed dataset manifests. The GPU name in the subtitle is shortened to RTX PRO 6000 Blackwell; the measured card is the NVIDIA RTX PRO 6000 Blackwell Workstation Edition. The Vesin CUDA baseline includes per-structure calls and output concatenation.
 

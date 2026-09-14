@@ -2,6 +2,30 @@
 
 本文回答三个问题：结果是否与独立实现一致、常见真实 workload 中的端到端成本是多少、体系变大后性能如何变化。这里保留足以理解结论的结果；完整统计、环境、revision 和 binary/data hashes 位于 `benchmarks/results/*.json`。
 
+## 图表
+
+README 使用以下双面板 PNG；各组的单张高清 PNG 和矢量 PDF 下载见 [artifacts](../artifacts/README.md)。曲线来自下文对应的独立测量记录。
+
+### CUDA batch
+
+![QMugs 与 Matbench CUDA batch 延迟](../artifacts/readme-cuda-batches.png)
+
+### 单个周期大体系
+
+![CUDA 与 CPU 周期大体系延迟](../artifacts/readme-large-structures.png)
+
+### CPU 固定 batch 多线程
+
+![QMugs 与 Matbench CPU 多线程](../artifacts/readme-cpu-threads.png)
+
+<a id="cpu-thread-figures"></a>
+
+### CPU 单个大体系多线程
+
+![32,768 原子超胞的 NumPy CPU 多线程延迟](../artifacts/single-structure-cpu-thread-scaling.png)
+
+[下载 PDF](../artifacts/single-structure-cpu-thread-scaling.pdf)。此图使用 NumPy 重测结果，详细条件见下文 CPU 多线程 scaling。
+
 ## 统一测量口径
 
 所有 backend 使用相同 structures、cutoff、PBC、pair 方向和 zero-shift self policy。输出统一转换为 `(source, target, Sx, Sy, Sz)` keys 后做 exact comparison，输出顺序不参与比较。
