@@ -109,7 +109,7 @@ def main() -> None:
     ax.legend(
         loc="lower left",
         bbox_to_anchor=(-0.01, 1.03),
-        labelspacing=0.6,
+        labelspacing=0.25,
         frameon=False,
         fontsize=12,
         borderaxespad=0,
