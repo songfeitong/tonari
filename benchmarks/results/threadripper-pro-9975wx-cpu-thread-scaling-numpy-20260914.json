@@ -1,0 +1,804 @@
+{
+  "datasets": {
+    "matbench_cache_sha256": "d43ff90f10c63c05f645b6a0a7b4ba825b613af37653e7dc1e42b52b5bbd5e55",
+    "matbench_manifest_sha256": "3475c391b8def6bf599a57a7f1c938113eabcbfb0f2b89f7d31da648c6f7b413",
+    "qmugs_cache_sha256": "bc5bce3e8173f5c8dd823b1dcb37d0dcb8ab06d7f81949f8d297f733a39b4d73",
+    "qmugs_manifest_sha256": "a764a23b001873f5b7f879212fcc324acfa57fa3d9918abdbba295d0664b462f"
+  },
+  "environment": {
+    "cpu": "AMD Ryzen Threadripper PRO 9975WX 32-Cores",
+    "cpu_affinity": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ],
+    "cpu_frequency_policy": {
+      "0": {
+        "boost": "1",
+        "driver": "amd-pstate-epp",
+        "energy_performance_preference": "balance_performance",
+        "governor": "powersave",
+        "scaling_max_khz": "5487604",
+        "scaling_min_khz": "1223141"
+      },
+      "1": {
+        "boost": "1",
+        "driver": "amd-pstate-epp",
+        "energy_performance_preference": "balance_performance",
+        "governor": "powersave",
+        "scaling_max_khz": "5487604",
+        "scaling_min_khz": "1223141"
+      },
+      "2": {
+        "boost": "1",
+        "driver": "amd-pstate-epp",
+        "energy_performance_preference": "balance_performance",
+        "governor": "powersave",
+        "scaling_max_khz": "5487604",
+        "scaling_min_khz": "1223141"
+      },
+      "3": {
+        "boost": "1",
+        "driver": "amd-pstate-epp",
+        "energy_performance_preference": "balance_performance",
+        "governor": "powersave",
+        "scaling_max_khz": "5487604",
+        "scaling_min_khz": "1223141"
+      },
+      "4": {
+        "boost": "1",
+        "driver": "amd-pstate-epp",
+        "energy_performance_preference": "balance_performance",
+        "governor": "powersave",
+        "scaling_max_khz": "5487604",
+        "scaling_min_khz": "1223141"
+      },
+      "5": {
+        "boost": "1",
+        "driver": "amd-pstate-epp",
+        "energy_performance_preference": "balance_performance",
+        "governor": "powersave",
+        "scaling_max_khz": "5487604",
+        "scaling_min_khz": "1223141"
+      },
+      "6": {
+        "boost": "1",
+        "driver": "amd-pstate-epp",
+        "energy_performance_preference": "balance_performance",
+        "governor": "powersave",
+        "scaling_max_khz": "5487604",
+        "scaling_min_khz": "1223141"
+      },
+      "7": {
+        "boost": "1",
+        "driver": "amd-pstate-epp",
+        "energy_performance_preference": "balance_performance",
+        "governor": "powersave",
+        "scaling_max_khz": "5487604",
+        "scaling_min_khz": "1223141"
+      }
+    },
+    "numpy": "2.5.1",
+    "numpy_extension_sha256": "bd7fec91c8a321ac2da5cdeca7fdd5acd5ede835075d680236323f60f7986313",
+    "platform": "Linux-7.0.0-28-generic-x86_64-with-glibc2.39",
+    "python": "3.12.13",
+    "repository_revision": "b2dc323755da2b75e59f31589f9c1b6094e0e995",
+    "repository_worktree_clean": true,
+    "script_sha256": "a4252df8a652c603ca9c6802771a2e64c051070f21b47e30398502f26cfdd628",
+    "timestamp_utc": "2026-09-14T05:10:53.285958+00:00",
+    "torch": "2.12.1+cu130",
+    "torch_num_threads": 1,
+    "vesin_version": "0.6.1"
+  },
+  "method": {
+    "array_api": "NumPy inputs and outputs; Torch used only for data preparation outside timing",
+    "cutoff_angstrom": 5.0,
+    "data_loading_timed": false,
+    "dtype": "float64",
+    "exact_keys_compared": "(source, target, Sx, Sy, Sz)",
+    "output_order_compared": false,
+    "output_release_timed": false,
+    "quantities": "ijS",
+    "statistic": "median wall time; minimum, maximum, and samples retained",
+    "thread_counts": [
+      1,
+      2,
+      4,
+      8
+    ],
+    "threaded_validation": "both NumPy backends at every thread count are exact-compared against canonical single-thread Tonari keys; SHA-256 recorded for each",
+    "tonari": "one native NumPy batch call; the requested thread count includes the caller",
+    "vesin": "one reused NeighborList per measurement; n_threads matches Tonari; NumPy compute per structure; batch offsets and concatenation timed; single structure uses direct compute",
+    "warmup_seconds_per_backend_workload_and_thread_count": 1.0
+  },
+  "workloads": [
+    {
+      "measurements": {
+        "1": {
+          "tonari": {
+            "maximum_ms": 188.359237,
+            "median_ms": 159.812748,
+            "minimum_ms": 159.29008,
+            "pairs": 2780158,
+            "repeats": 11,
+            "samples_ms": [
+              188.359237,
+              166.087717,
+              161.171583,
+              161.150051,
+              159.76835,
+              159.448428,
+              159.29008,
+              159.649202,
+              159.408528,
+              160.096194,
+              159.812748
+            ],
+            "speedup_over_one_thread": 1.0,
+            "warmup_runs": 6
+          },
+          "vesin": {
+            "maximum_ms": 231.131646,
+            "median_ms": 230.785444,
+            "minimum_ms": 230.621346,
+            "pairs": 2780158,
+            "repeats": 11,
+            "samples_ms": [
+              230.665483,
+              230.676049,
+              230.740096,
+              230.785444,
+              230.621346,
+              230.72307,
+              230.939556,
+              231.131646,
+              230.975972,
+              230.838595,
+              230.9738
+            ],
+            "speedup_over_one_thread": 1.0,
+            "warmup_runs": 5
+          },
+          "vesin_over_tonari": 1.4440990902678177
+        },
+        "2": {
+          "tonari": {
+            "maximum_ms": 87.056078,
+            "median_ms": 86.000589,
+            "minimum_ms": 85.809841,
+            "pairs": 2780158,
+            "repeats": 11,
+            "samples_ms": [
+              86.000589,
+              85.934989,
+              85.951574,
+              87.056078,
+              86.261521,
+              85.809841,
+              86.558008,
+              85.825104,
+              86.128491,
+              85.855771,
+              86.009993
+            ],
+            "speedup_over_one_thread": 1.8582750404186184,
+            "warmup_runs": 12
+          },
+          "vesin": {
+            "maximum_ms": 227.430357,
+            "median_ms": 224.795677,
+            "minimum_ms": 224.124066,
+            "pairs": 2780158,
+            "repeats": 11,
+            "samples_ms": [
+              224.124066,
+              224.795677,
+              224.634154,
+              224.814666,
+              224.408805,
+              225.52074,
+              225.213297,
+              225.202912,
+              224.762058,
+              224.57077,
+              227.430357
+            ],
+            "speedup_over_one_thread": 1.026645383398543,
+            "warmup_runs": 5
+          },
+          "vesin_over_tonari": 2.6138853188552
+        },
+        "4": {
+          "tonari": {
+            "maximum_ms": 65.869371,
+            "median_ms": 63.996181,
+            "minimum_ms": 63.663019,
+            "pairs": 2780158,
+            "repeats": 11,
+            "samples_ms": [
+              64.024914,
+              65.869371,
+              64.113116,
+              64.495142,
+              63.996181,
+              64.103391,
+              63.748998,
+              63.726274,
+              63.954868,
+              63.81693,
+              63.663019
+            ],
+            "speedup_over_one_thread": 2.4972232014907263,
+            "warmup_runs": 16
+          },
+          "vesin": {
+            "maximum_ms": 216.435641,
+            "median_ms": 212.812565,
+            "minimum_ms": 210.818563,
+            "pairs": 2780158,
+            "repeats": 11,
+            "samples_ms": [
+              215.362865,
+              212.228626,
+              216.435641,
+              210.989399,
+              212.812565,
+              211.965729,
+              211.902585,
+              213.61209,
+              214.132323,
+              210.818563,
+              216.082871
+            ],
+            "speedup_over_one_thread": 1.0844540311799729,
+            "warmup_runs": 5
+          },
+          "vesin_over_tonari": 3.325394760665484
+        },
+        "8": {
+          "tonari": {
+            "maximum_ms": 46.874776,
+            "median_ms": 45.212242,
+            "minimum_ms": 44.78574,
+            "pairs": 2780158,
+            "repeats": 11,
+            "samples_ms": [
+              45.208867,
+              45.212242,
+              46.874776,
+              44.899191,
+              45.330801,
+              44.78574,
+              45.11183,
+              45.302928,
+              45.385002,
+              45.342478,
+              44.974864
+            ],
+            "speedup_over_one_thread": 3.5347229186289852,
+            "warmup_runs": 22
+          },
+          "vesin": {
+            "maximum_ms": 206.57933,
+            "median_ms": 202.007535,
+            "minimum_ms": 199.721162,
+            "pairs": 2780158,
+            "repeats": 11,
+            "samples_ms": [
+              206.57933,
+              202.007535,
+              201.030454,
+              204.120308,
+              202.150531,
+              200.957564,
+              203.600365,
+              202.58087,
+              201.193911,
+              199.721162,
+              201.65784
+            ],
+            "speedup_over_one_thread": 1.1424595820150967,
+            "warmup_runs": 5
+          },
+          "vesin_over_tonari": 4.467983140495443
+        }
+      },
+      "name": "matbench_1536_structure_batch",
+      "source_id_count": 1536,
+      "source_id_sha256": "6159e128117ade2c760bf21ef813d227d97d773c0cfa02622f4c1ec6911506c2",
+      "source_ids": null,
+      "validation": {
+        "atoms": 75238,
+        "backend_thread_key_sha256": {
+          "1": {
+            "tonari": "899878543775ebf424c0c3795fc1b6f779e4c6b069e99d03c49103bbb579fb2b",
+            "vesin": "899878543775ebf424c0c3795fc1b6f779e4c6b069e99d03c49103bbb579fb2b"
+          },
+          "2": {
+            "tonari": "899878543775ebf424c0c3795fc1b6f779e4c6b069e99d03c49103bbb579fb2b",
+            "vesin": "899878543775ebf424c0c3795fc1b6f779e4c6b069e99d03c49103bbb579fb2b"
+          },
+          "4": {
+            "tonari": "899878543775ebf424c0c3795fc1b6f779e4c6b069e99d03c49103bbb579fb2b",
+            "vesin": "899878543775ebf424c0c3795fc1b6f779e4c6b069e99d03c49103bbb579fb2b"
+          },
+          "8": {
+            "tonari": "899878543775ebf424c0c3795fc1b6f779e4c6b069e99d03c49103bbb579fb2b",
+            "vesin": "899878543775ebf424c0c3795fc1b6f779e4c6b069e99d03c49103bbb579fb2b"
+          }
+        },
+        "canonical_key_sha256": "899878543775ebf424c0c3795fc1b6f779e4c6b069e99d03c49103bbb579fb2b",
+        "exact_key_match": true,
+        "pairs": 2780158,
+        "structures": 1536,
+        "thread_count_key_match": {
+          "1": true,
+          "2": true,
+          "4": true,
+          "8": true
+        }
+      }
+    },
+    {
+      "measurements": {
+        "1": {
+          "tonari": {
+            "maximum_ms": 169.97733,
+            "median_ms": 147.147598,
+            "minimum_ms": 146.909119,
+            "pairs": 5320936,
+            "repeats": 11,
+            "samples_ms": [
+              169.97733,
+              169.818972,
+              147.504905,
+              147.147598,
+              147.519588,
+              147.132836,
+              147.12888,
+              147.592728,
+              146.909119,
+              147.052064,
+              147.12847
+            ],
+            "speedup_over_one_thread": 1.0,
+            "warmup_runs": 6
+          },
+          "vesin": {
+            "maximum_ms": 166.505264,
+            "median_ms": 164.568416,
+            "minimum_ms": 163.833049,
+            "pairs": 5320936,
+            "repeats": 11,
+            "samples_ms": [
+              163.891366,
+              163.833049,
+              164.311008,
+              164.568416,
+              164.241224,
+              166.505264,
+              165.372578,
+              164.811874,
+              164.518071,
+              165.301942,
+              164.574546
+            ],
+            "speedup_over_one_thread": 1.0,
+            "warmup_runs": 7
+          },
+          "vesin_over_tonari": 1.1183900942779916
+        },
+        "2": {
+          "tonari": {
+            "maximum_ms": 85.415415,
+            "median_ms": 81.049089,
+            "minimum_ms": 80.802687,
+            "pairs": 5320936,
+            "repeats": 11,
+            "samples_ms": [
+              81.352385,
+              80.851862,
+              81.007256,
+              81.200087,
+              80.881205,
+              81.067937,
+              81.049089,
+              81.172034,
+              85.415415,
+              80.802687,
+              80.855267
+            ],
+            "speedup_over_one_thread": 1.8155367298452916,
+            "warmup_runs": 13
+          },
+          "vesin": {
+            "maximum_ms": 228.631367,
+            "median_ms": 226.417782,
+            "minimum_ms": 224.7239,
+            "pairs": 5320936,
+            "repeats": 11,
+            "samples_ms": [
+              226.379423,
+              224.7239,
+              225.001989,
+              224.944863,
+              226.898596,
+              226.417782,
+              228.132695,
+              226.76849,
+              228.631367,
+              226.208707,
+              226.497142
+            ],
+            "speedup_over_one_thread": 0.7268352094359798,
+            "warmup_runs": 5
+          },
+          "vesin_over_tonari": 2.793588241318789
+        },
+        "4": {
+          "tonari": {
+            "maximum_ms": 60.183074,
+            "median_ms": 59.815059,
+            "minimum_ms": 53.330924,
+            "pairs": 5320936,
+            "repeats": 11,
+            "samples_ms": [
+              60.046347,
+              59.655028,
+              59.735008,
+              59.867949,
+              59.815059,
+              60.183074,
+              59.922842,
+              59.873317,
+              53.330924,
+              53.483463,
+              53.36184
+            ],
+            "speedup_over_one_thread": 2.460042679218957,
+            "warmup_runs": 17
+          },
+          "vesin": {
+            "maximum_ms": 258.912238,
+            "median_ms": 256.402626,
+            "minimum_ms": 253.397221,
+            "pairs": 5320936,
+            "repeats": 11,
+            "samples_ms": [
+              256.714386,
+              256.402626,
+              255.570253,
+              256.681477,
+              255.423793,
+              254.509135,
+              256.069285,
+              258.912238,
+              253.397221,
+              258.843534,
+              258.491094
+            ],
+            "speedup_over_one_thread": 0.6418359225384845,
+            "warmup_runs": 4
+          },
+          "vesin_over_tonari": 4.2865898702866785
+        },
+        "8": {
+          "tonari": {
+            "maximum_ms": 43.845408,
+            "median_ms": 42.67158,
+            "minimum_ms": 42.277046,
+            "pairs": 5320936,
+            "repeats": 11,
+            "samples_ms": [
+              42.995308,
+              43.845408,
+              42.883989,
+              42.67158,
+              43.223191,
+              42.553933,
+              42.766793,
+              42.661254,
+              42.284187,
+              42.277046,
+              42.524087
+            ],
+            "speedup_over_one_thread": 3.448374726222933,
+            "warmup_runs": 24
+          },
+          "vesin": {
+            "maximum_ms": 260.598662,
+            "median_ms": 258.728396,
+            "minimum_ms": 256.716132,
+            "pairs": 5320936,
+            "repeats": 11,
+            "samples_ms": [
+              256.716132,
+              259.537993,
+              258.985822,
+              257.860787,
+              259.201317,
+              259.60819,
+              258.345067,
+              260.598662,
+              258.728396,
+              258.393191,
+              257.005631
+            ],
+            "speedup_over_one_thread": 0.6360663094745891,
+            "warmup_runs": 4
+          },
+          "vesin_over_tonari": 6.06324856028298
+        }
+      },
+      "name": "qmugs_population_4096_structure_batch",
+      "source_id_count": 4096,
+      "source_id_sha256": "d518faf72d706e71c2517702e1e36a0fe28eaf47a88b162e698cbe1db7ac05d9",
+      "source_ids": null,
+      "validation": {
+        "atoms": 226648,
+        "backend_thread_key_sha256": {
+          "1": {
+            "tonari": "61e4d15a85cdce7155df88dc9cf961f16ef1ffd1141a40c693164115aa45233c",
+            "vesin": "61e4d15a85cdce7155df88dc9cf961f16ef1ffd1141a40c693164115aa45233c"
+          },
+          "2": {
+            "tonari": "61e4d15a85cdce7155df88dc9cf961f16ef1ffd1141a40c693164115aa45233c",
+            "vesin": "61e4d15a85cdce7155df88dc9cf961f16ef1ffd1141a40c693164115aa45233c"
+          },
+          "4": {
+            "tonari": "61e4d15a85cdce7155df88dc9cf961f16ef1ffd1141a40c693164115aa45233c",
+            "vesin": "61e4d15a85cdce7155df88dc9cf961f16ef1ffd1141a40c693164115aa45233c"
+          },
+          "8": {
+            "tonari": "61e4d15a85cdce7155df88dc9cf961f16ef1ffd1141a40c693164115aa45233c",
+            "vesin": "61e4d15a85cdce7155df88dc9cf961f16ef1ffd1141a40c693164115aa45233c"
+          }
+        },
+        "canonical_key_sha256": "61e4d15a85cdce7155df88dc9cf961f16ef1ffd1141a40c693164115aa45233c",
+        "exact_key_match": true,
+        "pairs": 5320936,
+        "structures": 4096,
+        "thread_count_key_match": {
+          "1": true,
+          "2": true,
+          "4": true,
+          "8": true
+        }
+      }
+    },
+    {
+      "measurements": {
+        "1": {
+          "tonari": {
+            "maximum_ms": 25.74124,
+            "median_ms": 25.678667,
+            "minimum_ms": 25.64167,
+            "pairs": 380928,
+            "repeats": 11,
+            "samples_ms": [
+              25.64167,
+              25.74124,
+              25.69452,
+              25.69425,
+              25.691516,
+              25.679377,
+              25.668561,
+              25.653458,
+              25.673288,
+              25.678667,
+              25.656653
+            ],
+            "speedup_over_one_thread": 1.0,
+            "warmup_runs": 39
+          },
+          "vesin": {
+            "maximum_ms": 11.910349,
+            "median_ms": 11.879161,
+            "minimum_ms": 11.848055,
+            "pairs": 380928,
+            "repeats": 11,
+            "samples_ms": [
+              11.874605,
+              11.910119,
+              11.908075,
+              11.910349,
+              11.861155,
+              11.848055,
+              11.895587,
+              11.865782,
+              11.879161,
+              11.888115,
+              11.850549
+            ],
+            "speedup_over_one_thread": 1.0,
+            "warmup_runs": 84
+          },
+          "vesin_over_tonari": 0.4626081642010467
+        },
+        "2": {
+          "tonari": {
+            "maximum_ms": 16.591419,
+            "median_ms": 16.283536,
+            "minimum_ms": 16.092568,
+            "pairs": 380928,
+            "repeats": 11,
+            "samples_ms": [
+              16.441894,
+              16.283536,
+              16.436967,
+              16.282544,
+              16.092568,
+              16.094502,
+              16.591419,
+              16.17366,
+              16.455115,
+              16.542916,
+              16.157155
+            ],
+            "speedup_over_one_thread": 1.5769711811979903,
+            "warmup_runs": 63
+          },
+          "vesin": {
+            "maximum_ms": 9.099476,
+            "median_ms": 8.871052,
+            "minimum_ms": 8.588226,
+            "pairs": 380928,
+            "repeats": 11,
+            "samples_ms": [
+              8.862258,
+              8.871052,
+              8.588226,
+              8.765592,
+              8.940005,
+              8.885042,
+              8.885593,
+              8.589137,
+              8.778441,
+              8.878352,
+              9.099476
+            ],
+            "speedup_over_one_thread": 1.3390927028722184,
+            "warmup_runs": 134
+          },
+          "vesin_over_tonari": 0.5447865868936574
+        },
+        "4": {
+          "tonari": {
+            "maximum_ms": 13.019009,
+            "median_ms": 12.688962,
+            "minimum_ms": 12.512075,
+            "pairs": 380928,
+            "repeats": 11,
+            "samples_ms": [
+              12.652787,
+              13.019009,
+              12.884587,
+              12.704375,
+              12.552326,
+              12.740029,
+              12.675462,
+              12.593989,
+              12.730996,
+              12.512075,
+              12.688962
+            ],
+            "speedup_over_one_thread": 2.0237011506536153,
+            "warmup_runs": 79
+          },
+          "vesin": {
+            "maximum_ms": 8.583308,
+            "median_ms": 7.045311,
+            "minimum_ms": 6.527892,
+            "pairs": 380928,
+            "repeats": 11,
+            "samples_ms": [
+              7.002848,
+              7.269739,
+              7.000124,
+              6.527892,
+              7.135657,
+              7.925488,
+              8.583308,
+              7.045311,
+              7.32307,
+              6.922857,
+              7.024601
+            ],
+            "speedup_over_one_thread": 1.686108817623523,
+            "warmup_runs": 140
+          },
+          "vesin_over_tonari": 0.5552314681059018
+        },
+        "8": {
+          "tonari": {
+            "maximum_ms": 11.890039,
+            "median_ms": 11.258768,
+            "minimum_ms": 10.092942,
+            "pairs": 380928,
+            "repeats": 11,
+            "samples_ms": [
+              11.258768,
+              11.756347,
+              11.272498,
+              10.652054,
+              10.540466,
+              11.87778,
+              11.829387,
+              10.092942,
+              11.033408,
+              11.036623,
+              11.890039
+            ],
+            "speedup_over_one_thread": 2.280770595859156,
+            "warmup_runs": 94
+          },
+          "vesin": {
+            "maximum_ms": 7.060284,
+            "median_ms": 4.917817,
+            "minimum_ms": 4.724967,
+            "pairs": 380928,
+            "repeats": 11,
+            "samples_ms": [
+              4.917817,
+              4.789314,
+              5.239422,
+              6.29394,
+              7.060284,
+              4.724967,
+              4.774221,
+              5.29824,
+              4.829985,
+              4.858578,
+              4.99281
+            ],
+            "speedup_over_one_thread": 2.415535388974417,
+            "warmup_runs": 195
+          },
+          "vesin_over_tonari": 0.43679885756594333
+        }
+      },
+      "name": "matbench_32768_atom_supercell",
+      "source_id_count": 1,
+      "source_id_sha256": "2492df5d6dcbcb1034db87ee815b9e08609588c7f581e9c8ae3c7ba810d28288",
+      "source_ids": [
+        "CO_8661596785617876616983344__8x8x8"
+      ],
+      "validation": {
+        "atoms": 32768,
+        "backend_thread_key_sha256": {
+          "1": {
+            "tonari": "dd4dfb121d85ae88f1c6c071fe7d112eb76f81a5d2fcfe15bcd06677e0f3064d",
+            "vesin": "dd4dfb121d85ae88f1c6c071fe7d112eb76f81a5d2fcfe15bcd06677e0f3064d"
+          },
+          "2": {
+            "tonari": "dd4dfb121d85ae88f1c6c071fe7d112eb76f81a5d2fcfe15bcd06677e0f3064d",
+            "vesin": "dd4dfb121d85ae88f1c6c071fe7d112eb76f81a5d2fcfe15bcd06677e0f3064d"
+          },
+          "4": {
+            "tonari": "dd4dfb121d85ae88f1c6c071fe7d112eb76f81a5d2fcfe15bcd06677e0f3064d",
+            "vesin": "dd4dfb121d85ae88f1c6c071fe7d112eb76f81a5d2fcfe15bcd06677e0f3064d"
+          },
+          "8": {
+            "tonari": "dd4dfb121d85ae88f1c6c071fe7d112eb76f81a5d2fcfe15bcd06677e0f3064d",
+            "vesin": "dd4dfb121d85ae88f1c6c071fe7d112eb76f81a5d2fcfe15bcd06677e0f3064d"
+          }
+        },
+        "canonical_key_sha256": "dd4dfb121d85ae88f1c6c071fe7d112eb76f81a5d2fcfe15bcd06677e0f3064d",
+        "exact_key_match": true,
+        "pairs": 380928,
+        "structures": 1,
+        "thread_count_key_match": {
+          "1": true,
+          "2": true,
+          "4": true,
+          "8": true
+        }
+      }
+    }
+  ]
+}

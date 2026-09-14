@@ -16,12 +16,14 @@ from matplotlib.ticker import FixedLocator, MaxNLocator
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = Path(__file__).resolve().parent
 RESULTS = (
-    ROOT / "benchmarks/results/threadripper-pro-9975wx-cpu-thread-scaling-20260914.json"
+    ROOT
+    / "benchmarks/results/threadripper-pro-9975wx-cpu-thread-scaling-numpy-20260914.json"
 )
 
 
 def main() -> None:
     report = json.loads(RESULTS.read_text())
+    assert report["method"]["array_api"].startswith("NumPy")
     for filename in ("Geist-Regular.ttf", "Geist-Bold.ttf"):
         font_manager.fontManager.addfont(OUTPUT / "fonts/geist" / filename)
     plt.rcParams.update(
@@ -78,7 +80,7 @@ def main() -> None:
         maximum = 0.0
         for backend, label, color, marker in (
             ("tonari", "tonari", "#087F8C", "o"),
-            ("vesin", "vesin-torch", "#D46A39", "s"),
+            ("vesin", "vesin", "#D46A39", "s"),
         ):
             medians = np.array(
                 [workload["measurements"][str(n)][backend]["median_ms"] for n in counts]
@@ -102,13 +104,19 @@ def main() -> None:
                     workload["name"] == "matbench_32768_atom_supercell"
                 )
                 if n == 1:
-                    upper = not (
-                        backend == "vesin" and workload["name"].startswith("qmugs")
-                    )
+                    upper = True
+                    if workload["name"].startswith("qmugs"):
+                        other = "vesin" if backend == "tonari" else "tonari"
+                        upper = (
+                            median > workload["measurements"]["1"][other]["median_ms"]
+                        )
                 ax.annotate(
                     f"{median:.{precision}f} ms",
                     (n, median),
-                    xytext=(-8 if n == 8 else 0, 12 if upper else -22),
+                    xytext=(
+                        -8 if n == 8 else 0,
+                        12 if upper else -34 if n == 1 else -22,
+                    ),
                     textcoords="offset points",
                     ha="right" if n == 8 else "center",
                     fontsize=10,
