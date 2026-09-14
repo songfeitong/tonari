@@ -69,6 +69,7 @@ Synchronized latency for one complete batch on an NVIDIA RTX PRO 6000 Blackwell 
 | Structures per batch | QMugs: tonari | QMugs: Vesin | Matbench: tonari | Matbench: Vesin |
 | --: | --: | --: | --: | --: |
 | 8 | 0.105 ms | 1.882 ms | 0.118 ms | 2.346 ms |
+| 16 | 0.112 ms | 3.727 ms | 0.211 ms | 4.824 ms |
 | 32 | 0.118 ms | 7.383 ms | 0.268 ms | 9.312 ms |
 | 64 | 0.115 ms | 14.084 ms | 0.417 ms | 19.108 ms |
 | 128 | 0.130 ms | 28.085 ms | 0.705 ms | 38.314 ms |
@@ -76,7 +77,7 @@ Synchronized latency for one complete batch on an NVIDIA RTX PRO 6000 Blackwell 
 | 512 | 0.226 ms | 112.198 ms | 2.779 ms | 152.629 ms |
 | 1024 | 0.349 ms | 225.422 ms | 7.513 ms | 303.111 ms |
 
-Measured on 2026-09-14: 16 sampled batches per size, 7 timed calls per backend and batch. Values are medians across per-batch medians; all 224 batches exactly match Vesin pair keys. This compares native batching with a per-structure API. See [benchmark methodology, variability, and reproducible records](docs/benchmark.md#cuda-batch-size-scaling2026-09-14).
+Measured on 2026-09-14: 16 sampled batches per size, 7 timed calls per backend and batch. Values are medians across per-batch medians; all 256 batches exactly match Vesin pair keys. This compares native batching with a per-structure API. See [benchmark methodology, variability, and reproducible records](docs/benchmark.md#cuda-batch-size-scaling2026-09-14).
 
 ## Install from source
 

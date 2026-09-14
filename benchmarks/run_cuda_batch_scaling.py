@@ -39,7 +39,10 @@ def summary(values: list[float]) -> dict[str, float]:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--batch-sizes", nargs="+", type=int, default=[8, 32, 64, 128, 256, 512, 1024]
+        "--batch-sizes",
+        nargs="+",
+        type=int,
+        default=[8, 16, 32, 64, 128, 256, 512, 1024],
     )
     parser.add_argument("--batches", type=int, default=16)
     parser.add_argument("--repeats", type=int, default=7)

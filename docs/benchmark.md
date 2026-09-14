@@ -12,7 +12,7 @@ CPU 单线程对比固定为单核、单线程；多线程 scaling 另行标明�
 
 ## CUDA batch-size scaling（2026-09-14）
 
-这组测量回答“一个 batch 构图需要多久”，覆盖 QMugs population 和 Matbench 的 `batch_size=8/32/64/128/256/512/1024`。硬件为 NVIDIA RTX PRO 6000 Blackwell，geometry 为 float32，cutoff 为 5 Å，输出为 `PS`，使用 `algorithm="auto"`、full list、无 zero-shift self、无 sorting。Tonari 在一次 native 调用中处理整个 batch；Vesin 0.6.1 使用 CUDA 逐结构调用，包含 batch index offset 和输出拼接成本。
+这组测量回答“一个 batch 构图需要多久”，覆盖 QMugs population 和 Matbench 的 `batch_size=8/16/32/64/128/256/512/1024`。硬件为 NVIDIA RTX PRO 6000 Blackwell，geometry 为 float32，cutoff 为 5 Å，输出为 `PS`，使用 `algorithm="auto"`、full list、无 zero-shift self、无 sorting。Tonari 在一次 native 调用中处理整个 batch；Vesin 0.6.1 使用 CUDA 逐结构调用，包含 batch index offset 和输出拼接成本。
 
 每个数据集、每档 batch size 使用 16 个完整 batch。Seed 为 `20260914` 到 `20260929`，各自生成无放回随机排列并取前 B 个结构；同一 seed 在不同 batch size 下使用嵌套前缀。QMugs 从原有 4,096-molecule population sample 取样，Matbench 从原有 1,536-structure sample 取样。不同 batch 之间允许重叠，batch 内不重复；尤其 Matbench 的 bs=1024 不使用 512-structure 尾批。它们是不同组成的 batch 样本，不是 16 份独立数据集。
 
@@ -23,6 +23,7 @@ CPU 单线程对比固定为单核、单线程；多线程 scaling 另行标明�
 | Batch size | tonari，ms（P10–P90） | Vesin CUDA 逐结构调用，ms（P10–P90） | Vesin / tonari |
 | --: | --: | --: | --: |
 | 8 | 0.1049（0.1038–0.1085） | 1.8818（1.8246–1.9440） | 17.9× |
+| 16 | 0.1115（0.1101–0.1147） | 3.7275（3.6515–3.7711） | 33.4× |
 | 32 | 0.1178（0.1058–0.1195） | 7.3834（7.1084–7.4487） | 62.7× |
 | 64 | 0.1150（0.1109–0.1167） | 14.0836（13.9515–14.1730） | 122.5× |
 | 128 | 0.1301（0.1294–0.1310） | 28.0850（27.8990–28.3484） | 215.9× |
@@ -35,6 +36,7 @@ CPU 单线程对比固定为单核、单线程；多线程 scaling 另行标明�
 | Batch size | tonari，ms（P10–P90） | Vesin CUDA 逐结构调用，ms（P10–P90） | Vesin / tonari |
 | --: | --: | --: | --: |
 | 8 | 0.1178（0.1068–0.1944） | 2.3459（2.0458–2.8427） | 19.9× |
+| 16 | 0.2109（0.1460–0.2495） | 4.8244（4.5520–6.0055） | 22.9× |
 | 32 | 0.2678（0.1960–0.3414） | 9.3117（8.9474–10.7066） | 34.8× |
 | 64 | 0.4168（0.3511–0.4949） | 19.1085（18.2073–20.3290） | 45.8× |
 | 128 | 0.7053（0.6234–0.7707） | 38.3143（37.1092–40.0708） | 54.3× |
@@ -42,11 +44,11 @@ CPU 单线程对比固定为单核、单线程；多线程 scaling 另行标明�
 | 512 | 2.7795（2.6816–2.9701） | 152.6286（148.6937–155.1866） | 54.9× |
 | 1024 | 7.5129（7.2910–7.7547） | 303.1113（301.0874–305.1597） | 40.3× |
 
-全部 224 个实测 batch 均与 Vesin 的 pair keys 精确一致，共比较 101,452,168 条 keys；此计数包含重叠抽样，不能解释为同样数量的独立结构或独立邻接关系。
+全部 256 个实测 batch 均与 Vesin 的 pair keys 精确一致，共比较 102,323,440 条 keys；此计数包含重叠抽样，不能解释为同样数量的独立结构或独立邻接关系。
 
 QMugs 从 bs=8 到 1024，batch size 增长 128 倍，tonari 延迟从 0.1049 ms 增至 0.3490 ms，约增长 3.3 倍。Matbench 同一区间从 0.1178 ms 增至 7.5129 ms，约增长 63.8 倍；特别是 bs=512 到 1024 耗时增长约 2.7 倍。这组数据支持原生 batch 相对逐结构 CUDA 调用的优势，但不支持“所有体系的 batch 耗时都近乎不变”的表述；曲线变化的原因需要另外 profiling，不能仅从耗时推断。
 
-完整 batch IDs、原始 samples、P10/P90、pair-key correctness、软件版本、Git revision 和 native binary/data hashes 记录在 [`rtx-pro-6000-blackwell-batch-scaling-20260914.json`](../benchmarks/results/rtx-pro-6000-blackwell-batch-scaling-20260914.json)。下面的历史 epoch、representative batch 和 supercell 表保留各自原始测量，不能与这组新数据拼成同一条曲线；本次没有复测单体系 supercell scaling。
+完整 batch IDs、原始 samples、P10/P90、pair-key correctness、软件版本、Git revision 和 native binary/data hashes 记录在 [`rtx-pro-6000-blackwell-batch-scaling-20260914.json`](../benchmarks/results/rtx-pro-6000-blackwell-batch-scaling-20260914.json)。bs=16 使用相同 binary、seed、输入前缀和计时口径单独补测，原始记录保存在 [`rtx-pro-6000-blackwell-batch-scaling-bs16-20260914.json`](../benchmarks/results/rtx-pro-6000-blackwell-batch-scaling-bs16-20260914.json)，保留独立的测量 revision 与环境信息。下面的历史 epoch、representative batch 和 supercell 表保留各自原始测量，不能与这组新数据拼成同一条曲线；本次没有复测单体系 supercell scaling。
 
 ## CPU 多线程 scaling
 
@@ -177,7 +179,7 @@ benchmarks/run_pair_options_cuda_benchmark.py
 
 ```bash
 CUDA_VISIBLE_DEVICES=0 python -m benchmarks.run_cuda_batch_scaling \
-  --batch-sizes 8 32 64 128 256 512 1024 \
+  --batch-sizes 8 16 32 64 128 256 512 1024 \
   --batches 16 --repeats 7 --warmup 2 --seed 20260914 \
   --output runs/cuda-batch-scaling-20260914.json
 ```

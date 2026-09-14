@@ -1,0 +1,2149 @@
+{
+  "datasets": {
+    "matbench": {
+      "cache_sha256": "d43ff90f10c63c05f645b6a0a7b4ba825b613af37653e7dc1e42b52b5bbd5e55",
+      "manifest_sha256": "3475c391b8def6bf599a57a7f1c938113eabcbfb0f2b89f7d31da648c6f7b413",
+      "structures": 1536
+    },
+    "qmugs_population": {
+      "cache_sha256": "bc5bce3e8173f5c8dd823b1dcb37d0dcb8ab06d7f81949f8d297f733a39b4d73",
+      "manifest_sha256": "a764a23b001873f5b7f879212fcc324acfa57fa3d9918abdbba295d0664b462f",
+      "structures": 4096
+    }
+  },
+  "environment": {
+    "benchmark_script_sha256": "82ea0506bce1f07973799a1e8bd4bccedba4ed3e9dea4b58fabbd3db3916d027",
+    "compute_capability": [
+      12,
+      0
+    ],
+    "cuda_extension_sha256": "cb9d1f3981395f7739cc3ba350389a957c937a5716d6dc3c0b628816eef97e24",
+    "gpu": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+    "nvidia_smi": "index, uuid, name, driver_version, pstate, temperature.gpu, power.draw [W]\n0, GPU-8b867b56-cb95-6fdd-c078-b84eeb511cf3, NVIDIA RTX PRO 6000 Blackwell Workstation Edition, 595.71.05, P8, 29, 16.18 W\n1, GPU-6faee3ab-4ee3-d2ed-0c05-3288eb4815f2, NVIDIA RTX PRO 6000 Blackwell Workstation Edition, 595.71.05, P8, 30, 4.50 W\n",
+    "platform": "Linux-7.0.0-28-generic-x86_64-with-glibc2.39",
+    "python": "3.12.13",
+    "repository_revision": "d20da4945d83112929d923b00c2585fd2667e704",
+    "repository_worktree_clean": true,
+    "timestamp_utc": "2026-09-14T04:32:07.173994+00:00",
+    "torch": "2.12.1+cu130",
+    "torch_cuda": "13.0",
+    "torch_num_threads": 1,
+    "vesin_version": "0.6.1"
+  },
+  "method": {
+    "algorithm": "auto",
+    "batch_sizes": [
+      16
+    ],
+    "batches_per_size": 16,
+    "cutoff_angstrom": 5.0,
+    "data_loading_and_h2d_timed": false,
+    "dtype": "float32",
+    "half_list": false,
+    "include_self": false,
+    "quantities": "PS",
+    "repeats_per_batch": 7,
+    "sampling": "Each seed generates a random permutation without replacement; take its batch-size prefix. Same seeds across sizes, nested inputs; overlap between batches is allowed. No partial batches.",
+    "seed": 20260914,
+    "sorted": false,
+    "statistic": "Median across per-batch latency medians; p10/p90 across those medians describe input-composition variation, not a confidence interval.",
+    "timing": "perf_counter_ns around one public API call, CUDA synchronize before and after; output release outside timing; alternating backend order across repeats",
+    "validation": "Every measured batch exact-compared with Vesin using sorted (source,target,Sx,Sy,Sz) keys outside timing",
+    "vesin": "reused NeighborList; CUDA per-structure compute with batch offsets and concatenation included",
+    "warmup_calls_per_backend_per_batch": 2
+  },
+  "workloads": [
+    {
+      "backends": {
+        "production_cuda": {
+          "maximum_ms": 0.114994,
+          "median_ms": 0.1115285,
+          "minimum_ms": 0.109596,
+          "p10_ms": 0.110121,
+          "p90_ms": 0.1147235
+        },
+        "vesin_gpu_per_structure": {
+          "maximum_ms": 3.794001,
+          "median_ms": 3.7274510000000003,
+          "minimum_ms": 3.587059,
+          "p10_ms": 3.6515459999999997,
+          "p90_ms": 3.771102
+        }
+      },
+      "batch_size": 16,
+      "batches": [
+        {
+          "atoms": 759,
+          "backends": {
+            "production_cuda": {
+              "maximum_ms": 0.122204,
+              "median_ms": 0.114994,
+              "minimum_ms": 0.094092,
+              "p10_ms": 0.0955038,
+              "p90_ms": 0.121862,
+              "samples_ms": [
+                0.121634,
+                0.122204,
+                0.096445,
+                0.114994,
+                0.096936,
+                0.11935,
+                0.094092
+              ]
+            },
+            "vesin_gpu_per_structure": {
+              "maximum_ms": 4.194336,
+              "median_ms": 3.7141,
+              "minimum_ms": 3.695031,
+              "p10_ms": 3.6992856,
+              "p90_ms": 3.9158934000000003,
+              "samples_ms": [
+                4.194336,
+                3.7141,
+                3.716624,
+                3.702122,
+                3.730265,
+                3.695031,
+                3.705907
+              ]
+            }
+          },
+          "seed": 20260914,
+          "source_id_sha256": "9a12394ac79ba0267835348785a0f48149f50a4755fb3292170cacd3fbfacd7c",
+          "source_ids": [
+            "CHEMBL3093991/conf_02",
+            "CHEMBL3351031/conf_01",
+            "CHEMBL2287059/conf_02",
+            "CHEMBL462299/conf_01",
+            "CHEMBL2414197/conf_02",
+            "CHEMBL476462/conf_00",
+            "CHEMBL201139/conf_01",
+            "CHEMBL1870010/conf_02",
+            "CHEMBL66592/conf_01",
+            "CHEMBL326797/conf_01",
+            "CHEMBL3354884/conf_02",
+            "CHEMBL3695462/conf_00",
+            "CHEMBL2012112/conf_01",
+            "CHEMBL370565/conf_01",
+            "CHEMBL3618458/conf_02",
+            "CHEMBL1587521/conf_00"
+          ],
+          "structures": 16,
+          "validation": {
+            "batches": 1,
+            "exact_key_match": true,
+            "pairs": 17468,
+            "structures": 16
+          }
+        },
+        {
+          "atoms": 829,
+          "backends": {
+            "production_cuda": {
+              "maximum_ms": 0.120682,
+              "median_ms": 0.114884,
+              "minimum_ms": 0.093582,
+              "p10_ms": 0.0944706,
+              "p90_ms": 0.1182064,
+              "samples_ms": [
+                0.120682,
+                0.095063,
+                0.116556,
+                0.096035,
+                0.115514,
+                0.093582,
+                0.114884
+              ]
+            },
+            "vesin_gpu_per_structure": {
+              "maximum_ms": 3.830166,
+              "median_ms": 3.736424,
+              "minimum_ms": 3.726019,
+              "p10_ms": 3.7276228000000002,
+              "p90_ms": 3.7836432,
+              "samples_ms": [
+                3.728692,
+                3.830166,
+                3.726019,
+                3.730025,
+                3.740199,
+                3.752628,
+                3.736424
+              ]
+            }
+          },
+          "seed": 20260915,
+          "source_id_sha256": "a5f8b0be035650988eaf64103581c538bddff249aae737578b800d15f6f6eef9",
+          "source_ids": [
+            "CHEMBL3656710/conf_02",
+            "CHEMBL228998/conf_00",
+            "CHEMBL108727/conf_02",
+            "CHEMBL2429962/conf_02",
+            "CHEMBL1887754/conf_00",
+            "CHEMBL1701471/conf_02",
+            "CHEMBL2112239/conf_02",
+            "CHEMBL3891463/conf_01",
+            "CHEMBL190983/conf_02",
+            "CHEMBL3084480/conf_00",
+            "CHEMBL3682555/conf_01",
+            "CHEMBL1499286/conf_02",
+            "CHEMBL3661216/conf_02",
+            "CHEMBL3663616/conf_02",
+            "CHEMBL11414/conf_01",
+            "CHEMBL2170917/conf_01"
+          ],
+          "structures": 16,
+          "validation": {
+            "batches": 1,
+            "exact_key_match": true,
+            "pairs": 18456,
+            "structures": 16
+          }
+        },
+        {
+          "atoms": 993,
+          "backends": {
+            "production_cuda": {
+              "maximum_ms": 0.118679,
+              "median_ms": 0.113462,
+              "minimum_ms": 0.093862,
+              "p10_ms": 0.093904,
+              "p90_ms": 0.1161074,
+              "samples_ms": [
+                0.118679,
+                0.114272,
+                0.094343,
+                0.114393,
+                0.093862,
+                0.113462,
+                0.093932
+              ]
+            },
+            "vesin_gpu_per_structure": {
+              "maximum_ms": 3.751937,
+              "median_ms": 3.734902,
+              "minimum_ms": 3.717796,
+              "p10_ms": 3.723709,
+              "p90_ms": 3.7467631999999997,
+              "samples_ms": [
+                3.734902,
+                3.728272,
+                3.743314,
+                3.727651,
+                3.738848,
+                3.717796,
+                3.751937
+              ]
+            }
+          },
+          "seed": 20260916,
+          "source_id_sha256": "3230cdd3a4a275210a7d04d622c763c08307f6b403dcad9e66e63488dc7ae8ba",
+          "source_ids": [
+            "CHEMBL1093948/conf_01",
+            "CHEMBL575154/conf_01",
+            "CHEMBL3641839/conf_02",
+            "CHEMBL3640451/conf_01",
+            "CHEMBL3134265/conf_02",
+            "CHEMBL3261023/conf_02",
+            "CHEMBL4280367/conf_00",
+            "CHEMBL142478/conf_01",
+            "CHEMBL1916001/conf_00",
+            "CHEMBL1688618/conf_02",
+            "CHEMBL3669681/conf_01",
+            "CHEMBL2164582/conf_02",
+            "CHEMBL461209/conf_01",
+            "CHEMBL2234018/conf_02",
+            "CHEMBL2429962/conf_02",
+            "CHEMBL3642688/conf_01"
+          ],
+          "structures": 16,
+          "validation": {
+            "batches": 1,
+            "exact_key_match": true,
+            "pairs": 24562,
+            "structures": 16
+          }
+        },
+        {
+          "atoms": 808,
+          "backends": {
+            "production_cuda": {
+              "maximum_ms": 0.118539,
+              "median_ms": 0.11225,
+              "minimum_ms": 0.093621,
+              "p10_ms": 0.093723,
+              "p90_ms": 0.118335,
+              "samples_ms": [
+                0.118199,
+                0.093791,
+                0.11225,
+                0.093621,
+                0.118539,
+                0.094182,
+                0.116115
+              ]
+            },
+            "vesin_gpu_per_structure": {
+              "maximum_ms": 4.275138,
+              "median_ms": 3.673539,
+              "minimum_ms": 3.657665,
+              "p10_ms": 3.6579956,
+              "p90_ms": 3.9283362,
+              "samples_ms": [
+                3.657665,
+                3.697135,
+                3.659999,
+                3.68723,
+                3.658216,
+                4.275138,
+                3.673539
+              ]
+            }
+          },
+          "seed": 20260917,
+          "source_id_sha256": "aa9928358ef95922204bd619b5fd60e04c27804a047e9c3c8da5ff26e2491b1d",
+          "source_ids": [
+            "CHEMBL3298147/conf_01",
+            "CHEMBL3686266/conf_02",
+            "CHEMBL1651353/conf_00",
+            "CHEMBL1632490/conf_01",
+            "CHEMBL269330/conf_02",
+            "CHEMBL416535/conf_00",
+            "CHEMBL2348192/conf_01",
+            "CHEMBL3650750/conf_01",
+            "CHEMBL3652579/conf_00",
+            "CHEMBL4076484/conf_01",
+            "CHEMBL51234/conf_00",
+            "CHEMBL214716/conf_02",
+            "CHEMBL2153183/conf_00",
+            "CHEMBL3693279/conf_02",
+            "CHEMBL176797/conf_00",
+            "CHEMBL39284/conf_02"
+          ],
+          "structures": 16,
+          "validation": {
+            "batches": 1,
+            "exact_key_match": true,
+            "pairs": 18482,
+            "structures": 16
+          }
+        },
+        {
+          "atoms": 826,
+          "backends": {
+            "production_cuda": {
+              "maximum_ms": 0.120712,
+              "median_ms": 0.110036,
+              "minimum_ms": 0.09239,
+              "p10_ms": 0.092534,
+              "p90_ms": 0.1161334,
+              "samples_ms": [
+                0.120712,
+                0.113081,
+                0.09239,
+                0.11293,
+                0.09263,
+                0.110036,
+                0.097247
+              ]
+            },
+            "vesin_gpu_per_structure": {
+              "maximum_ms": 3.786289,
+              "median_ms": 3.725738,
+              "minimum_ms": 3.699268,
+              "p10_ms": 3.7003072,
+              "p90_ms": 3.750331,
+              "samples_ms": [
+                3.726129,
+                3.715683,
+                3.786289,
+                3.701,
+                3.726359,
+                3.699268,
+                3.725738
+              ]
+            }
+          },
+          "seed": 20260918,
+          "source_id_sha256": "c752eaf590ca0b8eaae8f75d4314e218ff82c385efdd0bbc90163f9f7f2b805d",
+          "source_ids": [
+            "CHEMBL1651353/conf_00",
+            "CHEMBL1242569/conf_02",
+            "CHEMBL187399/conf_02",
+            "CHEMBL3237532/conf_01",
+            "CHEMBL3693744/conf_01",
+            "CHEMBL3104182/conf_02",
+            "CHEMBL2391587/conf_02",
+            "CHEMBL602280/conf_00",
+            "CHEMBL2324409/conf_02",
+            "CHEMBL3910756/conf_02",
+            "CHEMBL2011557/conf_01",
+            "CHEMBL4159022/conf_00",
+            "CHEMBL3652727/conf_02",
+            "CHEMBL3717729/conf_00",
+            "CHEMBL593526/conf_00",
+            "CHEMBL3931946/conf_00"
+          ],
+          "structures": 16,
+          "validation": {
+            "batches": 1,
+            "exact_key_match": true,
+            "pairs": 18098,
+            "structures": 16
+          }
+        },
+        {
+          "atoms": 842,
+          "backends": {
+            "production_cuda": {
+              "maximum_ms": 0.119541,
+              "median_ms": 0.110206,
+              "minimum_ms": 0.09261,
+              "p10_ms": 0.0931752,
+              "p90_ms": 0.1158696,
+              "samples_ms": [
+                0.119541,
+                0.095654,
+                0.113422,
+                0.09261,
+                0.112801,
+                0.093552,
+                0.110206
+              ]
+            },
+            "vesin_gpu_per_structure": {
+              "maximum_ms": 3.777977,
+              "median_ms": 3.721071,
+              "minimum_ms": 3.70058,
+              "p10_ms": 3.7010785999999998,
+              "p90_ms": 3.7528106,
+              "samples_ms": [
+                3.777977,
+                3.736033,
+                3.710445,
+                3.728222,
+                3.70058,
+                3.721071,
+                3.701411
+              ]
+            }
+          },
+          "seed": 20260919,
+          "source_id_sha256": "ee76b8cc40287aff0504597bbb66930e784c332e0fbac5697c3ef68a85ae0120",
+          "source_ids": [
+            "CHEMBL213784/conf_02",
+            "CHEMBL589800/conf_01",
+            "CHEMBL3681445/conf_02",
+            "CHEMBL66673/conf_00",
+            "CHEMBL372670/conf_01",
+            "CHEMBL21545/conf_01",
+            "CHEMBL2063252/conf_01",
+            "CHEMBL239052/conf_01",
+            "CHEMBL3680225/conf_02",
+            "CHEMBL1571605/conf_00",
+            "CHEMBL1259176/conf_01",
+            "CHEMBL594537/conf_01",
+            "CHEMBL2321951/conf_00",
+            "CHEMBL325526/conf_00",
+            "CHEMBL1688251/conf_02",
+            "CHEMBL53077/conf_02"
+          ],
+          "structures": 16,
+          "validation": {
+            "batches": 1,
+            "exact_key_match": true,
+            "pairs": 20130,
+            "structures": 16
+          }
+        },
+        {
+          "atoms": 992,
+          "backends": {
+            "production_cuda": {
+              "maximum_ms": 0.120813,
+              "median_ms": 0.111949,
+              "minimum_ms": 0.09227,
+              "p10_ms": 0.09254659999999999,
+              "p90_ms": 0.1205424,
+              "samples_ms": [
+                0.120813,
+                0.120362,
+                0.094302,
+                0.111949,
+                0.09227,
+                0.114353,
+                0.092731
+              ]
+            },
+            "vesin_gpu_per_structure": {
+              "maximum_ms": 3.893381,
+              "median_ms": 3.718497,
+              "minimum_ms": 3.687861,
+              "p10_ms": 3.6923496,
+              "p90_ms": 3.8186762,
+              "samples_ms": [
+                3.893381,
+                3.701692,
+                3.725408,
+                3.695342,
+                3.718497,
+                3.687861,
+                3.768873
+              ]
+            }
+          },
+          "seed": 20260920,
+          "source_id_sha256": "2ce4db9a3590885bb78c267ac07b842e2af16fd35b18ccf90018b97b594a07fc",
+          "source_ids": [
+            "CHEMBL3912295/conf_02",
+            "CHEMBL1642856/conf_02",
+            "CHEMBL3677360/conf_02",
+            "CHEMBL1630118/conf_02",
+            "CHEMBL3099596/conf_01",
+            "CHEMBL80836/conf_01",
+            "CHEMBL4103042/conf_02",
+            "CHEMBL2153183/conf_00",
+            "CHEMBL3398469/conf_01",
+            "CHEMBL3950483/conf_01",
+            "CHEMBL274414/conf_02",
+            "CHEMBL2323413/conf_00",
+            "CHEMBL3945572/conf_00",
+            "CHEMBL189463/conf_00",
+            "CHEMBL3091583/conf_01",
+            "CHEMBL3787317/conf_02"
+          ],
+          "structures": 16,
+          "validation": {
+            "batches": 1,
+            "exact_key_match": true,
+            "pairs": 23318,
+            "structures": 16
+          }
+        },
+        {
+          "atoms": 869,
+          "backends": {
+            "production_cuda": {
+              "maximum_ms": 0.116406,
+              "median_ms": 0.11237,
+              "minimum_ms": 0.091889,
+              "p10_ms": 0.091943,
+              "p90_ms": 0.114633,
+              "samples_ms": [
+                0.116406,
+                0.094042,
+                0.11252,
+                0.091979,
+                0.11237,
+                0.091889,
+                0.113451
+              ]
+            },
+            "vesin_gpu_per_structure": {
+              "maximum_ms": 3.702964,
+              "median_ms": 3.629553,
+              "minimum_ms": 3.618957,
+              "p10_ms": 3.6192036,
+              "p90_ms": 3.6659596000000003,
+              "samples_ms": [
+                3.618957,
+                3.631035,
+                3.6211,
+                3.702964,
+                3.619368,
+                3.64129,
+                3.629553
+              ]
+            }
+          },
+          "seed": 20260921,
+          "source_id_sha256": "ba80fb6d35523c2aa0007b0e1f8a6e1bf4451145327fc18ebbe58056dc18efd7",
+          "source_ids": [
+            "CHEMBL200643/conf_01",
+            "CHEMBL3680588/conf_02",
+            "CHEMBL3703502/conf_02",
+            "CHEMBL488313/conf_00",
+            "CHEMBL3927231/conf_02",
+            "CHEMBL2440651/conf_02",
+            "CHEMBL4161755/conf_00",
+            "CHEMBL210244/conf_01",
+            "CHEMBL1797445/conf_01",
+            "CHEMBL22071/conf_02",
+            "CHEMBL3104182/conf_02",
+            "CHEMBL478533/conf_01",
+            "CHEMBL3682637/conf_01",
+            "CHEMBL38565/conf_02",
+            "CHEMBL179922/conf_02",
+            "CHEMBL3959799/conf_00"
+          ],
+          "structures": 16,
+          "validation": {
+            "batches": 1,
+            "exact_key_match": true,
+            "pairs": 19746,
+            "structures": 16
+          }
+        },
+        {
+          "atoms": 928,
+          "backends": {
+            "production_cuda": {
+              "maximum_ms": 0.116456,
+              "median_ms": 0.111269,
+              "minimum_ms": 0.09286,
+              "p10_ms": 0.09290799999999999,
+              "p90_ms": 0.1158248,
+              "samples_ms": [
+                0.116456,
+                0.114463,
+                0.094012,
+                0.115404,
+                0.09294,
+                0.111269,
+                0.09286
+              ]
+            },
+            "vesin_gpu_per_structure": {
+              "maximum_ms": 3.748272,
+              "median_ms": 3.698958,
+              "minimum_ms": 3.68124,
+              "p10_ms": 3.6821958,
+              "p90_ms": 3.7279314,
+              "samples_ms": [
+                3.701802,
+                3.748272,
+                3.714371,
+                3.68124,
+                3.693219,
+                3.682833,
+                3.698958
+              ]
+            }
+          },
+          "seed": 20260922,
+          "source_id_sha256": "26365a026ecacd6dd59ff92a80a76cee3442d6f21f3619c4280a870f0b006894",
+          "source_ids": [
+            "CHEMBL3885360/conf_02",
+            "CHEMBL4169670/conf_02",
+            "CHEMBL2012112/conf_01",
+            "CHEMBL1430538/conf_01",
+            "CHEMBL3814494/conf_00",
+            "CHEMBL3968739/conf_00",
+            "CHEMBL3675559/conf_02",
+            "CHEMBL4207355/conf_01",
+            "CHEMBL250928/conf_01",
+            "CHEMBL3684491/conf_02",
+            "CHEMBL3984255/conf_02",
+            "CHEMBL1914835/conf_01",
+            "CHEMBL1923130/conf_00",
+            "CHEMBL2181048/conf_00",
+            "CHEMBL2323653/conf_02",
+            "CHEMBL2331669/conf_00"
+          ],
+          "structures": 16,
+          "validation": {
+            "batches": 1,
+            "exact_key_match": true,
+            "pairs": 21914,
+            "structures": 16
+          }
+        },
+        {
+          "atoms": 952,
+          "backends": {
+            "production_cuda": {
+              "maximum_ms": 0.118699,
+              "median_ms": 0.111579,
+              "minimum_ms": 0.09215,
+              "p10_ms": 0.0929912,
+              "p90_ms": 0.1173592,
+              "samples_ms": [
+                0.118699,
+                0.095294,
+                0.113942,
+                0.093552,
+                0.116466,
+                0.09215,
+                0.111579
+              ]
+            },
+            "vesin_gpu_per_structure": {
+              "maximum_ms": 3.764918,
+              "median_ms": 3.750185,
+              "minimum_ms": 3.732849,
+              "p10_ms": 3.7338942,
+              "p90_ms": 3.7631684,
+              "samples_ms": [
+                3.738377,
+                3.761893,
+                3.764918,
+                3.750185,
+                3.734591,
+                3.762002,
+                3.732849
+              ]
+            }
+          },
+          "seed": 20260923,
+          "source_id_sha256": "c4b5352dad92afb299552b34de6c2cd793bc87083f60fb9ae941bffd50ae8960",
+          "source_ids": [
+            "CHEMBL3645720/conf_00",
+            "CHEMBL103119/conf_00",
+            "CHEMBL3925057/conf_01",
+            "CHEMBL2376167/conf_01",
+            "CHEMBL484742/conf_01",
+            "CHEMBL3237532/conf_01",
+            "CHEMBL4162344/conf_02",
+            "CHEMBL107140/conf_00",
+            "CHEMBL4292369/conf_02",
+            "CHEMBL597115/conf_02",
+            "CHEMBL3601335/conf_02",
+            "CHEMBL1078934/conf_02",
+            "CHEMBL334107/conf_01",
+            "CHEMBL3924016/conf_00",
+            "CHEMBL110076/conf_01",
+            "CHEMBL1946955/conf_00"
+          ],
+          "structures": 16,
+          "validation": {
+            "batches": 1,
+            "exact_key_match": true,
+            "pairs": 22710,
+            "structures": 16
+          }
+        },
+        {
+          "atoms": 962,
+          "backends": {
+            "production_cuda": {
+              "maximum_ms": 0.118329,
+              "median_ms": 0.111288,
+              "minimum_ms": 0.092349,
+              "p10_ms": 0.0926136,
+              "p90_ms": 0.11655,
+              "samples_ms": [
+                0.115364,
+                0.118329,
+                0.093652,
+                0.111288,
+                0.09279,
+                0.113091,
+                0.092349
+              ]
+            },
+            "vesin_gpu_per_structure": {
+              "maximum_ms": 3.854202,
+              "median_ms": 3.794001,
+              "minimum_ms": 3.781752,
+              "p10_ms": 3.783255,
+              "p90_ms": 3.8217888,
+              "samples_ms": [
+                3.796165,
+                3.781752,
+                3.80018,
+                3.785018,
+                3.854202,
+                3.784257,
+                3.794001
+              ]
+            }
+          },
+          "seed": 20260924,
+          "source_id_sha256": "5db28693011450c640880c0a90db611ea7305109714594b5797e46195d5df230",
+          "source_ids": [
+            "CHEMBL463181/conf_01",
+            "CHEMBL246950/conf_00",
+            "CHEMBL1642477/conf_00",
+            "CHEMBL1914644/conf_00",
+            "CHEMBL106574/conf_02",
+            "CHEMBL3975308/conf_02",
+            "CHEMBL3920992/conf_01",
+            "CHEMBL549067/conf_00",
+            "CHEMBL127125/conf_02",
+            "CHEMBL3417303/conf_00",
+            "CHEMBL3797967/conf_02",
+            "CHEMBL3735098/conf_01",
+            "CHEMBL4109479/conf_00",
+            "CHEMBL1945653/conf_02",
+            "CHEMBL2164391/conf_02",
+            "CHEMBL480234/conf_01"
+          ],
+          "structures": 16,
+          "validation": {
+            "batches": 1,
+            "exact_key_match": true,
+            "pairs": 23214,
+            "structures": 16
+          }
+        },
+        {
+          "atoms": 802,
+          "backends": {
+            "production_cuda": {
+              "maximum_ms": 0.116436,
+              "median_ms": 0.110737,
+              "minimum_ms": 0.091668,
+              "p10_ms": 0.0924678,
+              "p90_ms": 0.1150542,
+              "samples_ms": [
+                0.116436,
+                0.094172,
+                0.114133,
+                0.091668,
+                0.11226,
+                0.093001,
+                0.110737
+              ]
+            },
+            "vesin_gpu_per_structure": {
+              "maximum_ms": 3.77374,
+              "median_ms": 3.729164,
+              "minimum_ms": 3.706138,
+              "p10_ms": 3.7071838,
+              "p90_ms": 3.7487842,
+              "samples_ms": [
+                3.707881,
+                3.732147,
+                3.77374,
+                3.730134,
+                3.708993,
+                3.729164,
+                3.706138
+              ]
+            }
+          },
+          "seed": 20260925,
+          "source_id_sha256": "a8c27b0c87da935d90de2aab73b16e9b2f6789a065b1a124b3a95032ad59fe81",
+          "source_ids": [
+            "CHEMBL3906207/conf_00",
+            "CHEMBL1939019/conf_01",
+            "CHEMBL387829/conf_02",
+            "CHEMBL4107507/conf_00",
+            "CHEMBL595573/conf_02",
+            "CHEMBL487327/conf_01",
+            "CHEMBL3317498/conf_02",
+            "CHEMBL3890704/conf_00",
+            "CHEMBL2036960/conf_01",
+            "CHEMBL3906924/conf_00",
+            "CHEMBL3647907/conf_02",
+            "CHEMBL517819/conf_00",
+            "CHEMBL3355142/conf_01",
+            "CHEMBL237033/conf_01",
+            "CHEMBL1368696/conf_02",
+            "CHEMBL1567971/conf_01"
+          ],
+          "structures": 16,
+          "validation": {
+            "batches": 1,
+            "exact_key_match": true,
+            "pairs": 17766,
+            "structures": 16
+          }
+        },
+        {
+          "atoms": 842,
+          "backends": {
+            "production_cuda": {
+              "maximum_ms": 0.123267,
+              "median_ms": 0.109596,
+              "minimum_ms": 0.09208,
+              "p10_ms": 0.09246399999999999,
+              "p90_ms": 0.11832720000000001,
+              "samples_ms": [
+                0.115034,
+                0.123267,
+                0.095725,
+                0.110687,
+                0.09272,
+                0.109596,
+                0.09208
+              ]
+            },
+            "vesin_gpu_per_structure": {
+              "maximum_ms": 3.686178,
+              "median_ms": 3.587059,
+              "minimum_ms": 3.576563,
+              "p10_ms": 3.580829,
+              "p90_ms": 3.6371862,
+              "samples_ms": [
+                3.686178,
+                3.583673,
+                3.603914,
+                3.587059,
+                3.604525,
+                3.576563,
+                3.584023
+              ]
+            }
+          },
+          "seed": 20260926,
+          "source_id_sha256": "1e9422622498e7a569d5cf5326b99e3e90a3324858d0c98f74f61da317677b0a",
+          "source_ids": [
+            "CHEMBL478648/conf_01",
+            "CHEMBL3735730/conf_00",
+            "CHEMBL169999/conf_00",
+            "CHEMBL412452/conf_01",
+            "CHEMBL3967465/conf_00",
+            "CHEMBL3911317/conf_02",
+            "CHEMBL3699115/conf_00",
+            "CHEMBL592159/conf_01",
+            "CHEMBL391468/conf_00",
+            "CHEMBL1203095/conf_02",
+            "CHEMBL487327/conf_01",
+            "CHEMBL3890166/conf_00",
+            "CHEMBL3669866/conf_02",
+            "CHEMBL3954770/conf_00",
+            "CHEMBL362501/conf_01",
+            "CHEMBL2037119/conf_01"
+          ],
+          "structures": 16,
+          "validation": {
+            "batches": 1,
+            "exact_key_match": true,
+            "pairs": 18446,
+            "structures": 16
+          }
+        },
+        {
+          "atoms": 925,
+          "backends": {
+            "production_cuda": {
+              "maximum_ms": 0.11931,
+              "median_ms": 0.110987,
+              "minimum_ms": 0.093061,
+              "p10_ms": 0.09317500000000001,
+              "p90_ms": 0.1146288,
+              "samples_ms": [
+                0.11931,
+                0.095173,
+                0.111508,
+                0.093061,
+                0.111398,
+                0.093251,
+                0.110987
+              ]
+            },
+            "vesin_gpu_per_structure": {
+              "maximum_ms": 3.810086,
+              "median_ms": 3.743315,
+              "minimum_ms": 3.732118,
+              "p10_ms": 3.7346649999999997,
+              "p90_ms": 3.7785379999999997,
+              "samples_ms": [
+                3.732118,
+                3.757506,
+                3.743315,
+                3.749864,
+                3.738738,
+                3.810086,
+                3.736363
+              ]
+            }
+          },
+          "seed": 20260927,
+          "source_id_sha256": "c29b93196aeb35d94403021168110eec47cfe7a4e2737f1ebb3c09a0e5209f39",
+          "source_ids": [
+            "CHEMBL477979/conf_02",
+            "CHEMBL9250/conf_01",
+            "CHEMBL2106399/conf_00",
+            "CHEMBL3899215/conf_00",
+            "CHEMBL304054/conf_00",
+            "CHEMBL3977368/conf_00",
+            "CHEMBL3604958/conf_01",
+            "CHEMBL4100854/conf_02",
+            "CHEMBL2262527/conf_02",
+            "CHEMBL3689680/conf_00",
+            "CHEMBL497281/conf_00",
+            "CHEMBL3699375/conf_01",
+            "CHEMBL3798914/conf_02",
+            "CHEMBL2017281/conf_02",
+            "CHEMBL1829422/conf_02",
+            "CHEMBL3335622/conf_02"
+          ],
+          "structures": 16,
+          "validation": {
+            "batches": 1,
+            "exact_key_match": true,
+            "pairs": 22352,
+            "structures": 16
+          }
+        },
+        {
+          "atoms": 1072,
+          "backends": {
+            "production_cuda": {
+              "maximum_ms": 0.122225,
+              "median_ms": 0.111478,
+              "minimum_ms": 0.092369,
+              "p10_ms": 0.09274160000000001,
+              "p90_ms": 0.1182704,
+              "samples_ms": [
+                0.122225,
+                0.11265,
+                0.09324,
+                0.111478,
+                0.092369,
+                0.115634,
+                0.09299
+              ]
+            },
+            "vesin_gpu_per_structure": {
+              "maximum_ms": 3.783085,
+              "median_ms": 3.740621,
+              "minimum_ms": 3.719068,
+              "p10_ms": 3.723208,
+              "p90_ms": 3.7704418,
+              "samples_ms": [
+                3.739599,
+                3.725968,
+                3.762013,
+                3.783085,
+                3.740621,
+                3.719068,
+                3.750355
+              ]
+            }
+          },
+          "seed": 20260928,
+          "source_id_sha256": "7ce3671b6abf6717907ccfed892362ab777e0ffb8b5bb2c848a22fa15450c53f",
+          "source_ids": [
+            "CHEMBL523335/conf_02",
+            "CHEMBL3666579/conf_02",
+            "CHEMBL431550/conf_00",
+            "CHEMBL585917/conf_02",
+            "CHEMBL598718/conf_01",
+            "CHEMBL2158419/conf_02",
+            "CHEMBL460257/conf_00",
+            "CHEMBL434991/conf_00",
+            "CHEMBL20918/conf_00",
+            "CHEMBL4092078/conf_01",
+            "CHEMBL3929267/conf_02",
+            "CHEMBL2177783/conf_00",
+            "CHEMBL3911824/conf_00",
+            "CHEMBL2079787/conf_01",
+            "CHEMBL3335626/conf_02",
+            "CHEMBL263950/conf_01"
+          ],
+          "structures": 16,
+          "validation": {
+            "batches": 1,
+            "exact_key_match": true,
+            "pairs": 26818,
+            "structures": 16
+          }
+        },
+        {
+          "atoms": 991,
+          "backends": {
+            "production_cuda": {
+              "maximum_ms": 0.11897,
+              "median_ms": 0.114563,
+              "minimum_ms": 0.093671,
+              "p10_ms": 0.093797,
+              "p90_ms": 0.11787020000000001,
+              "samples_ms": [
+                0.117137,
+                0.094062,
+                0.114833,
+                0.093671,
+                0.11897,
+                0.093881,
+                0.114563
+              ]
+            },
+            "vesin_gpu_per_structure": {
+              "maximum_ms": 3.848474,
+              "median_ms": 3.792019,
+              "minimum_ms": 3.770836,
+              "p10_ms": 3.7736488,
+              "p90_ms": 3.8174306,
+              "samples_ms": [
+                3.770836,
+                3.848474,
+                3.779329,
+                3.796735,
+                3.795674,
+                3.792019,
+                3.775524
+              ]
+            }
+          },
+          "seed": 20260929,
+          "source_id_sha256": "f769d5970f28b3e91e5c2ba7e9a76eb75cb916cee883d3c46a60b92e7bb67427",
+          "source_ids": [
+            "CHEMBL3696975/conf_00",
+            "CHEMBL2012962/conf_02",
+            "CHEMBL3416360/conf_01",
+            "CHEMBL23234/conf_01",
+            "CHEMBL3924728/conf_02",
+            "CHEMBL569448/conf_00",
+            "CHEMBL113215/conf_00",
+            "CHEMBL46523/conf_01",
+            "CHEMBL1277028/conf_00",
+            "CHEMBL498505/conf_01",
+            "CHEMBL4083528/conf_01",
+            "CHEMBL1082784/conf_01",
+            "CHEMBL3335626/conf_02",
+            "CHEMBL3104462/conf_02",
+            "CHEMBL1170671/conf_01",
+            "CHEMBL3335473/conf_01"
+          ],
+          "structures": 16,
+          "validation": {
+            "batches": 1,
+            "exact_key_match": true,
+            "pairs": 25362,
+            "structures": 16
+          }
+        }
+      ],
+      "dataset": "qmugs_population"
+    },
+    {
+      "backends": {
+        "production_cuda": {
+          "maximum_ms": 0.271009,
+          "median_ms": 0.210858,
+          "minimum_ms": 0.133332,
+          "p10_ms": 0.14599600000000001,
+          "p90_ms": 0.249522
+        },
+        "vesin_gpu_per_structure": {
+          "maximum_ms": 7.021246,
+          "median_ms": 4.8244430000000005,
+          "minimum_ms": 4.051229,
+          "p10_ms": 4.5519815,
+          "p90_ms": 6.005507
+        }
+      },
+      "batch_size": 16,
+      "batches": [
+        {
+          "atoms": 895,
+          "backends": {
+            "production_cuda": {
+              "maximum_ms": 0.174103,
+              "median_ms": 0.170938,
+              "minimum_ms": 0.151549,
+              "p10_ms": 0.1523062,
+              "p90_ms": 0.1735858,
+              "samples_ms": [
+                0.174103,
+                0.171749,
+                0.151549,
+                0.173241,
+                0.153122,
+                0.170938,
+                0.152811
+              ]
+            },
+            "vesin_gpu_per_structure": {
+              "maximum_ms": 4.981926,
+              "median_ms": 4.813662,
+              "minimum_ms": 4.788954,
+              "p10_ms": 4.8001668,
+              "p90_ms": 4.886399399999999,
+              "samples_ms": [
+                4.813662,
+                4.812449,
+                4.822715,
+                4.822655,
+                4.981926,
+                4.788954,
+                4.807642
+              ]
+            }
+          },
+          "seed": 20260914,
+          "source_id_sha256": "c3ea6cde3e84b4f808a1b9be740dff9c168b1bf9a7da97b3563633d7050635d4",
+          "source_ids": [
+            "CO_1112178785381199443802552",
+            "CO_4911294945609841539788324",
+            "CO_9430166091247698575522011",
+            "CO_9306146715956142941544361",
+            "CO_2104092681712187521701338",
+            "CO_1240162949118596724559480",
+            "CO_1068993055181942009729424",
+            "CO_7848469933468165260331872",
+            "CO_9834591878386329755721367",
+            "CO_2189819595777727023805810",
+            "CO_4067889575490122606188306",
+            "CO_6230183982862646936889142",
+            "CO_4116212821816533138610094",
+            "CO_2638368842719972832817970",
+            "CO_4515615670143660782924559",
+            "CO_1339244776666117914034231"
+          ],
+          "structures": 16,
+          "validation": {
+            "batches": 1,
+            "exact_key_match": true,
+            "pairs": 33410,
+            "structures": 16
+          }
+        },
+        {
+          "atoms": 1139,
+          "backends": {
+            "production_cuda": {
+              "maximum_ms": 0.264119,
+              "median_ms": 0.250839,
+              "minimum_ms": 0.229066,
+              "p10_ms": 0.2301058,
+              "p90_ms": 0.258344,
+              "samples_ms": [
+                0.264119,
+                0.230799,
+                0.254494,
+                0.233512,
+                0.253493,
+                0.229066,
+                0.250839
+              ]
+            },
+            "vesin_gpu_per_structure": {
+              "maximum_ms": 4.673389,
+              "median_ms": 4.642823,
+              "minimum_ms": 4.60734,
+              "p10_ms": 4.60746,
+              "p90_ms": 4.6570324,
+              "samples_ms": [
+                4.60754,
+                4.642823,
+                4.673389,
+                4.646128,
+                4.645597,
+                4.630414,
+                4.60734
+              ]
+            }
+          },
+          "seed": 20260915,
+          "source_id_sha256": "9c4b73e0f9eda32e1ba54aa0711a3ce6a406a1b234fa073431e711dbce538a8e",
+          "source_ids": [
+            "CO_3864104691879850784869744",
+            "CO_8220247028033024969525015",
+            "CO_1658343131430784707993017",
+            "CO_6333453405861643750876377",
+            "CO_1221242784447944761989275",
+            "CO_1154953364710361420477191",
+            "CO_8068187467750530326048621",
+            "CO_1017750495413776512175808",
+            "CO_4537356173211991641225564",
+            "CO_2613038013445077407446259",
+            "CO_5175739722198844719083646",
+            "CO_3470581137538970817907927",
+            "CO_1035542345271185573600847",
+            "CO_9995951233668398080764672",
+            "CO_2053444287349241405791244",
+            "CO_8992952840067178197900856"
+          ],
+          "structures": 16,
+          "validation": {
+            "batches": 1,
+            "exact_key_match": true,
+            "pairs": 42060,
+            "structures": 16
+          }
+        },
+        {
+          "atoms": 686,
+          "backends": {
+            "production_cuda": {
+              "maximum_ms": 0.212982,
+              "median_ms": 0.207363,
+              "minimum_ms": 0.189226,
+              "p10_ms": 0.18961060000000002,
+              "p90_ms": 0.2115696,
+              "samples_ms": [
+                0.212982,
+                0.210628,
+                0.189867,
+                0.207363,
+                0.189226,
+                0.209145,
+                0.19253
+              ]
+            },
+            "vesin_gpu_per_structure": {
+              "maximum_ms": 4.939471,
+              "median_ms": 4.846411,
+              "minimum_ms": 4.823626,
+              "p10_ms": 4.8296356000000005,
+              "p90_ms": 4.894457200000001,
+              "samples_ms": [
+                4.939471,
+                4.833642,
+                4.864448,
+                4.83944,
+                4.862606,
+                4.823626,
+                4.846411
+              ]
+            }
+          },
+          "seed": 20260916,
+          "source_id_sha256": "54d14d30f044270e10c7fe0143c5afe145c26e2054c90e1a42a91597ce708c63",
+          "source_ids": [
+            "CO_5365497978425514666960213",
+            "CO_6619547599481455347778658",
+            "CO_1034949602387687094578798",
+            "CO_7592571703298658625234713",
+            "CO_1074608773687888787750402",
+            "CO_6396846302277622750272269",
+            "CO_1237916327329465915487734",
+            "CO_8465166384566925385099941",
+            "CO_2462822272578451813161313",
+            "CO_8809258846103479360716356",
+            "CO_2482741103631954093800896",
+            "CO_1271178656567933962551304",
+            "CO_7851309051304604905320790",
+            "CO_3819422197733082960342323",
+            "CO_5044605480440542565221377",
+            "CO_5691874900193744519256347"
+          ],
+          "structures": 16,
+          "validation": {
+            "batches": 1,
+            "exact_key_match": true,
+            "pairs": 29234,
+            "structures": 16
+          }
+        },
+        {
+          "atoms": 510,
+          "backends": {
+            "production_cuda": {
+              "maximum_ms": 0.165841,
+              "median_ms": 0.14535,
+              "minimum_ms": 0.128064,
+              "p10_ms": 0.1301184,
+              "p90_ms": 0.1567972,
+              "samples_ms": [
+                0.149306,
+                0.131488,
+                0.14535,
+                0.128064,
+                0.165841,
+                0.132711,
+                0.150768
+              ]
+            },
+            "vesin_gpu_per_structure": {
+              "maximum_ms": 6.626459,
+              "median_ms": 6.549203,
+              "minimum_ms": 6.502132,
+              "p10_ms": 6.5166256,
+              "p90_ms": 6.5827316,
+              "samples_ms": [
+                6.549203,
+                6.55358,
+                6.526288,
+                6.550314,
+                6.533209,
+                6.626459,
+                6.502132
+              ]
+            }
+          },
+          "seed": 20260917,
+          "source_id_sha256": "7f255f84ff97f9d1731fb980aac47618acea06bdff34ce9026988629638181c8",
+          "source_ids": [
+            "CO_3398865269933185049242886",
+            "CO_1913442994629850152106332",
+            "CO_8175034069547421472248494",
+            "CO_1011460360893836393587436",
+            "CO_5517821516817082010512358",
+            "CO_6284534076647960102771103",
+            "CO_4727090369906863478140174",
+            "CO_5175739722198844719083646",
+            "CO_1261777879826002960585899",
+            "CO_2523906943294364422487440",
+            "CO_3100059870982633807985279",
+            "CO_5228036043634006546876633",
+            "CO_9092922502714440733835346",
+            "CO_6697629420986719104093172",
+            "CO_4941853229959604596294736",
+            "CO_8255460200445543616059644"
+          ],
+          "structures": 16,
+          "validation": {
+            "batches": 1,
+            "exact_key_match": true,
+            "pairs": 22058,
+            "structures": 16
+          }
+        },
+        {
+          "atoms": 586,
+          "backends": {
+            "production_cuda": {
+              "maximum_ms": 0.153852,
+              "median_ms": 0.146642,
+              "minimum_ms": 0.129736,
+              "p10_ms": 0.1306552,
+              "p90_ms": 0.1531254,
+              "samples_ms": [
+                0.152641,
+                0.148184,
+                0.131349,
+                0.153852,
+                0.131268,
+                0.146642,
+                0.129736
+              ]
+            },
+            "vesin_gpu_per_structure": {
+              "maximum_ms": 4.681662,
+              "median_ms": 4.653869,
+              "minimum_ms": 4.613399,
+              "p10_ms": 4.625519000000001,
+              "p90_ms": 4.6730148,
+              "samples_ms": [
+                4.66725,
+                4.633599,
+                4.66066,
+                4.681662,
+                4.641051,
+                4.613399,
+                4.653869
+              ]
+            }
+          },
+          "seed": 20260918,
+          "source_id_sha256": "8b8a021d0ced64f9c2b50cf12955e0e31730dae8d916326cec975b66503d8d7a",
+          "source_ids": [
+            "CO_8083438387511370107862863",
+            "CO_9630746740457058715897459",
+            "CO_3373016617449798366654260",
+            "CO_1053906600472145804336051",
+            "CO_4201476835497963240058885",
+            "CO_1025480698138293561431889",
+            "CO_6531308181220584822669998",
+            "CO_1112270202177326658538042",
+            "CO_8878153435355283067366634",
+            "CO_4534167892968192837264677",
+            "CO_1470224727610504025816566",
+            "CO_5265641816271753036159564",
+            "CO_4116212821816533138610094",
+            "CO_1215351257288955168222992",
+            "CO_5729530032915923013610134",
+            "CO_7765058939978613824573409"
+          ],
+          "structures": 16,
+          "validation": {
+            "batches": 1,
+            "exact_key_match": true,
+            "pairs": 18836,
+            "structures": 16
+          }
+        },
+        {
+          "atoms": 728,
+          "backends": {
+            "production_cuda": {
+              "maximum_ms": 0.22537,
+              "median_ms": 0.214353,
+              "minimum_ms": 0.195435,
+              "p10_ms": 0.1957776,
+              "p90_ms": 0.221452,
+              "samples_ms": [
+                0.22537,
+                0.203177,
+                0.21845,
+                0.195435,
+                0.21884,
+                0.196006,
+                0.214353
+              ]
+            },
+            "vesin_gpu_per_structure": {
+              "maximum_ms": 5.165313,
+              "median_ms": 5.089749,
+              "minimum_ms": 5.057179,
+              "p10_ms": 5.0651896,
+              "p90_ms": 5.127744,
+              "samples_ms": [
+                5.07053,
+                5.165313,
+                5.057179,
+                5.102698,
+                5.089749,
+                5.094646,
+                5.078071
+              ]
+            }
+          },
+          "seed": 20260919,
+          "source_id_sha256": "bb365f7ed9599d07ddc5a7f8d0be0522d67748918879c31c882a48dc4c02075e",
+          "source_ids": [
+            "CO_7530439778358506112840854",
+            "CO_1569857583124270786070884",
+            "CO_9765578350800098661121159",
+            "CO_7576459308589246317021320",
+            "CO_9039548608647534785092759",
+            "CO_6724663512262406027709845",
+            "CO_2657872469121617038058969",
+            "CO_9241658143931246315130217",
+            "CO_1200283568015980428340810",
+            "CO_4366086186452171037407735",
+            "CO_6534684680857704664384918",
+            "CO_3823509535038174687914398",
+            "CO_5155231725011360564701159",
+            "CO_1883753049098148245827880",
+            "CO_7226139032170555401557337",
+            "CO_6889043631777131576925427"
+          ],
+          "structures": 16,
+          "validation": {
+            "batches": 1,
+            "exact_key_match": true,
+            "pairs": 32994,
+            "structures": 16
+          }
+        },
+        {
+          "atoms": 780,
+          "backends": {
+            "production_cuda": {
+              "maximum_ms": 0.241735,
+              "median_ms": 0.227623,
+              "minimum_ms": 0.209286,
+              "p10_ms": 0.2122362,
+              "p90_ms": 0.2371144,
+              "samples_ms": [
+                0.241735,
+                0.227623,
+                0.214203,
+                0.232291,
+                0.217258,
+                0.234034,
+                0.209286
+              ]
+            },
+            "vesin_gpu_per_structure": {
+              "maximum_ms": 4.801974,
+              "median_ms": 4.738108,
+              "minimum_ms": 4.705027,
+              "p10_ms": 4.7058688,
+              "p90_ms": 4.7744526,
+              "samples_ms": [
+                4.748313,
+                4.705027,
+                4.738108,
+                4.70643,
+                4.756105,
+                4.728062,
+                4.801974
+              ]
+            }
+          },
+          "seed": 20260920,
+          "source_id_sha256": "6bfaa9b0da33c8ad5921d704adbd1775a93605a57f5ea6ef3be08b2709e850a8",
+          "source_ids": [
+            "CO_1852567951983903061508356",
+            "CO_1024402168358776820559695",
+            "CO_1067740273731370561915277",
+            "CO_9028194781278676120072568",
+            "CO_6024596087888144409607690",
+            "CO_1297467578997070872070780",
+            "CO_9479395022098230175348755",
+            "CO_1401442009856515807283234",
+            "CO_9305557099162084338338675",
+            "CO_1103524520986127114005986",
+            "CO_3100059870982633807985279",
+            "CO_1681294629653273574725301",
+            "CO_1308530187713198886696139",
+            "CO_9252039566816498900089114",
+            "CO_8201596905820863990258226",
+            "CO_1026991598981478511096800"
+          ],
+          "structures": 16,
+          "validation": {
+            "batches": 1,
+            "exact_key_match": true,
+            "pairs": 31908,
+            "structures": 16
+          }
+        },
+        {
+          "atoms": 817,
+          "backends": {
+            "production_cuda": {
+              "maximum_ms": 0.225872,
+              "median_ms": 0.218961,
+              "minimum_ms": 0.196817,
+              "p10_ms": 0.1976528,
+              "p90_ms": 0.224069,
+              "samples_ms": [
+                0.225872,
+                0.206452,
+                0.222867,
+                0.19821,
+                0.221875,
+                0.196817,
+                0.218961
+              ]
+            },
+            "vesin_gpu_per_structure": {
+              "maximum_ms": 4.500939,
+              "median_ms": 4.466327,
+              "minimum_ms": 4.442922,
+              "p10_ms": 4.44717,
+              "p90_ms": 4.4996172,
+              "samples_ms": [
+                4.442922,
+                4.498736,
+                4.450002,
+                4.473327,
+                4.500939,
+                4.466327,
+                4.460778
+              ]
+            }
+          },
+          "seed": 20260921,
+          "source_id_sha256": "cd696b303ffe77a7e8992ec748fd4e09b9cf48fca76fc9c456778c2a5f2ad890",
+          "source_ids": [
+            "CO_3522784543684864724729822",
+            "CO_1715130566461328192150534",
+            "CO_4067889575490122606188306",
+            "CO_1440664408873940083727412",
+            "CO_8558973443161271264100854",
+            "CO_1318005670684632369721836",
+            "CO_6675591335595629590495620",
+            "CO_8887147884464576189955334",
+            "CO_3315961749900068348018489",
+            "CO_1268344592942145408488946",
+            "CO_3966126349978577362436724",
+            "CO_1174820168116232426464541",
+            "CO_1283363721732393846181690",
+            "CO_7399422591299944488936863",
+            "CO_1123689771192146437576597",
+            "CO_5125605109745982151845703"
+          ],
+          "structures": 16,
+          "validation": {
+            "batches": 1,
+            "exact_key_match": true,
+            "pairs": 29570,
+            "structures": 16
+          }
+        },
+        {
+          "atoms": 676,
+          "backends": {
+            "production_cuda": {
+              "maximum_ms": 0.159701,
+              "median_ms": 0.153372,
+              "minimum_ms": 0.13851,
+              "p10_ms": 0.1395612,
+              "p90_ms": 0.1583792,
+              "samples_ms": [
+                0.159701,
+                0.157498,
+                0.140262,
+                0.155796,
+                0.143627,
+                0.153372,
+                0.13851
+              ]
+            },
+            "vesin_gpu_per_structure": {
+              "maximum_ms": 4.770556,
+              "median_ms": 4.696264,
+              "minimum_ms": 4.661542,
+              "p10_ms": 4.6728508,
+              "p90_ms": 4.738606,
+              "samples_ms": [
+                4.717306,
+                4.680681,
+                4.770556,
+                4.68039,
+                4.698698,
+                4.661542,
+                4.696264
+              ]
+            }
+          },
+          "seed": 20260922,
+          "source_id_sha256": "73353b520190f264df8a8446c5f8daeba8f2802bda6d1a2165b8af3220acd690",
+          "source_ids": [
+            "CO_4409145442910845075969647",
+            "CO_7538051940588029822421470",
+            "CO_4292198515048666324589292",
+            "CO_1141127095380409012517663",
+            "CO_2154550680460525572436426",
+            "CO_1092339797835324596947610",
+            "CO_1150349665238199747873812",
+            "CO_1227770173443725185571867",
+            "CO_8513547966048212803409810",
+            "CO_2687131789746255857709963",
+            "CO_8293671511481232724904425",
+            "CO_1668152784544766071246907",
+            "CO_2663361907581415509302794",
+            "CO_3057551128573682737703109",
+            "CO_1273402282003452711725424",
+            "CO_1288652755644359712853038"
+          ],
+          "structures": 16,
+          "validation": {
+            "batches": 1,
+            "exact_key_match": true,
+            "pairs": 21676,
+            "structures": 16
+          }
+        },
+        {
+          "atoms": 1015,
+          "backends": {
+            "production_cuda": {
+              "maximum_ms": 0.232532,
+              "median_ms": 0.223117,
+              "minimum_ms": 0.202777,
+              "p10_ms": 0.2037862,
+              "p90_ms": 0.22937659999999999,
+              "samples_ms": [
+                0.232532,
+                0.208205,
+                0.227273,
+                0.204459,
+                0.223117,
+                0.202777,
+                0.223919
+              ]
+            },
+            "vesin_gpu_per_structure": {
+              "maximum_ms": 4.921294,
+              "median_ms": 4.876787,
+              "minimum_ms": 4.85246,
+              "p10_ms": 4.8597914,
+              "p90_ms": 4.9148824,
+              "samples_ms": [
+                4.868384,
+                4.921294,
+                4.876787,
+                4.896737,
+                4.864679,
+                4.910608,
+                4.85246
+              ]
+            }
+          },
+          "seed": 20260923,
+          "source_id_sha256": "c6dd775abe58515cc6f6ba7491a43bae4f27ad91fe799c8bf29161ba6f515e1a",
+          "source_ids": [
+            "CO_5776503164757384146324221",
+            "CO_9479121532338739600738421",
+            "CO_8556795390473029782012680",
+            "CO_8082710792376238280063053",
+            "CO_4551399222196879840879836",
+            "CO_9475368089460020762949518",
+            "CO_1146078574434083113309478",
+            "CO_8189434822238577633833214",
+            "CO_9839262567645726985198793",
+            "CO_3470703834851019147185363",
+            "CO_1089855353828948149206368",
+            "CO_3197633555218112700016420",
+            "CO_1196868016938808683750043",
+            "CO_4996055658286188868216532",
+            "CO_9650630224055620245860590",
+            "CO_1264747316094234069784849"
+          ],
+          "structures": 16,
+          "validation": {
+            "batches": 1,
+            "exact_key_match": true,
+            "pairs": 43412,
+            "structures": 16
+          }
+        },
+        {
+          "atoms": 986,
+          "backends": {
+            "production_cuda": {
+              "maximum_ms": 0.254614,
+              "median_ms": 0.248205,
+              "minimum_ms": 0.222897,
+              "p10_ms": 0.2233356,
+              "p90_ms": 0.2530756,
+              "samples_ms": [
+                0.25205,
+                0.254614,
+                0.226553,
+                0.248205,
+                0.223628,
+                0.248876,
+                0.222897
+              ]
+            },
+            "vesin_gpu_per_structure": {
+              "maximum_ms": 4.860472,
+              "median_ms": 4.835224,
+              "minimum_ms": 4.807342,
+              "p10_ms": 4.8105088,
+              "p90_ms": 4.858423,
+              "samples_ms": [
+                4.857057,
+                4.807342,
+                4.835224,
+                4.81262,
+                4.81286,
+                4.860472,
+                4.836195
+              ]
+            }
+          },
+          "seed": 20260924,
+          "source_id_sha256": "96e43c1d93778a08a65981dcf9c791c02596b5ef58db789633b8b2f574df440a",
+          "source_ids": [
+            "CO_9071768924541211232548931",
+            "CO_6452011569925146488259386",
+            "CO_3428312292138946432296615",
+            "CO_5821853995793702077565584",
+            "CO_3823248002513263366087748",
+            "CO_4915887083574802673129095",
+            "CO_6588776130264013647858602",
+            "CO_9475368089460020762949518",
+            "CO_1282890132630114137518109",
+            "CO_5208376720286753874273066",
+            "CO_1453435390648160165639736",
+            "CO_9456629751701522564365753",
+            "CO_7324866874372102177733511",
+            "CO_1335515389764425825633408",
+            "CO_8447878372841045372853446",
+            "CO_5143438781867484816564174"
+          ],
+          "structures": 16,
+          "validation": {
+            "batches": 1,
+            "exact_key_match": true,
+            "pairs": 35998,
+            "structures": 16
+          }
+        },
+        {
+          "atoms": 556,
+          "backends": {
+            "production_cuda": {
+              "maximum_ms": 0.15887,
+              "median_ms": 0.147854,
+              "minimum_ms": 0.131198,
+              "p10_ms": 0.1315946,
+              "p90_ms": 0.1539122,
+              "samples_ms": [
+                0.15887,
+                0.13218,
+                0.150067,
+                0.131198,
+                0.150607,
+                0.131859,
+                0.147854
+              ]
+            },
+            "vesin_gpu_per_structure": {
+              "maximum_ms": 7.101538,
+              "median_ms": 7.021246,
+              "minimum_ms": 6.998552,
+              "p10_ms": 7.0044344,
+              "p90_ms": 7.06591,
+              "samples_ms": [
+                7.021246,
+                7.034657,
+                7.008356,
+                7.101538,
+                7.011181,
+                7.042158,
+                6.998552
+              ]
+            }
+          },
+          "seed": 20260925,
+          "source_id_sha256": "491f48e491e551653f889a3b0979d5ebd33ba1cfc4b9a34375d486f9a1dd78d5",
+          "source_ids": [
+            "CO_4563631787465259037454802",
+            "CO_2638368842719972832817970",
+            "CO_6321866044718074437591648",
+            "CO_1136054251712282916251165",
+            "CO_4508999143039499278369524",
+            "CO_4855905762895495283854427",
+            "CO_8090503826151365479130886",
+            "CO_1694572763662666426333125",
+            "CO_1273550464821893215765150",
+            "CO_8943426278253562810889563",
+            "CO_1847213850231819766022039",
+            "CO_3629928517665382639028784",
+            "CO_6844763758919159702626494",
+            "CO_6697629420986719104093172",
+            "CO_9595637874432903535377208",
+            "CO_1921911075498682265859088"
+          ],
+          "structures": 16,
+          "validation": {
+            "batches": 1,
+            "exact_key_match": true,
+            "pairs": 24334,
+            "structures": 16
+          }
+        },
+        {
+          "atoms": 1220,
+          "backends": {
+            "production_cuda": {
+              "maximum_ms": 0.249507,
+              "median_ms": 0.242225,
+              "minimum_ms": 0.220944,
+              "p10_ms": 0.2221698,
+              "p90_ms": 0.2482872,
+              "samples_ms": [
+                0.249507,
+                0.247474,
+                0.224819,
+                0.242256,
+                0.222987,
+                0.242225,
+                0.220944
+              ]
+            },
+            "vesin_gpu_per_structure": {
+              "maximum_ms": 5.542573,
+              "median_ms": 5.461811,
+              "minimum_ms": 5.435661,
+              "p10_ms": 5.4398376,
+              "p90_ms": 5.5027324,
+              "samples_ms": [
+                5.542573,
+                5.442622,
+                5.457704,
+                5.461811,
+                5.476172,
+                5.435661,
+                5.47448
+              ]
+            }
+          },
+          "seed": 20260926,
+          "source_id_sha256": "78bc2f7235651ebc37ea87f153fda5351984900904f366e4b4cf75e539fe408c",
+          "source_ids": [
+            "CO_2013281154521933683003619",
+            "CO_1027999783944455302319638",
+            "CO_2613038013445077407446259",
+            "CO_1206317927502352459378835",
+            "CO_6024596087888144409607690",
+            "CO_1167212559185833561368199",
+            "CO_6534684680857704664384918",
+            "CO_1284132345484585227434761",
+            "CO_3414352037759401785789027",
+            "CO_1314495725876916272710248",
+            "CO_1095443601220132324511736",
+            "CO_1005860942544492676666076",
+            "CO_4643693147926926212080481",
+            "CO_7707988229328224973674465",
+            "CO_5776503164757384146324221",
+            "CO_9090115037616596651071448"
+          ],
+          "structures": 16,
+          "validation": {
+            "batches": 1,
+            "exact_key_match": true,
+            "pairs": 51408,
+            "structures": 16
+          }
+        },
+        {
+          "atoms": 826,
+          "backends": {
+            "production_cuda": {
+              "maximum_ms": 0.19918,
+              "median_ms": 0.188164,
+              "minimum_ms": 0.170968,
+              "p10_ms": 0.17122,
+              "p90_ms": 0.19815939999999999,
+              "samples_ms": [
+                0.19918,
+                0.170968,
+                0.188164,
+                0.171388,
+                0.189967,
+                0.178609,
+                0.197479
+              ]
+            },
+            "vesin_gpu_per_structure": {
+              "maximum_ms": 4.999452,
+              "median_ms": 4.958891,
+              "minimum_ms": 4.921695,
+              "p10_ms": 4.9255944000000005,
+              "p90_ms": 4.9792734,
+              "samples_ms": [
+                4.928194,
+                4.964649,
+                4.942636,
+                4.965821,
+                4.921695,
+                4.958891,
+                4.999452
+              ]
+            }
+          },
+          "seed": 20260927,
+          "source_id_sha256": "7c900f86e9f6862a2337061564f5b441e4371f398adcb2d9db1a9414d2a3490b",
+          "source_ids": [
+            "CO_2977917277671188017532335",
+            "CO_4984427538432637412026932",
+            "CO_3850903277261463745805018",
+            "CO_8763530830781219272957593",
+            "CO_1119819228050012887502483",
+            "CO_3158430725261584515598002",
+            "CO_4657664290757752092006600",
+            "CO_1193865577949264674496662",
+            "CO_1086032875911714921959918",
+            "CO_8731530785555074002543969",
+            "CO_4480121096899148673359026",
+            "CO_1080667415804379907867110",
+            "CO_1068993055181942009729424",
+            "CO_1162051654832558456950073",
+            "CO_1072669190610479599266541",
+            "CO_4433317082318902970896733"
+          ],
+          "structures": 16,
+          "validation": {
+            "batches": 1,
+            "exact_key_match": true,
+            "pairs": 32456,
+            "structures": 16
+          }
+        },
+        {
+          "atoms": 1702,
+          "backends": {
+            "production_cuda": {
+              "maximum_ms": 0.276067,
+              "median_ms": 0.271009,
+              "minimum_ms": 0.253883,
+              "p10_ms": 0.2541962,
+              "p90_ms": 0.2757424,
+              "samples_ms": [
+                0.276067,
+                0.272511,
+                0.255165,
+                0.275526,
+                0.253883,
+                0.271009,
+                0.254405
+              ]
+            },
+            "vesin_gpu_per_structure": {
+              "maximum_ms": 4.682654,
+              "median_ms": 4.637636,
+              "minimum_ms": 4.603715,
+              "p10_ms": 4.6062686,
+              "p90_ms": 4.669067,
+              "samples_ms": [
+                4.660009,
+                4.603715,
+                4.64674,
+                4.622081,
+                4.682654,
+                4.607971,
+                4.637636
+              ]
+            }
+          },
+          "seed": 20260928,
+          "source_id_sha256": "ce2415923970b28992f0847cc8590f8d4fc24bb339fbeb38cade1934b29e1cf3",
+          "source_ids": [
+            "CO_3541387712350456651887769",
+            "CO_6427551956240778229356533",
+            "CO_5372787162472876858719745",
+            "CO_1156530697515441287064845",
+            "CO_9169796462088826287545938",
+            "CO_1182260832162232232748414",
+            "CO_1116822147478180911380986",
+            "CO_1084792126746841536014390",
+            "CO_1317118009273630530664953",
+            "CO_9452035494998069363612870",
+            "CO_4515615670143660782924559",
+            "CO_1963558104930767314153325",
+            "CO_5034456513639080200210335",
+            "CO_4911294945609841539788324",
+            "CO_1314376545619302869595075",
+            "CO_5630222958621887541555727"
+          ],
+          "structures": 16,
+          "validation": {
+            "batches": 1,
+            "exact_key_match": true,
+            "pairs": 66194,
+            "structures": 16
+          }
+        },
+        {
+          "atoms": 452,
+          "backends": {
+            "production_cuda": {
+              "maximum_ms": 0.13885,
+              "median_ms": 0.133332,
+              "minimum_ms": 0.117868,
+              "p10_ms": 0.1191118,
+              "p90_ms": 0.1383328,
+              "samples_ms": [
+                0.137988,
+                0.123146,
+                0.13885,
+                0.119941,
+                0.133332,
+                0.117868,
+                0.133862
+              ]
+            },
+            "vesin_gpu_per_structure": {
+              "maximum_ms": 4.116799,
+              "median_ms": 4.051229,
+              "minimum_ms": 4.043989,
+              "p10_ms": 4.0454854000000005,
+              "p90_ms": 4.0853596,
+              "samples_ms": [
+                4.051229,
+                4.116799,
+                4.0644,
+                4.047905,
+                4.043989,
+                4.064209,
+                4.046483
+              ]
+            }
+          },
+          "seed": 20260929,
+          "source_id_sha256": "8914839fdbb963cc0e7c48d7587ca2f7a149c62b41fbd3f7dc9732c4b4fa3f9f",
+          "source_ids": [
+            "CO_1358412911866896802575342",
+            "CO_6331388169704081949310618",
+            "CO_4849559737693511994747463",
+            "CO_9822312299544345131517232",
+            "CO_1168433766682021351694329",
+            "CO_2441426971256424420669856",
+            "CO_4320356471716356503427461",
+            "CO_1191901873619597114799277",
+            "CO_3248682336912422958575416",
+            "CO_1017487686386160745410669",
+            "CO_2218174163290713231706785",
+            "CO_1620551371715792740170778",
+            "CO_1023602427269732888514378",
+            "CO_4116212821816533138610094",
+            "CO_3226976853399863671067648",
+            "CO_6877432030250356861196126"
+          ],
+          "structures": 16,
+          "validation": {
+            "batches": 1,
+            "exact_key_match": true,
+            "pairs": 16882,
+            "structures": 16
+          }
+        }
+      ],
+      "dataset": "matbench"
+    }
+  ]
+}

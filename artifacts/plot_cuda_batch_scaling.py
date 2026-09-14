@@ -14,11 +14,15 @@ from matplotlib.ticker import FixedLocator, FuncFormatter
 
 ROOT = Path(__file__).resolve().parents[1]
 RESULTS = ROOT / "benchmarks/results/rtx-pro-6000-blackwell-batch-scaling-20260914.json"
+SUPPLEMENT = (
+    ROOT / "benchmarks/results/rtx-pro-6000-blackwell-batch-scaling-bs16-20260914.json"
+)
 OUTPUT = Path(__file__).resolve().parent
 
 
 def main() -> None:
     report = json.loads(RESULTS.read_text())
+    report["workloads"].extend(json.loads(SUPPLEMENT.read_text())["workloads"])
     plt.rcParams.update(
         {
             "font.family": "DejaVu Sans",
@@ -47,7 +51,7 @@ def main() -> None:
             key=lambda w: w["batch_size"],
         )
         sizes = np.array([w["batch_size"] for w in workloads])
-        assert sizes.tolist() == [8, 32, 64, 128, 256, 512]
+        assert sizes.tolist() == [8, 16, 32, 64, 128, 256, 512]
         fig, ax = plt.subplots(figsize=(7.2, 4.9))
         fig.subplots_adjust(left=0.115, right=0.96, bottom=0.285, top=0.78)
         fig.text(0.115, 0.935, title, fontsize=19, weight="bold")
