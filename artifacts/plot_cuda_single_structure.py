@@ -54,7 +54,7 @@ def main() -> None:
     fig.text(
         0.115,
         0.892,
-        "Single periodic structure · RTX PRO 6000 Blackwell",
+        "Cutoff 5 Å · RTX PRO 6000 Blackwell",
         fontsize=11,
         color="#536174",
     )
