@@ -34,3 +34,17 @@ Source: [2026-09-14 CPU measurements](../benchmarks/results/threadripper-pro-997
 ```bash
 python artifacts/plot_cpu_single_structure.py
 ```
+
+## CPU thread scaling
+
+Three fixed-workload figures use 1, 2, 4, and 8 threads on eight physical CPU cores. Curves show median wall time from 11 repeats, with linear axes and the same Geist style:
+
+- [Single 32,768-atom periodic structure](single-structure-cpu-thread-scaling.pdf)
+- [QMugs: fixed batch of 4,096 molecules](qmugs-cpu-thread-scaling.pdf)
+- [Matbench: fixed batch of 1,536 crystals](matbench-cpu-thread-scaling.pdf)
+
+Source: [2026-09-14 thread-scaling results](../benchmarks/results/threadripper-pro-9975wx-cpu-thread-scaling-20260914.json). These use Torch CPU inputs, float64, and a 5 Å cutoff. Tonari processes each workload as one native batch call. Vesin processes each structure sequentially with the requested internal thread count, counting output pairs without concatenation. It has no outer structure parallelism in this measurement. The single-structure NumPy comparison uses a different timing boundary and CPU affinity; its absolute values are not merged with these curves. See [benchmark methodology](../docs/benchmark.md) for correctness validation and interpretation.
+
+```bash
+python artifacts/plot_cpu_thread_scaling.py
+```

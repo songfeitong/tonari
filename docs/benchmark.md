@@ -50,28 +50,43 @@ QMugs 从 bs=8 到 1024，batch size 增长 128 倍，tonari 延迟从 0.1049 ms
 
 完整 batch IDs、原始 samples、P10/P90、pair-key correctness、软件版本、Git revision 和 native binary/data hashes 记录在 [`rtx-pro-6000-blackwell-batch-scaling-20260914.json`](../benchmarks/results/rtx-pro-6000-blackwell-batch-scaling-20260914.json)。bs=16 使用相同 binary、seed、输入前缀和计时口径单独补测，原始记录保存在 [`rtx-pro-6000-blackwell-batch-scaling-bs16-20260914.json`](../benchmarks/results/rtx-pro-6000-blackwell-batch-scaling-bs16-20260914.json)，保留独立的测量 revision 与环境信息。下面的历史 epoch、representative batch 和 supercell 表保留各自原始测量，不能与这组新数据拼成同一条曲线；本次没有复测单体系 supercell scaling。
 
-## CPU 多线程 scaling
+## CPU 多线程 scaling（2026-09-14 复测）
 
-多线程测量使用 AMD Ryzen Threadripper PRO 9975WX 上固定的八个 cores、float64 和 5 Å cutoff，显式比较 `cpu_threads=1/2/4/8`。Matbench 的 1,536 个晶体和 QMugs population 的 4,096 个分子分别合并成一个 `batch_ptr` batch，用于观察大量独立 structures；大型单体系沿用真实 Matbench 晶体派生的 32,768-atom supercell。三个 workload 的 8,482,022 个 pair keys 在单线程下与 Vesin 0.6.1 逐 structure exact match，其他 thread counts 的每 structure canonical-key SHA-256 也全部相同。
+固定三个 workload，比较 1、2、4、8 个 CPU 线程：Matbench 全部 1,536 个晶体组成一个 batch，QMugs population 全部 4,096 个分子组成一个 batch，以及由同一 Matbench 晶体派生的 32,768-atom 超胞。使用 Threadripper PRO 9975WX 的八个不同物理核（affinity 0–7）、float64、5 Å cutoff、Torch CPU 输入；Torch、OMP、OpenBLAS、MKL 的背景线程设为 1，tonari/Vesin 邻居搜索显式采用指定线程数。每档每个 backend warmup 至少 1 秒，测量 11 次，报告中位数。
 
-| Workload | Threads | tonari | Speedup | Vesin | Vesin speedup |
+| Workload | Threads | tonari | tonari speedup | Vesin | Vesin speedup |
 | --- | --: | --: | --: | --: | --: |
-| Matbench，1,536-structure batch | 1 | 156.429 ms | 1.00× | 222.521 ms | 1.00× |
-|  | 2 | 81.730 ms | 1.91× | 218.920 ms | 1.02× |
-|  | 4 | 52.220 ms | 3.00× | 206.478 ms | 1.08× |
-|  | 8 | 38.597 ms | 4.05× | 196.020 ms | 1.14× |
-| QMugs population，4,096-structure batch | 1 | 151.676 ms | 1.00× | 147.136 ms | 1.00× |
-|  | 2 | 89.405 ms | 1.70× | 212.365 ms | 0.69× |
-|  | 4 | 55.238 ms | 2.75× | 242.905 ms | 0.61× |
-|  | 8 | 38.361 ms | 3.95× | 243.029 ms | 0.61× |
-| Matbench-derived，32,768 atoms | 1 | 21.541 ms | 1.00× | 12.076 ms | 1.00× |
-|  | 2 | 14.870 ms | 1.45× | 8.993 ms | 1.34× |
-|  | 4 | 12.389 ms | 1.74× | 7.437 ms | 1.62× |
-|  | 8 | 9.943 ms | 2.17× | 6.065 ms | 1.99× |
+| Matbench，1,536 structures | 1 | 157.982 ms | 1.00× | 222.350 ms | 1.00× |
+|  | 2 | 86.588 ms | 1.82× | 218.548 ms | 1.02× |
+|  | 4 | 50.252 ms | 3.14× | 201.189 ms | 1.11× |
+|  | 8 | 38.927 ms | 4.06× | 194.131 ms | 1.15× |
+| QMugs，4,096 structures | 1 | 162.155 ms | 1.00× | 149.172 ms | 1.00× |
+|  | 2 | 94.734 ms | 1.71× | 212.079 ms | 0.70× |
+|  | 4 | 57.122 ms | 2.84× | 241.004 ms | 0.62× |
+|  | 8 | 37.656 ms | 4.31× | 243.924 ms | 0.61× |
+| Single periodic structure，32,768 atoms | 1 | 22.809 ms | 1.00× | 12.060 ms | 1.00× |
+|  | 2 | 16.022 ms | 1.42× | 7.785 ms | 1.55× |
+|  | 4 | 13.973 ms | 1.63× | 6.916 ms | 1.74× |
+|  | 8 | 11.191 ms | 2.04× | 6.073 ms | 1.99× |
 
-Tonari 对两个大 batch 的收益来自跨 structure 调度；Vesin 的公开 API 一次只接收一个 structure，因此 baseline 复用一个 `NeighborList`、把相同 `n_threads` 传给每次调用，但仍需顺序遍历 structures。Baseline 对每个 structure 的输出只计数而不额外拼接，这略微有利于 Vesin。这个比较包含两种公开执行模型的差异，并不表示调用方不能在 Vesin 外层另行组织并行。对 32,768-atom 单体系，两者都直接使用相同线程数执行一次调用；Tonari 获得 2.17× scaling，但 Vesin 在所有线程数下仍更快，说明现有 CPU cell-list 的常数差距没有被多线程掩盖。
+Tonari 对两个大 batch 的 8 线程收益分别为 4.06×、4.31×，来自其跨 structure 调度。Vesin 的公开接口一次接收一个 structure，本 baseline 复用一个 `NeighborList`，每次调用传入相同 `n_threads`，仍顺序遍历 structures；输出只计数，不额外拼接，所以这项省略略微有利于 Vesin。这个比较包含不同公开执行模型的差异，不能解释为调用方不能在 Vesin 外部并行处理 structures。QMugs 上 Vesin 增加内部线程后变慢，说明大量小任务并不一定受益于结构内部并行。
 
-默认 `cpu_threads=None` 在 CPU 上解析为 `1`，其意义仍是控制资源而非自动追求最快 wall time。已有 DataLoader workers 或 DDP 进程时，显式增加内部线程可能像 QMugs 上的 Vesin baseline 一样让小任务的调度成本超过收益；组合建议见 [CPU 多线程](cpu-multithreading.md)。完整 samples、frequency policy、affinity、revision 与 binary/data hashes 位于 `benchmarks/results/threadripper-pro-9975wx-cpu-thread-scaling.json`。
+单个 32,768-atom 体系，两者都一次调用处理相同结构，8 线程分别得到 2.04×、1.99× 加速，Vesin 在各档仍更快。这是 Torch CPU 接口的测量；与 NumPy 单线程三方图使用不同 frontend、输出处理和 CPU affinity，不混用其绝对耗时。
+
+三个 workload 的 8,482,022 条 pair keys 在 tonari 单线程下均与 Vesin 逐结构精确一致；tonari 的 2/4/8 线程 canonical-key SHA-256 与该 reference 全部相同。计时中的 Vesin 各线程 pair count 也与 tonari 一致。完整 samples、环境、revision 和 native/data hashes 位于[本次记录](../benchmarks/results/threadripper-pro-9975wx-cpu-thread-scaling-20260914.json)，[旧记录](../benchmarks/results/threadripper-pro-9975wx-cpu-thread-scaling.json)保留供追溯。
+
+PDF：[单个大体系](../artifacts/single-structure-cpu-thread-scaling.pdf)、[QMugs 固定 batch](../artifacts/qmugs-cpu-thread-scaling.pdf)、[Matbench 固定 batch](../artifacts/matbench-cpu-thread-scaling.pdf)。图中横轴是 CPU 线程数，工作量固定，纵轴使用线性耗时刻度。
+
+```bash
+OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 \
+  python -m benchmarks.run_cpu_thread_scaling \
+  --threads 1,2,4,8 --cpus 0,1,2,3,4,5,6,7 \
+  --repeats 11 --warmup-seconds 1 --require-clean \
+  --output runs/cpu-thread-scaling-20260914.json
+python artifacts/plot_cpu_thread_scaling.py
+```
+
+默认 `cpu_threads=None` 仍在 CPU 上解析为 1；已有 DataLoader workers 或 DDP 进程时，应显式规划内部线程，避免过量并行。见 [CPU 多线程](cpu-multithreading.md)。
 
 ## 周期晶体：matbench_mp_e_form
 

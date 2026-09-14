@@ -1,0 +1,744 @@
+{
+  "datasets": {
+    "matbench_cache_sha256": "d43ff90f10c63c05f645b6a0a7b4ba825b613af37653e7dc1e42b52b5bbd5e55",
+    "matbench_manifest_sha256": "3475c391b8def6bf599a57a7f1c938113eabcbfb0f2b89f7d31da648c6f7b413",
+    "qmugs_cache_sha256": "bc5bce3e8173f5c8dd823b1dcb37d0dcb8ab06d7f81949f8d297f733a39b4d73",
+    "qmugs_manifest_sha256": "a764a23b001873f5b7f879212fcc324acfa57fa3d9918abdbba295d0664b462f"
+  },
+  "environment": {
+    "cpu": "AMD Ryzen Threadripper PRO 9975WX 32-Cores",
+    "cpu_affinity": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ],
+    "cpu_extension_sha256": "5247598fadce25a415d1a7b333b7346d895c37617e2b3e2b497ed0d0ebaa6017",
+    "cpu_frequency_policy": {
+      "0": {
+        "boost": "1",
+        "driver": "amd-pstate-epp",
+        "energy_performance_preference": "balance_performance",
+        "governor": "powersave",
+        "scaling_max_khz": "5487604",
+        "scaling_min_khz": "1223141"
+      },
+      "1": {
+        "boost": "1",
+        "driver": "amd-pstate-epp",
+        "energy_performance_preference": "balance_performance",
+        "governor": "powersave",
+        "scaling_max_khz": "5487604",
+        "scaling_min_khz": "1223141"
+      },
+      "2": {
+        "boost": "1",
+        "driver": "amd-pstate-epp",
+        "energy_performance_preference": "balance_performance",
+        "governor": "powersave",
+        "scaling_max_khz": "5487604",
+        "scaling_min_khz": "1223141"
+      },
+      "3": {
+        "boost": "1",
+        "driver": "amd-pstate-epp",
+        "energy_performance_preference": "balance_performance",
+        "governor": "powersave",
+        "scaling_max_khz": "5487604",
+        "scaling_min_khz": "1223141"
+      },
+      "4": {
+        "boost": "1",
+        "driver": "amd-pstate-epp",
+        "energy_performance_preference": "balance_performance",
+        "governor": "powersave",
+        "scaling_max_khz": "5487604",
+        "scaling_min_khz": "1223141"
+      },
+      "5": {
+        "boost": "1",
+        "driver": "amd-pstate-epp",
+        "energy_performance_preference": "balance_performance",
+        "governor": "powersave",
+        "scaling_max_khz": "5487604",
+        "scaling_min_khz": "1223141"
+      },
+      "6": {
+        "boost": "1",
+        "driver": "amd-pstate-epp",
+        "energy_performance_preference": "balance_performance",
+        "governor": "powersave",
+        "scaling_max_khz": "5487604",
+        "scaling_min_khz": "1223141"
+      },
+      "7": {
+        "boost": "1",
+        "driver": "amd-pstate-epp",
+        "energy_performance_preference": "balance_performance",
+        "governor": "powersave",
+        "scaling_max_khz": "5487604",
+        "scaling_min_khz": "1223141"
+      }
+    },
+    "platform": "Linux-7.0.0-28-generic-x86_64-with-glibc2.39",
+    "python": "3.12.13",
+    "repository_revision": "c316337e3c7c6f2f0ed1070e56d6c314c8636ac0",
+    "repository_worktree_clean": true,
+    "torch": "2.12.1+cu130",
+    "torch_num_threads": 1,
+    "vesin_version": "0.6.1"
+  },
+  "method": {
+    "cutoff_angstrom": 5.0,
+    "data_loading_timed": false,
+    "dtype": "float64",
+    "exact_keys_compared": "(source, target, Sx, Sy, Sz)",
+    "output_order_compared": false,
+    "statistic": "median wall time; minimum, maximum, and samples retained",
+    "thread_counts": [
+      1,
+      2,
+      4,
+      8
+    ],
+    "threaded_validation": "the one-thread Tonari output is compared exactly with Vesin per structure; every other requested thread count must have the same per-structure canonical-key SHA-256",
+    "tonari": "one native batch call; the requested thread count includes the caller",
+    "vesin": "one reused NeighborList per measurement; n_threads matches Tonari; batches require one public compute call per structure",
+    "warmup_seconds_per_backend_workload_and_thread_count": 1.0
+  },
+  "workloads": [
+    {
+      "measurements": {
+        "1": {
+          "tonari": {
+            "maximum_ms": 160.27773823589087,
+            "median_ms": 157.98188000917435,
+            "minimum_ms": 157.2032580152154,
+            "pairs": 2780158,
+            "repeats": 11,
+            "samples_ms": [
+              160.27773823589087,
+              157.65173081308603,
+              157.2032580152154,
+              159.3563435599208,
+              158.41182507574558,
+              157.4221272021532,
+              158.60712807625532,
+              159.68481823801994,
+              157.8302914276719,
+              157.9487705603242,
+              157.98188000917435
+            ],
+            "speedup_over_one_thread": 1.0,
+            "warmup_runs": 7
+          },
+          "vesin": {
+            "maximum_ms": 222.7528439834714,
+            "median_ms": 222.34985139220953,
+            "minimum_ms": 222.09979500621557,
+            "pairs": 2780158,
+            "repeats": 11,
+            "samples_ms": [
+              222.67028968781233,
+              222.7528439834714,
+              222.33783267438412,
+              222.09979500621557,
+              222.20811806619167,
+              222.59722277522087,
+              222.42097929120064,
+              222.34985139220953,
+              222.27509133517742,
+              222.16813918203115,
+              222.39474952220917
+            ],
+            "speedup_over_one_thread": 1.0,
+            "warmup_runs": 5
+          },
+          "vesin_over_tonari": 1.4074389504625289
+        },
+        "2": {
+          "tonari": {
+            "maximum_ms": 89.46442045271397,
+            "median_ms": 86.5881871432066,
+            "minimum_ms": 81.61061629652977,
+            "pairs": 2780158,
+            "repeats": 11,
+            "samples_ms": [
+              82.04211387783289,
+              81.90710283815861,
+              87.60460652410984,
+              86.51278540492058,
+              81.77118841558695,
+              81.61061629652977,
+              87.55576238036156,
+              89.46442045271397,
+              86.5881871432066,
+              87.9663098603487,
+              86.93436905741692
+            ],
+            "speedup_over_one_thread": 1.8245200092697522,
+            "warmup_runs": 12
+          },
+          "vesin": {
+            "maximum_ms": 219.4122988730669,
+            "median_ms": 218.547735363245,
+            "minimum_ms": 217.82642416656017,
+            "pairs": 2780158,
+            "repeats": 11,
+            "samples_ms": [
+              218.34999974817038,
+              218.1891268119216,
+              218.547735363245,
+              218.09618640691042,
+              219.4122988730669,
+              218.89911592006683,
+              218.15252397209406,
+              217.82642416656017,
+              219.06208340078592,
+              218.84869132190943,
+              219.3960351869464
+            ],
+            "speedup_over_one_thread": 1.0173971879536756,
+            "warmup_runs": 6
+          },
+          "vesin_over_tonari": 2.5239901951266512
+        },
+        "4": {
+          "tonari": {
+            "maximum_ms": 54.00478467345238,
+            "median_ms": 50.25154445320368,
+            "minimum_ms": 49.34302903711796,
+            "pairs": 2780158,
+            "repeats": 11,
+            "samples_ms": [
+              54.00478467345238,
+              50.577874295413494,
+              49.91583991795778,
+              50.40072835981846,
+              49.680124036967754,
+              49.68921933323145,
+              49.34302903711796,
+              50.29963608831167,
+              50.50858110189438,
+              50.25154445320368,
+              50.19391793757677
+            ],
+            "speedup_over_one_thread": 3.1438213835655064,
+            "warmup_runs": 17
+          },
+          "vesin": {
+            "maximum_ms": 203.69225554168224,
+            "median_ms": 201.18905697017908,
+            "minimum_ms": 199.8640624806285,
+            "pairs": 2780158,
+            "repeats": 11,
+            "samples_ms": [
+              200.61726495623589,
+              199.8640624806285,
+              203.69225554168224,
+              200.41714515537024,
+              201.42849534749985,
+              200.31742472201586,
+              201.04502886533737,
+              201.96156576275826,
+              201.2018458917737,
+              201.18905697017908,
+              202.9769252985716
+            ],
+            "speedup_over_one_thread": 1.1051786550456717,
+            "warmup_runs": 6
+          },
+          "vesin_over_tonari": 4.0036392743617
+        },
+        "8": {
+          "tonari": {
+            "maximum_ms": 39.344560354948044,
+            "median_ms": 38.9266824349761,
+            "minimum_ms": 38.04000001400709,
+            "pairs": 2780158,
+            "repeats": 11,
+            "samples_ms": [
+              38.75129949301481,
+              38.10579888522625,
+              38.04000001400709,
+              39.023357443511486,
+              39.33187201619148,
+              39.17024936527014,
+              39.344560354948044,
+              38.749637082219124,
+              39.07494619488716,
+              38.902707397937775,
+              38.9266824349761
+            ],
+            "speedup_over_one_thread": 4.058447063221234,
+            "warmup_runs": 26
+          },
+          "vesin": {
+            "maximum_ms": 197.84466829150915,
+            "median_ms": 194.13084536790848,
+            "minimum_ms": 192.75971222668886,
+            "pairs": 2780158,
+            "repeats": 11,
+            "samples_ms": [
+              193.13013926148415,
+              192.75971222668886,
+              194.58590727299452,
+              194.16874088346958,
+              194.13739442825317,
+              194.13084536790848,
+              193.74664686620235,
+              194.3445559591055,
+              192.81189236789942,
+              197.84466829150915,
+              193.44812165945768
+            ],
+            "speedup_over_one_thread": 1.1453607538298285,
+            "warmup_runs": 6
+          },
+          "vesin_over_tonari": 4.98708940049511
+        }
+      },
+      "name": "matbench_1536_structure_batch",
+      "source_id_count": 1536,
+      "source_id_sha256": "6159e128117ade2c760bf21ef813d227d97d773c0cfa02622f4c1ec6911506c2",
+      "source_ids": null,
+      "validation": {
+        "atoms": 75238,
+        "canonical_key_sha256": "e02436b4311547091d6b8e24df0c1114b023b2b699418ed0d29a176d61146521",
+        "exact_key_match": true,
+        "pairs": 2780158,
+        "structures": 1536,
+        "thread_count_key_match": {
+          "1": true,
+          "2": true,
+          "4": true,
+          "8": true
+        }
+      }
+    },
+    {
+      "measurements": {
+        "1": {
+          "tonari": {
+            "maximum_ms": 166.7551612481475,
+            "median_ms": 162.1552985161543,
+            "minimum_ms": 161.8224959820509,
+            "pairs": 5320936,
+            "repeats": 11,
+            "samples_ms": [
+              162.15412318706512,
+              164.7748937830329,
+              162.43422497063875,
+              162.5852445140481,
+              161.94190550595522,
+              161.90100368112326,
+              161.8224959820509,
+              166.7551612481475,
+              162.53025084733963,
+              162.1552985161543,
+              161.89822182059288
+            ],
+            "speedup_over_one_thread": 1.0,
+            "warmup_runs": 7
+          },
+          "vesin": {
+            "maximum_ms": 205.8850470930338,
+            "median_ms": 149.17166344821453,
+            "minimum_ms": 148.81464652717113,
+            "pairs": 5320936,
+            "repeats": 11,
+            "samples_ms": [
+              205.8850470930338,
+              149.2876261472702,
+              149.66123830527067,
+              149.186996743083,
+              148.97933416068554,
+              148.97016156464815,
+              149.06430337578058,
+              148.81464652717113,
+              149.17166344821453,
+              149.46783892810345,
+              148.9293109625578
+            ],
+            "speedup_over_one_thread": 1.0,
+            "warmup_runs": 7
+          },
+          "vesin_over_tonari": 0.9199308614226608
+        },
+        "2": {
+          "tonari": {
+            "maximum_ms": 99.60029739886522,
+            "median_ms": 94.73409224301577,
+            "minimum_ms": 92.58614294230938,
+            "pairs": 5320936,
+            "repeats": 11,
+            "samples_ms": [
+              94.56795174628496,
+              99.17554818093777,
+              94.73768714815378,
+              97.87255898118019,
+              92.58614294230938,
+              94.46041006594896,
+              93.29822286963463,
+              99.60029739886522,
+              94.73409224301577,
+              93.94316468387842,
+              99.10694602876902
+            ],
+            "speedup_over_one_thread": 1.7116889461524252,
+            "warmup_runs": 11
+          },
+          "vesin": {
+            "maximum_ms": 213.44615519046783,
+            "median_ms": 212.07898017019033,
+            "minimum_ms": 210.75626276433468,
+            "pairs": 5320936,
+            "repeats": 11,
+            "samples_ms": [
+              212.01580204069614,
+              213.10160495340824,
+              213.22977729141712,
+              213.01788091659546,
+              211.23104356229305,
+              211.02804876863956,
+              213.44615519046783,
+              211.7615332826972,
+              212.35680766403675,
+              212.07898017019033,
+              210.75626276433468
+            ],
+            "speedup_over_one_thread": 0.7033778799224063,
+            "warmup_runs": 6
+          },
+          "vesin_over_tonari": 2.2386764378990054
+        },
+        "4": {
+          "tonari": {
+            "maximum_ms": 61.033813282847404,
+            "median_ms": 57.122102938592434,
+            "minimum_ms": 55.586024187505245,
+            "pairs": 5320936,
+            "repeats": 11,
+            "samples_ms": [
+              61.033813282847404,
+              60.412218794226646,
+              58.17274283617735,
+              57.30649083852768,
+              57.21211899071932,
+              57.122102938592434,
+              56.78099114447832,
+              56.664745323359966,
+              56.327047757804394,
+              55.89029099792242,
+              55.586024187505245
+            ],
+            "speedup_over_one_thread": 2.8387487535337232,
+            "warmup_runs": 17
+          },
+          "vesin": {
+            "maximum_ms": 243.4719419106841,
+            "median_ms": 241.00419506430626,
+            "minimum_ms": 238.97054512053728,
+            "pairs": 5320936,
+            "repeats": 11,
+            "samples_ms": [
+              242.0877991244197,
+              243.4719419106841,
+              238.97054512053728,
+              241.96717143058777,
+              240.06429966539145,
+              241.18051771074533,
+              240.60731939971447,
+              241.00419506430626,
+              239.82137627899647,
+              241.82639177888632,
+              240.71401078253984
+            ],
+            "speedup_over_one_thread": 0.6189587837191448,
+            "warmup_runs": 5
+          },
+          "vesin_over_tonari": 4.219105786833361
+        },
+        "8": {
+          "tonari": {
+            "maximum_ms": 39.1447888687253,
+            "median_ms": 37.6557307317853,
+            "minimum_ms": 34.98672787100077,
+            "pairs": 5320936,
+            "repeats": 11,
+            "samples_ms": [
+              38.945719599723816,
+              39.09191023558378,
+              38.8650381937623,
+              38.78472838550806,
+              39.1447888687253,
+              37.6557307317853,
+              35.07828526198864,
+              35.013328306376934,
+              34.98672787100077,
+              35.14343313872814,
+              35.23354884237051
+            ],
+            "speedup_over_one_thread": 4.30625818075756,
+            "warmup_runs": 27
+          },
+          "vesin": {
+            "maximum_ms": 248.6459966748953,
+            "median_ms": 243.92442405223846,
+            "minimum_ms": 239.6218180656433,
+            "pairs": 5320936,
+            "repeats": 11,
+            "samples_ms": [
+              244.29324828088284,
+              241.7320180684328,
+              243.92442405223846,
+              244.57162711769342,
+              244.49342023581266,
+              242.21619684249163,
+              239.6218180656433,
+              245.20622193813324,
+              248.6459966748953,
+              242.32896883040667,
+              241.74549244344234
+            ],
+            "speedup_over_one_thread": 0.6115486959857213,
+            "warmup_runs": 5
+          },
+          "vesin_over_tonari": 6.477750379873553
+        }
+      },
+      "name": "qmugs_population_4096_structure_batch",
+      "source_id_count": 4096,
+      "source_id_sha256": "d518faf72d706e71c2517702e1e36a0fe28eaf47a88b162e698cbe1db7ac05d9",
+      "source_ids": null,
+      "validation": {
+        "atoms": 226648,
+        "canonical_key_sha256": "f5ab2895b9cdcd0b4d8f5a2c83b2affdaeaaea79a185c57df97ab8f8d753e088",
+        "exact_key_match": true,
+        "pairs": 5320936,
+        "structures": 4096,
+        "thread_count_key_match": {
+          "1": true,
+          "2": true,
+          "4": true,
+          "8": true
+        }
+      }
+    },
+    {
+      "measurements": {
+        "1": {
+          "tonari": {
+            "maximum_ms": 22.86459505558014,
+            "median_ms": 22.809241898357868,
+            "minimum_ms": 22.770052775740623,
+            "pairs": 380928,
+            "repeats": 11,
+            "samples_ms": [
+              22.770052775740623,
+              22.790953516960144,
+              22.86459505558014,
+              22.817455232143402,
+              22.823072969913483,
+              22.786167450249195,
+              22.813288494944572,
+              22.791394963860512,
+              22.830763831734657,
+              22.809241898357868,
+              22.80839066952467
+            ],
+            "speedup_over_one_thread": 1.0,
+            "warmup_runs": 38
+          },
+          "vesin": {
+            "maximum_ms": 12.157698161900043,
+            "median_ms": 12.060160748660564,
+            "minimum_ms": 12.025359086692333,
+            "pairs": 380928,
+            "repeats": 11,
+            "samples_ms": [
+              12.043707072734833,
+              12.060160748660564,
+              12.044748291373253,
+              12.066241353750229,
+              12.025359086692333,
+              12.066630646586418,
+              12.072409503161907,
+              12.157698161900043,
+              12.067291885614395,
+              12.05900963395834,
+              12.042145244777203
+            ],
+            "speedup_over_one_thread": 1.0,
+            "warmup_runs": 83
+          },
+          "vesin_over_tonari": 0.5287400958963404
+        },
+        "2": {
+          "tonari": {
+            "maximum_ms": 16.211853362619877,
+            "median_ms": 16.021568328142166,
+            "minimum_ms": 15.884230844676495,
+            "pairs": 380928,
+            "repeats": 11,
+            "samples_ms": [
+              16.007976606488228,
+              16.021717339754105,
+              15.996300615370274,
+              15.952764078974724,
+              16.068038530647755,
+              16.021568328142166,
+              15.904801897704601,
+              16.034596599638462,
+              16.079104505479336,
+              16.211853362619877,
+              15.884230844676495
+            ],
+            "speedup_over_one_thread": 1.4236584977946907,
+            "warmup_runs": 63
+          },
+          "vesin": {
+            "maximum_ms": 7.911705411970615,
+            "median_ms": 7.784833200275898,
+            "minimum_ms": 7.286504842340946,
+            "pairs": 380928,
+            "repeats": 11,
+            "samples_ms": [
+              7.286504842340946,
+              7.871074602007866,
+              7.784833200275898,
+              7.287806831300259,
+              7.815530523657799,
+              7.309199310839176,
+              7.8658657148480415,
+              7.911705411970615,
+              7.287687622010708,
+              7.887448184192181,
+              7.490922696888447
+            ],
+            "speedup_over_one_thread": 1.5491867890288449,
+            "warmup_runs": 131
+          },
+          "vesin_over_tonari": 0.48589707579386604
+        },
+        "4": {
+          "tonari": {
+            "maximum_ms": 14.008010737597942,
+            "median_ms": 13.973308727145195,
+            "minimum_ms": 13.70156928896904,
+            "pairs": 380928,
+            "repeats": 11,
+            "samples_ms": [
+              13.973308727145195,
+              13.964544981718063,
+              14.003943651914597,
+              14.005465433001518,
+              14.008010737597942,
+              13.991325162351131,
+              13.70156928896904,
+              13.78099899739027,
+              13.910123147070408,
+              13.927999883890152,
+              13.992536813020706
+            ],
+            "speedup_over_one_thread": 1.632343659168396,
+            "warmup_runs": 79
+          },
+          "vesin": {
+            "maximum_ms": 9.157898835837841,
+            "median_ms": 6.915747188031673,
+            "minimum_ms": 6.6825272515416145,
+            "pairs": 380928,
+            "repeats": 11,
+            "samples_ms": [
+              7.673877291381359,
+              6.909769028425217,
+              7.11983535438776,
+              6.772572174668312,
+              9.157898835837841,
+              6.867284886538982,
+              7.31897447258234,
+              6.754966452717781,
+              7.165883667767048,
+              6.6825272515416145,
+              6.915747188031673
+            ],
+            "speedup_over_one_thread": 1.7438695228090124,
+            "warmup_runs": 140
+          },
+          "vesin_over_tonari": 0.4949255271657187
+        },
+        "8": {
+          "tonari": {
+            "maximum_ms": 11.49909757077694,
+            "median_ms": 11.1906249076128,
+            "minimum_ms": 11.052225716412067,
+            "pairs": 380928,
+            "repeats": 11,
+            "samples_ms": [
+              11.110926046967506,
+              11.069763451814651,
+              11.08461618423462,
+              11.052225716412067,
+              11.49909757077694,
+              11.1906249076128,
+              11.16085983812809,
+              11.201029643416405,
+              11.215733364224434,
+              11.28949224948883,
+              11.21979858726263
+            ],
+            "speedup_over_one_thread": 2.0382455927766028,
+            "warmup_runs": 89
+          },
+          "vesin": {
+            "maximum_ms": 6.809167563915253,
+            "median_ms": 6.073120981454849,
+            "minimum_ms": 4.957152530550957,
+            "pairs": 380928,
+            "repeats": 11,
+            "samples_ms": [
+              6.025448441505432,
+              6.328514777123928,
+              6.693343631923199,
+              6.029535084962845,
+              4.957152530550957,
+              6.3415346667170525,
+              6.073120981454849,
+              6.809167563915253,
+              5.771096795797348,
+              6.135784089565277,
+              5.715423263609409
+            ],
+            "speedup_over_one_thread": 1.98582586869058,
+            "warmup_runs": 177
+          },
+          "vesin_over_tonari": 0.542697215892153
+        }
+      },
+      "name": "matbench_32768_atom_supercell",
+      "source_id_count": 1,
+      "source_id_sha256": "2492df5d6dcbcb1034db87ee815b9e08609588c7f581e9c8ae3c7ba810d28288",
+      "source_ids": [
+        "CO_8661596785617876616983344__8x8x8"
+      ],
+      "validation": {
+        "atoms": 32768,
+        "canonical_key_sha256": "79667fa71047a5dff26df6bf86a6abd50ee4fac0055569550a90ef8494606cb2",
+        "exact_key_match": true,
+        "pairs": 380928,
+        "structures": 1,
+        "thread_count_key_match": {
+          "1": true,
+          "2": true,
+          "4": true,
+          "8": true
+        }
+      }
+    }
+  ]
+}
