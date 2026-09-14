@@ -12,3 +12,13 @@ Regenerate from the repository root with Matplotlib and NumPy installed:
 ```bash
 python artifacts/plot_cuda_batch_scaling.py
 ```
+
+## Single-structure scaling
+
+[Single periodic structure PDF](single-structure-cuda-latency.pdf) uses the same visual style, plotting tonari and vesin-torch at 64, 512, 1,728, 4,096, 13,824, and 32,768 atoms. Labels highlight 512, 4,096, and 32,768 atoms. These are integer supercells of one sampled 64-atom Matbench crystal, not different independent crystals. The cutoff is 5 Å and geometry is float32 on the RTX PRO 6000 Blackwell Workstation Edition.
+
+Source: [historical CUDA measurements](../benchmarks/results/rtx-pro-6000-blackwell.json), revision `09c968610a54412b6a0b665861c5adfa8632bdb2`. Each point is the median of 12 synchronized single-structure calls. This figure does not represent a new run at the current HEAD; the batch figures use separate newer measurements.
+
+```bash
+python artifacts/plot_cuda_single_structure.py
+```
