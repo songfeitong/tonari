@@ -69,12 +69,12 @@ def main() -> None:
         )
         sizes = np.array([w["batch_size"] for w in workloads])
         assert sizes.tolist() == [8, 16, 32, 64, 128, 256, 512]
-        fig, ax = plt.subplots(figsize=(7.2, 4.9))
-        fig.subplots_adjust(left=0.115, right=0.96, bottom=0.15, top=0.75)
-        fig.text(0.115, 0.935, f"{title} · CUDA", fontsize=19, weight="bold")
+        fig, ax = plt.subplots(figsize=(7.2, 5.4))
+        fig.subplots_adjust(left=0.115, right=0.96, bottom=0.135, top=0.70)
+        fig.text(0.115, 0.945, f"{title} · CUDA", fontsize=19, weight="bold")
         fig.text(
             0.115,
-            0.885,
+            0.875,
             subtitles[dataset],
             fontsize=11,
             color="#536174",
@@ -128,7 +128,8 @@ def main() -> None:
         ax.set_axisbelow(True)
         ax.legend(
             loc="lower left",
-            bbox_to_anchor=(-0.01, 1.015),
+            bbox_to_anchor=(-0.01, 1.04),
+            labelspacing=0.7,
             frameon=False,
             fontsize=12,
             borderaxespad=0,
