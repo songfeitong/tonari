@@ -127,11 +127,10 @@ def main() -> None:
         ax.grid(axis="y", color="#E0E5EB", linewidth=0.8)
         ax.set_axisbelow(True)
         ax.legend(
-            loc="lower left",
-            bbox_to_anchor=(-0.01, 1.015),
+            loc="upper left",
             frameon=False,
-            fontsize=9,
-            borderaxespad=0,
+            fontsize=12,
+            borderaxespad=0.8,
         )
         fig.savefig(
             OUTPUT / filename,
