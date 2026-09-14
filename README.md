@@ -127,27 +127,25 @@ ase_source, ase_target, ase_cell_shifts = primitive_neighbor_list(
 
 ## Performance
 
-Median neighbor-list construction time with a 5 Å cutoff, full lists, and cell shifts; data loading and host-to-device transfer are excluded. CUDA: float32, RTX PRO 6000 Blackwell Workstation Edition. CPU: NumPy float64, Threadripper PRO 9975WX. [Measurement details and source records](docs/benchmark.md).
+Median neighbor-list construction time with a 5 Å cutoff, full lists, and cell shifts; data loading and host-to-device transfer are excluded. CUDA: float32, RTX PRO 6000 Blackwell Workstation Edition. CPU: NumPy float64, Threadripper PRO 9975WX.
 
 ### CUDA batches
 
-Time per batch versus batch size for QMugs molecules and Matbench crystals. Tonari processes the batch in one call; Vesin calls each structure separately and concatenates the outputs.
+Time per batch versus batch size for QMugs molecules and Matbench crystals. Tonari processes the batch in one call; [Vesin](https://github.com/Luthaf/vesin) calls each structure separately and concatenates the outputs.
 
 ![CUDA batch latency for QMugs and Matbench](artifacts/readme-cuda-batches.png)
 
 ### Large periodic structures
 
-Time per structure versus atom count for supercells of one Matbench crystal, from 64 to 32,768 atoms. The CPU comparison uses one thread; ASE uses `primitive_neighbor_list`.
+Time per structure versus atom count for supercells of one Matbench crystal, from 64 to 32,768 atoms. The CPU comparison uses one thread; [ASE](https://gitlab.com/ase/ase) uses `primitive_neighbor_list`.
 
 ![CUDA and single-thread CPU latency for large periodic structures](artifacts/readme-large-structures.png)
 
 ### CPU multithreading
 
-Time versus thread count for fixed batches of 4,096 QMugs molecules and 1,536 Matbench crystals, using eight physical cores. Vesin uses the specified internal thread count per structure, with sequential structure calls and output concatenation.
+Time versus thread count for fixed batches of 4,096 QMugs molecules and 1,536 Matbench crystals, using eight physical cores. [Vesin](https://github.com/Luthaf/vesin) uses the specified internal thread count per structure, with sequential structure calls and output concatenation.
 
 ![CPU thread scaling for fixed QMugs and Matbench batches](artifacts/readme-cpu-threads.png)
-
-[Individual figures and PDF downloads](artifacts/README.md) · [Single large-structure thread scaling](docs/benchmark.md#cpu-thread-figures)
 
 ## License
 
