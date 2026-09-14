@@ -85,16 +85,20 @@ def main() -> None:
                 linewidth=2,
                 label=label,
             )
-            ax.annotate(
-                f"{medians[-1]:.3f} ms",
-                (sizes[-1], medians[-1]),
-                xytext=(-9, 11),
-                textcoords="offset points",
-                ha="right",
-                color=color,
-                fontsize=10,
-                weight="bold",
-            )
+            precision = 2 if backend == "production_cuda" else 1
+            for size, median in zip(sizes, medians, strict=True):
+                if size not in (32, 128, 512):
+                    continue
+                ax.annotate(
+                    f"{median:.{precision}f} ms",
+                    (size, median),
+                    xytext=(-9, 11) if size == 512 else (0, 11),
+                    textcoords="offset points",
+                    ha="right" if size == 512 else "center",
+                    color=color,
+                    fontsize=10,
+                    weight="bold",
+                )
         ax.set_xscale("log", base=2)
         ax.set_yscale("log")
         ax.set_xlim(6.5, 650)
