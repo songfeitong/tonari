@@ -11,6 +11,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib import font_manager
 from matplotlib.ticker import FixedLocator, FuncFormatter
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -40,9 +41,11 @@ def main() -> None:
         "qmugs_population": f"Avg {np.mean(molecule_sizes):.1f} atoms per structure · Cutoff 5 Å · RTX PRO 6000 Blackwell",
         "matbench": f"Avg {np.mean(crystal_sizes):.1f} atoms per structure · Cutoff 5 Å · RTX PRO 6000 Blackwell",
     }
+    for filename in ("Geist-Regular.ttf", "Geist-Bold.ttf"):
+        font_manager.fontManager.addfont(OUTPUT / "fonts/geist" / filename)
     plt.rcParams.update(
         {
-            "font.family": "DejaVu Sans",
+            "font.family": "Geist",
             "font.size": 10,
             "axes.labelsize": 11,
             "axes.spines.top": False,

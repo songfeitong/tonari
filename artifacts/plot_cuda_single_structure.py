@@ -10,6 +10,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib import font_manager
 from matplotlib.ticker import FixedLocator, FuncFormatter
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -19,9 +20,11 @@ OUTPUT = Path(__file__).resolve().parent
 
 def main() -> None:
     report = json.loads(RESULTS.read_text())
+    for filename in ("Geist-Regular.ttf", "Geist-Bold.ttf"):
+        font_manager.fontManager.addfont(OUTPUT / "fonts/geist" / filename)
     plt.rcParams.update(
         {
-            "font.family": "DejaVu Sans",
+            "font.family": "Geist",
             "font.size": 10,
             "axes.labelsize": 11,
             "axes.spines.top": False,
@@ -34,7 +37,7 @@ def main() -> None:
             "pdf.fonttype": 42,
         }
     )
-    title = "Periodic supercell"
+    title = "Large Periodic structure"
     filename = "single-structure-cuda-latency.pdf"
     workloads = sorted(
         (w for w in report["workloads"] if w["name"].startswith("matbench_supercell_")),
