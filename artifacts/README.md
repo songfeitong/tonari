@@ -1,6 +1,6 @@
 # CUDA batch-latency figures
 
-English vector PDF figures for QMugs population and Matbench, showing batch sizes 8, 16, 32, 64, 128, 256, and 512. Both figures use identical logarithmic axes. Lines show the median across 16 per-batch latency medians; shading shows their P10–P90 range. The Vesin CUDA baseline includes per-structure calls and output concatenation.
+English vector PDF figures for QMugs population and Matbench, showing batch sizes 8, 16, 32, 64, 128, 256, and 512. Both figures use identical logarithmic axes. Lines show the median across 16 per-batch latency medians. The Vesin CUDA baseline includes per-structure calls and output concatenation.
 
 - [QMugs](qmugs-cuda-batch-latency.pdf)
 - [Matbench](matbench-cuda-batch-latency.pdf)

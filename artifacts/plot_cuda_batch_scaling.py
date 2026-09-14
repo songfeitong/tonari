@@ -53,12 +53,12 @@ def main() -> None:
         sizes = np.array([w["batch_size"] for w in workloads])
         assert sizes.tolist() == [8, 16, 32, 64, 128, 256, 512]
         fig, ax = plt.subplots(figsize=(7.2, 4.9))
-        fig.subplots_adjust(left=0.115, right=0.96, bottom=0.285, top=0.78)
-        fig.text(0.115, 0.935, title, fontsize=19, weight="bold")
+        fig.subplots_adjust(left=0.115, right=0.96, bottom=0.15, top=0.78)
+        fig.text(0.115, 0.935, f"{title} · CUDA", fontsize=19, weight="bold")
         fig.text(
             0.115,
             0.885,
-            "CUDA neighbor-list construction · single-batch latency",
+            "Neighbor-list construction · single-batch latency",
             fontsize=11,
             color="#536174",
         )
@@ -66,16 +66,13 @@ def main() -> None:
             ("production_cuda", "tonari · native batch", "#087F8C", "o"),
             (
                 "vesin_gpu_per_structure",
-                "Vesin CUDA · per-structure + concat",
+                "Vesin CUDA",
                 "#D46A39",
                 "s",
             ),
         ):
             values = [w["backends"][backend] for w in workloads]
             medians = np.array([v["median_ms"] for v in values])
-            low = np.array([v["p10_ms"] for v in values])
-            high = np.array([v["p90_ms"] for v in values])
-            ax.fill_between(sizes, low, high, color=color, alpha=0.16, linewidth=0)
             ax.plot(
                 sizes,
                 medians,
@@ -108,7 +105,7 @@ def main() -> None:
         ax.yaxis.set_major_locator(FixedLocator([0.1, 1, 10, 100]))
         ax.yaxis.set_major_formatter(FuncFormatter(lambda y, _: f"{y:g}"))
         ax.minorticks_off()
-        ax.set_xlabel("Structures per batch", labelpad=9)
+        ax.set_xlabel("Batch Size", labelpad=9)
         ax.set_ylabel("Time per batch (ms, log scale)", labelpad=9)
         ax.grid(axis="y", color="#E0E5EB", linewidth=0.8)
         ax.set_axisbelow(True)
@@ -119,33 +116,12 @@ def main() -> None:
             fontsize=9,
             borderaxespad=0,
         )
-        fig.text(
-            0.115,
-            0.13,
-            "Median of 16 batch medians; shaded bands: P10–P90. 7 timed calls per batch.",
-            fontsize=8.2,
-            color="#536174",
-        )
-        fig.text(
-            0.115,
-            0.093,
-            "RTX PRO 6000 Blackwell · float32 · 5 Å cutoff · full pair indices + cell shifts",
-            fontsize=8.2,
-            color="#536174",
-        )
-        fig.text(
-            0.115,
-            0.056,
-            "Synchronized wall time; excludes data loading and H2D. Measured 2026-09-14.",
-            fontsize=8.2,
-            color="#536174",
-        )
         fig.savefig(
             OUTPUT / filename,
             metadata={
                 "Title": f"{title}: CUDA batch latency",
                 "Author": "tonari",
-                "Subject": "Batch sizes 8–512; synchronized latency with P10–P90 across batch medians",
+                "Subject": "Batch sizes 8–512; synchronized latency medians",
             },
         )
         plt.close(fig)
