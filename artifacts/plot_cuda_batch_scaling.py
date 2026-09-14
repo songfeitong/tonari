@@ -37,8 +37,8 @@ def main() -> None:
     )
     crystal_sizes = [row["n_atoms"] for row in crystal_manifest["structures"]]
     subtitles = {
-        "qmugs_population": f"Avg {np.mean(molecule_sizes):.1f} atoms per structure · RTX PRO 6000 Blackwell",
-        "matbench": f"Avg {np.mean(crystal_sizes):.1f} atoms per structure · RTX PRO 6000 Blackwell",
+        "qmugs_population": f"Avg {np.mean(molecule_sizes):.1f} atoms per structure · Cutoff 5 Å · RTX PRO 6000 Blackwell",
+        "matbench": f"Avg {np.mean(crystal_sizes):.1f} atoms per structure · Cutoff 5 Å · RTX PRO 6000 Blackwell",
     }
     plt.rcParams.update(
         {
