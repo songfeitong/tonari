@@ -69,12 +69,12 @@ def main() -> None:
         )
         sizes = np.array([w["batch_size"] for w in workloads])
         assert sizes.tolist() == [8, 16, 32, 64, 128, 256, 512]
-        fig, ax = plt.subplots(figsize=(7.2, 5.4))
-        fig.subplots_adjust(left=0.115, right=0.96, bottom=0.135, top=0.70)
+        fig, ax = plt.subplots(figsize=(7.2, 5.2))
+        fig.subplots_adjust(left=0.115, right=0.96, bottom=0.14, top=0.725)
         fig.text(0.115, 0.945, f"{title} · CUDA", fontsize=19, weight="bold")
         fig.text(
             0.115,
-            0.875,
+            0.892,
             subtitles[dataset],
             fontsize=11,
             color="#536174",
@@ -83,7 +83,7 @@ def main() -> None:
             ("production_cuda", "tonari · native batch", "#087F8C", "o"),
             (
                 "vesin_gpu_per_structure",
-                "Vesin CUDA",
+                "vesin-torch",
                 "#D46A39",
                 "s",
             ),
@@ -128,8 +128,8 @@ def main() -> None:
         ax.set_axisbelow(True)
         ax.legend(
             loc="lower left",
-            bbox_to_anchor=(-0.01, 1.04),
-            labelspacing=0.7,
+            bbox_to_anchor=(-0.01, 1.03),
+            labelspacing=0.6,
             frameon=False,
             fontsize=12,
             borderaxespad=0,
